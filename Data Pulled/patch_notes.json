@@ -1,0 +1,80 @@
+{
+  "feed": {
+    "title": "The RPG RSS Feed",
+    "link": "https://steamcommunity.com/games/2429270",
+    "description": "Events and Announcements for The RPG",
+    "updated": ""
+  },
+  "entries": [
+    {
+      "title": "The RPG is now verified on Steam Deck!",
+      "link": "https://steamcommunity.com/games/2429270/announcements/detail/498331094794371719",
+      "published": "Wed, 10 Sep 2025 07:39:33 +0000",
+      "summary": "<p class=\"bb_paragraph\">We have exciting news for Deck owners!<br /><br />While The RPG was already fully playable on the Steam Deck, we've been working on updates specific to the Deck and ironed out some kinks thanks to our communications with the Steam team. <b>The RPG is now Verified on the Steam Deck!</b></p><p class=\"bb_paragraph\"></p><p class=\"bb_paragraph\">You can continue playing where you left off on whichever device you'd like by having your save files sync to your PC and Steam Deck through Steam Cloud.</p><p class=\"bb_paragraph\"></p><p class=\"bb_paragraph\"><img src=\"https://clan.akamai.steamstatic.com/images/44099477/d098055b7b9c33a2fd99b220ed2180d4c336ccc4.png\" /></p><p class=\"bb_paragraph\"></p><p class=\"bb_paragraph\">If you have any suggestions for improvements, you can let us know on the <a class=\"bb_link\" href=\"https://steamcommunity.com/linkfilter/?u=https%3A%2F%2Fdiscord.com%2Finvite%2F48fMKBdTEp\" rel=\" noopener\" target=\"_blank\">Discord server</a><span class=\"bb_link_host\">[discord.com]</span> or the <a class=\"bb_link\" href=\"https://steamcommunity.com/app/2429270/discussions/?snr=1_5_9_\" rel=\"\" target=\"_blank\">Steam Discussions forum</a>.</p>",
+      "id": "https://steamcommunity.com/games/2429270/announcements/detail/498331094794371719"
+    },
+    {
+      "title": "IMPORTANT Update 1.021",
+      "link": "https://steamcommunity.com/games/2429270/announcements/detail/498331094794371611",
+      "published": "Fri, 29 Aug 2025 18:16:00 +0000",
+      "summary": "<ul class=\"bb_ul\"><li>Fixed missing .exe (sorry for the hassle!)</li></ul>",
+      "id": "https://steamcommunity.com/games/2429270/announcements/detail/498331094794371611"
+    },
+    {
+      "title": "Version 1.020",
+      "link": "https://steamcommunity.com/games/2429270/announcements/detail/498331094794371580",
+      "published": "Fri, 29 Aug 2025 14:12:47 +0000",
+      "summary": "<ul class=\"bb_ul\"><li>You can now chop down the Sacred Tree only after receiving the corresponding quest, preventing softlocks in the early stages of the game.<br /></li><li>Lots of UI fixes, including fixes for Steam Deck.<br /></li><li>Save system is now more robust. The chance of save corruption has been greatly reduced in case of a PC or game crash during saving.<br /></li><li>Localization fixes.</li></ul>",
+      "id": "https://steamcommunity.com/games/2429270/announcements/detail/498331094794371580"
+    },
+    {
+      "title": "Version 1.019",
+      "link": "https://steamcommunity.com/games/2429270/announcements/detail/498330460301034096",
+      "published": "Tue, 26 Aug 2025 16:57:04 +0000",
+      "summary": "<ul class=\"bb_ul\"><li>German Community Localization - a complete revamp, thanks to our awesome adventurers on Discord!<br /></li><li>Fixes for other languages.<br /></li><li>Optimization.</li></ul>",
+      "id": "https://steamcommunity.com/games/2429270/announcements/detail/498330460301034096"
+    },
+    {
+      "title": "Version 1.017",
+      "link": "https://steamcommunity.com/games/2429270/announcements/detail/498330460301034024",
+      "published": "Mon, 25 Aug 2025 16:15:31 +0000",
+      "summary": "<ul class=\"bb_ul\"><li>Added anti-epilepsy mode (in settings).<br /></li><li>Big optimization for major boss battles.<br /></li><li>Improved UX on controllers.<br /></li><li>Fix for Hangover Adventurer.<br /></li><li>Some rebalancing.<br /></li><li>Important UI/UX improvements for Steam Deck.</li></ul>",
+      "id": "https://steamcommunity.com/games/2429270/announcements/detail/498330460301034024"
+    },
+    {
+      "title": "Trading Cards now available for The RPG!",
+      "link": "https://steamcommunity.com/games/2429270/announcements/detail/498330460301033786",
+      "published": "Sun, 24 Aug 2025 14:13:16 +0000",
+      "summary": "<p class=\"bb_paragraph\">Steam Community Items are now available for The RPG! You can receive up to 4 trading cards for free by just playing the game, 1 for each 30 minutes of playtime!</p><p class=\"bb_paragraph\"></p><p class=\"bb_paragraph\">You can also grab the profile backgrounds and the emoticons by crafting the badge on Steam. Or get them through the Points Shop by clicking the button below.</p><p class=\"bb_paragraph\"></p><p class=\"bb_paragraph\"><a class=\"bb_link\" href=\"https://steamcommunity.com/linkfilter/?u=https%3A%2F%2Fstore.steampowered.com%2Fpoints%2Fshop%2Fapp%2F2429270%20style%3Dbutton\" rel=\" noopener\" target=\"_blank\">Points Shop</a><span class=\"bb_link_host\">[store.steampowered.com]</span></p>",
+      "id": "https://steamcommunity.com/games/2429270/announcements/detail/498330460301033786"
+    },
+    {
+      "title": "Version 1.016",
+      "link": "https://steamcommunity.com/games/2429270/announcements/detail/498330460301033560",
+      "published": "Wed, 20 Aug 2025 18:34:04 +0000",
+      "summary": "<ul class=\"bb_ul\"><li>Rebalanced fall damage.<br /></li><li>Bomb and Burn Scream kills now count as player kills and grant XP properly.<br /></li><li>Important fix for becoming &quot;A Friend Of Monsters&quot; if you decide to switch to monsters' side at late game.<br /></li><li>UI fix for controllers in the intro cart scene.<br /></li><li>Removed Feedback Form hint, although the F8 button still works. The reason is that it becomes too difficult to manage reports from Feedback Form as the community grows. Dear adventurers, please feel free to join our Discord for that. Steam Forums is an alternative, but it has some major cons for me to handle(there's a pinned thread with details).</li></ul>",
+      "id": "https://steamcommunity.com/games/2429270/announcements/detail/498330460301033560"
+    },
+    {
+      "title": "Version 1.015",
+      "link": "https://steamcommunity.com/games/2429270/announcements/detail/834973992999715552",
+      "published": "Mon, 18 Aug 2025 22:17:43 +0000",
+      "summary": "<ul class=\"bb_ul\"><li>Fixed &quot;Sacred Bark for Bestiary&quot; quest flow.<br /></li><li>Fixed scream selection with cursor on controllers.<br /></li><li>Fargoth will no longer appear in the wrong places after certain game events.</li></ul>",
+      "id": "https://steamcommunity.com/games/2429270/announcements/detail/834973992999715552"
+    },
+    {
+      "title": "Version 1.014",
+      "link": "https://steamcommunity.com/games/2429270/announcements/detail/834973992999715378",
+      "published": "Sun, 17 Aug 2025 01:55:24 +0000",
+      "summary": "<ul class=\"bb_ul\"><li>Important fix for some players who experienced crashed during save loading from the main menu.<br /></li><li>Added &quot;Quit&quot; button to in-game menu (no more ALT+F4 needed ^_^)</li></ul>",
+      "id": "https://steamcommunity.com/games/2429270/announcements/detail/834973992999715378"
+    },
+    {
+      "title": "Version 1.013",
+      "link": "https://steamcommunity.com/games/2429270/announcements/detail/834973992999715373",
+      "published": "Sat, 16 Aug 2025 22:59:34 +0000",
+      "summary": "<ul class=\"bb_ul\"><li>Added &quot;toggle sprint&quot; option, a highly requested feature from players with controllers.<br /></li><li>UI fixes.<br /></li><li>Localization fixes.<br /></li><li>Improved Achievements support when transitioning from the demo to the full version.</li></ul>",
+      "id": "https://steamcommunity.com/games/2429270/announcements/detail/834973992999715373"
+    }
+  ]
+}

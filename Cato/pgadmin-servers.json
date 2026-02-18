@@ -1,0 +1,15 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "CATO PostgreSQL",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "cato",
+      "Username": "cato_user",
+      "Password": "cato_dev_password",
+      "SSLMode": "prefer",
+      "PassFile": ""
+    }
+  }
+}

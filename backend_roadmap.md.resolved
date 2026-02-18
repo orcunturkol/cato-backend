@@ -1,0 +1,60 @@
+# CATO Backend Roadmap (Solo Dev - Kanban)
+
+Since you are developing this alone, a **Kanban** approach is best. It focuses on limiting "Work In Progress" (WIP) so you don't get overwhelmed. Focus on finishing one card before starting the next.
+
+## Phase 1: Foundation & "The Truth" (Database)
+**Goal:** Have a running database and the ability to manually add games.
+
+### [To Do]
+- [ ] **Initialize Project**: Create a new ASP.NET Core Web API project (`dotnet new webapi`).
+- [ ] **Database Setup**: Setup PostgreSQL connection string in `appsettings.json`.
+- [ ] **EF Core Setup**: Install `Microsoft.EntityFrameworkCore.PostgreSQL`. Create `CatoDbContext`.
+- [ ] **Vertical Slice Setup**: Install `MediatR` and `Carter` (or FastEndpoints) for clean vertical slice routing.
+- [ ] **Env Security**: Use `.NET User Secrets` for local development (`STEAM_API_KEY`).
+- [ ] **CRUD Games**: Create `Features/Games/CreateGame.cs` slice.
+
+## Phase 2: Data Ingestion (Steam API)
+**Goal:** Clicking a button pulls meaningful data from Valve. 
+
+### [To Do]
+- [ ] **Steam Http Client**: Use `IHttpClientFactory` to create a typed client for Steam API.
+- [ ] **Fetcher - Basic Info**: Implement `GetAppList` in `Infrastructure/Steam/SteamService.cs`.
+- [ ] **Fetcher - Financials**: Implement `IPartnerFinancialsService` (Use C# Classes for JSON deserizalization).
+- [ ] **Sync Feature**: Create `Features/Sync/SyncFinancials.cs` (Command + Handler).
+- [ ] **Background Job**: Use `Hangfire` or `BackgroundService` to invoke the Sync command daily.
+
+## Phase 3: The Scraper (Competitor Data)
+**Goal:** Get the "hidden" data (Tags, Followers).
+
+### [To Do]
+- [ ] **Scraper Engine**: Use `HtmlAgilityPack` or `AngleSharp` for parsing HTML in .NET.
+- [ ] **Polite Parsing**: Implement `Polly` for retry policies and rate limiting (prevent 429 errors).
+- [ ] **Follower Scraper**: Logic to extract "Members" count text and parse to `int`.
+- [ ] **Tag Scraper**: Logic to find tag elements in Steam store DOM.
+- [ ] **Competitor Cron**: Schedule a Hangfire job `ScrapeCompetitorsJob` to run nightly.
+
+## Phase 4: Business Logic (Marketing)
+**Goal:** Connect specific marketing actions to your games.
+
+### [To Do]
+- [ ] **Targets API**: CRUD endpoints for `MarketingTargets` (Influencers/Events).
+- [ ] **Actions API**: CRUD endpoints to log an action ("Emailed IGN").
+- [ ] **Matching Logic**: Implement the algorithm:
+    - *If Game has Tag "FPS" AND Target likes "FPS" -> High Score.*
+    - Run this calculation whenever a new Game or Target is added.
+
+## Phase 5: Analytics & Insights (The MVP Goal)
+**Goal:** Answer "Did it work?"
+
+### [To Do]
+- [ ] **Impact Calculation**: Create a service that accepts an `ActionID`.
+    - Look at `Action.Date`.
+    - Fetch 7 days of `SteamFinancials` *before* the date (Baseline).
+    - Fetch 7 days of `SteamFinancials` *after* the date (Result).
+    - Compare and save % uplift to `ActionImpact` table.
+- [ ] **Dashboard API**: An endpoint `GET /api/dashboard/summary` returning JSON for the charts.
+
+## Phase 6: Polish & Automation
+### [To Do]
+- [ ] **Cron Scheduler**: Use a strict scheduler (like `node-cron` or Vercel Cron) to run the Sync Service at 04:00 UTC daily.
+- [ ] **Error Logging**: Pipe failed scrapes/API calls to a log file or Discord webhook so you know when it breaks.

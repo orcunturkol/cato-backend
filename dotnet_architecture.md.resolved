@@ -1,0 +1,99 @@
+# CATO .NET Backend Architecture (Vertical Slice)
+
+For this project, **Vertical Slice Architecture** is superior to Traditional Layered (Clean) Architecture.
+
+**Why?**
+CATO is feature-driven ("Sync Financials", "Analyze Impact"). Vertical Slice keeps all logic for a single feature (API Endpoint + Business Logic + DB Query) in **one file/folder**. This minimizes context switching and "file jumping" during development.
+
+## Tech Stack
+*   **Framework**: .NET 8 / 9 (ASP.NET Core Web API)
+*   **Database**: PostgreSQL
+*   **ORM**: Entity Framework Core (Code-First or Db-First)
+*   **Logic Dispatcher**: `MediatR` (Standard for Vertical Slices)
+*   **Validation**: `FluentValidation`
+*   **Scheduling**: `Hangfire` or `Quartz.NET` (Critical for your Daily Steam Sync tasks)
+
+## Folder Structure
+
+Instead of `Controllers/`, `Services/`, `Repositories/`, we organize by **Features**.
+
+```text
+Cato.API/
+├── Program.cs
+├── Infrastructure/          # Shared Plumbing (Database, External APIs)
+│   ├── Database/
+│   │   ├── CatoDbContext.cs
+│   │   └── Migrations/
+│   └── Steam/
+│       ├── SteamApiService.cs
+│       └── ISteamService.cs
+├── Domain/                  # Core Entities (lightweight)
+│   ├── Game.cs
+│   ├── MarketingAction.cs
+│   └── FinancialRecord.cs
+└── Features/                # The Vertical Slices
+    ├── Games/
+    │   ├── GetGameDetails.cs      # Query + Handler
+    │   ├── AddCompetitorGame.cs   # Command + Handler
+    │   └── GameDto.cs
+    ├── Financials/
+    │   ├── GetDailyRevenue.cs
+    │   └── SyncFinancialsJob.cs   # Background Job Logic
+    ├── Marketing/
+    │   ├── CreateAction.cs
+    │   └── LogActionImpact.cs
+    └── Competitors/
+        └── ScrapeCompetitorJob.cs
+```
+
+## Example Slice: `GetGameDetails.cs`
+
+In a Vertical Slice, the "Controller" is minimal or non-existent (using Minimal APIs or FastEndpoints).
+
+```csharp
+// Features/Games/GetGameDetails.cs
+
+// 1. The Request Object (Query)
+public record GetGameDetailsQuery(int AppId) : IRequest<GameDetailsDto>;
+
+// 2. The Handler (Logic + DB Access)
+public class GetGameDetailsHandler : IRequestHandler<GetGameDetailsQuery, GameDetailsDto>
+{
+    private readonly CatoDbContext _db;
+
+    public GetGameDetailsHandler(CatoDbContext db)
+    {
+        _db = db;
+    }
+
+    public async Task<GameDetailsDto> Handle(GetGameDetailsQuery request, CancellationToken ct)
+    {
+        // Direct Logic - No "Service" layer needed
+        var game = await _db.Games
+            .Include(g => g.Financials)
+            .FirstOrDefaultAsync(g => g.AppId == request.AppId, ct);
+
+        if (game == null) throw new NotFoundException($"Game {request.AppId} not found");
+
+        return game.ToDto();
+    }
+}
+
+// 3. The Enpoint (Minimal API)
+public class GetGameEndpoint : ICarterModule // Using Carter for organization
+{
+    public void AddRoutes(IEndpointRouteBuilder app)
+    {
+        app.MapGet("/api/games/{id}", async (int id, ISender sender) =>
+        {
+            var result = await sender.Send(new GetGameDetailsQuery(id));
+            return Results.Ok(result);
+        });
+    }
+}
+```
+
+## Why this wins for "Solo Dev":
+1.  **Code Locality**: When you work on "Financials", you are only in the `Features/Financials` folder. You don't care about the rest of the app.
+2.  **No Abstraction Bloat**: You don't need `IGameRepository` if strict unit testing isn't your capability yet. You can inject `DbContext` directly into Handlers for speed.
+3.  **Easy Navigation**: Want to fix a bug in scraping? Go to `Features/Competitors/ScrapeCompetitorJob.cs`. Done.

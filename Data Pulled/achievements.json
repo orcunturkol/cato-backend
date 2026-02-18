@@ -1,0 +1,98 @@
+{
+  "achievementpercentages": {
+    "achievements": [
+      {
+        "name": "collect_mushrooms_0",
+        "percent": "85.1"
+      },
+      {
+        "name": "steal",
+        "percent": "83.9"
+      },
+      {
+        "name": "loot_goblin",
+        "percent": "67.6"
+      },
+      {
+        "name": "defeat_bosses_0",
+        "percent": "64.8"
+      },
+      {
+        "name": "enter_dungeon_for_free",
+        "percent": "54.6"
+      },
+      {
+        "name": "get_drunk",
+        "percent": "52.2"
+      },
+      {
+        "name": "defeat_bosses_1",
+        "percent": "46.6"
+      },
+      {
+        "name": "learn_screams",
+        "percent": "45.5"
+      },
+      {
+        "name": "help_everyone_in_village",
+        "percent": "45.2"
+      },
+      {
+        "name": "beat_someone_while_drunk",
+        "percent": "44.7"
+      },
+      {
+        "name": "collect_mushrooms_1",
+        "percent": "40.6"
+      },
+      {
+        "name": "unlock_golden_locks",
+        "percent": "38.3"
+      },
+      {
+        "name": "activate_all_portal_stones",
+        "percent": "37.9"
+      },
+      {
+        "name": "kick_king",
+        "percent": "33.6"
+      },
+      {
+        "name": "find_secret_zones",
+        "percent": "33.1"
+      },
+      {
+        "name": "solve_mystery_of_island",
+        "percent": "32.1"
+      },
+      {
+        "name": "destroy_goo_generator",
+        "percent": "31.9"
+      },
+      {
+        "name": "find_laptops",
+        "percent": "30.1"
+      },
+      {
+        "name": "get_battle_bread",
+        "percent": "20.1"
+      },
+      {
+        "name": "collect_mushrooms_2",
+        "percent": "13.6"
+      },
+      {
+        "name": "pickpocket_very_important_key_from_king",
+        "percent": "12.5"
+      },
+      {
+        "name": "reconstruct_bridge",
+        "percent": "10.7"
+      },
+      {
+        "name": "both_destroy_goo_generator_and_reconstruct_bridge",
+        "percent": "9.7"
+      }
+    ]
+  }
+}

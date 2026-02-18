@@ -1,0 +1,698 @@
+[
+  {
+    "timestamp": 1754647678354,
+    "AUD": {
+      "fullPrice": 21.95,
+      "finalPrice": 19.75
+    },
+    "BRL": {
+      "fullPrice": 46.99,
+      "finalPrice": 42.29
+    },
+    "CAD": {
+      "fullPrice": 19.49,
+      "finalPrice": 17.54
+    },
+    "CHF": {
+      "fullPrice": 16.79,
+      "finalPrice": 15.11
+    },
+    "CNY": {
+      "fullPrice": 55,
+      "finalPrice": 49.5
+    },
+    "CZK": {
+      "fullPrice": 14.79,
+      "finalPrice": 13.31
+    },
+    "EUR": {
+      "fullPrice": 14.79,
+      "finalPrice": 13.31
+    },
+    "GBP": {
+      "fullPrice": 12.79,
+      "finalPrice": 11.51
+    },
+    "HKD": {
+      "fullPrice": 60,
+      "finalPrice": 54
+    },
+    "JPY": {
+      "fullPrice": 1700,
+      "finalPrice": 1530
+    },
+    "KRW": {
+      "fullPrice": 16500,
+      "finalPrice": 14850
+    },
+    "NOK": {
+      "fullPrice": 165,
+      "finalPrice": 148.5
+    },
+    "NZD": {
+      "fullPrice": 21.99,
+      "finalPrice": 19.79
+    },
+    "PLN": {
+      "fullPrice": 54.99,
+      "finalPrice": 49.49
+    },
+    "RUB": {
+      "fullPrice": 480,
+      "finalPrice": 432
+    },
+    "SEK": {
+      "fullPrice": 14.79,
+      "finalPrice": 13.31
+    },
+    "SGD": {
+      "fullPrice": 14.5,
+      "finalPrice": 13.05
+    },
+    "THB": {
+      "fullPrice": 315,
+      "finalPrice": 283.5
+    },
+    "TRY": {
+      "fullPrice": 6.99,
+      "finalPrice": 6.29
+    },
+    "TWD": {
+      "fullPrice": 268,
+      "finalPrice": 241
+    },
+    "USD": {
+      "fullPrice": 14.99,
+      "finalPrice": 13.49
+    }
+  },
+  {
+    "timestamp": 1755252546291,
+    "AUD": {
+      "fullPrice": 21.95,
+      "finalPrice": 21.95
+    },
+    "BRL": {
+      "fullPrice": 46.99,
+      "finalPrice": 46.99
+    },
+    "CAD": {
+      "fullPrice": 19.49,
+      "finalPrice": 19.49
+    },
+    "CHF": {
+      "fullPrice": 16.79,
+      "finalPrice": 16.79
+    },
+    "CNY": {
+      "fullPrice": 55,
+      "finalPrice": 55
+    },
+    "CZK": {
+      "fullPrice": 14.79,
+      "finalPrice": 14.79
+    },
+    "EUR": {
+      "fullPrice": 14.79,
+      "finalPrice": 14.79
+    },
+    "GBP": {
+      "fullPrice": 12.79,
+      "finalPrice": 12.79
+    },
+    "HKD": {
+      "fullPrice": 60,
+      "finalPrice": 60
+    },
+    "JPY": {
+      "fullPrice": 1700,
+      "finalPrice": 1700
+    },
+    "KRW": {
+      "fullPrice": 16500,
+      "finalPrice": 16500
+    },
+    "NOK": {
+      "fullPrice": 165,
+      "finalPrice": 165
+    },
+    "NZD": {
+      "fullPrice": 21.99,
+      "finalPrice": 21.99
+    },
+    "PLN": {
+      "fullPrice": 54.99,
+      "finalPrice": 54.99
+    },
+    "RUB": {
+      "fullPrice": 480,
+      "finalPrice": 480
+    },
+    "SEK": {
+      "fullPrice": 14.79,
+      "finalPrice": 14.79
+    },
+    "SGD": {
+      "fullPrice": 14.5,
+      "finalPrice": 14.5
+    },
+    "THB": {
+      "fullPrice": 315,
+      "finalPrice": 315
+    },
+    "TRY": {
+      "fullPrice": 6.99,
+      "finalPrice": 6.99
+    },
+    "TWD": {
+      "fullPrice": 268,
+      "finalPrice": 268
+    },
+    "USD": {
+      "fullPrice": 14.99,
+      "finalPrice": 14.99
+    }
+  },
+  {
+    "timestamp": 1758626590340,
+    "AUD": {
+      "fullPrice": 21.95,
+      "finalPrice": 19.75
+    },
+    "BRL": {
+      "fullPrice": 46.99,
+      "finalPrice": 42.29
+    },
+    "CAD": {
+      "fullPrice": 19.49,
+      "finalPrice": 17.54
+    },
+    "CHF": {
+      "fullPrice": 16.79,
+      "finalPrice": 15.11
+    },
+    "CNY": {
+      "fullPrice": 55,
+      "finalPrice": 49.5
+    },
+    "CZK": {
+      "fullPrice": 14.79,
+      "finalPrice": 13.31
+    },
+    "EUR": {
+      "fullPrice": 14.79,
+      "finalPrice": 13.31
+    },
+    "GBP": {
+      "fullPrice": 12.79,
+      "finalPrice": 11.51
+    },
+    "HKD": {
+      "fullPrice": 60,
+      "finalPrice": 54
+    },
+    "JPY": {
+      "fullPrice": 1700,
+      "finalPrice": 1530
+    },
+    "KRW": {
+      "fullPrice": 16500,
+      "finalPrice": 14850
+    },
+    "NOK": {
+      "fullPrice": 165,
+      "finalPrice": 148.5
+    },
+    "NZD": {
+      "fullPrice": 21.99,
+      "finalPrice": 19.79
+    },
+    "PLN": {
+      "fullPrice": 54.99,
+      "finalPrice": 49.49
+    },
+    "RUB": {
+      "fullPrice": 480,
+      "finalPrice": 432
+    },
+    "SEK": {
+      "fullPrice": 14.79,
+      "finalPrice": 13.31
+    },
+    "SGD": {
+      "fullPrice": 14.5,
+      "finalPrice": 13.05
+    },
+    "THB": {
+      "fullPrice": 315,
+      "finalPrice": 283.5
+    },
+    "TRY": {
+      "fullPrice": 6.99,
+      "finalPrice": 6.29
+    },
+    "TWD": {
+      "fullPrice": 268,
+      "finalPrice": 241
+    },
+    "USD": {
+      "fullPrice": 14.99,
+      "finalPrice": 13.49
+    }
+  },
+  {
+    "timestamp": 1759916724725,
+    "AUD": {
+      "fullPrice": 21.95,
+      "finalPrice": 21.95
+    },
+    "BRL": {
+      "fullPrice": 46.99,
+      "finalPrice": 46.99
+    },
+    "CAD": {
+      "fullPrice": 19.49,
+      "finalPrice": 19.49
+    },
+    "CHF": {
+      "fullPrice": 16.79,
+      "finalPrice": 16.79
+    },
+    "CNY": {
+      "fullPrice": 55,
+      "finalPrice": 55
+    },
+    "CZK": {
+      "fullPrice": 14.79,
+      "finalPrice": 14.79
+    },
+    "EUR": {
+      "fullPrice": 14.79,
+      "finalPrice": 14.79
+    },
+    "GBP": {
+      "fullPrice": 12.79,
+      "finalPrice": 12.79
+    },
+    "HKD": {
+      "fullPrice": 60,
+      "finalPrice": 60
+    },
+    "JPY": {
+      "fullPrice": 1700,
+      "finalPrice": 1700
+    },
+    "KRW": {
+      "fullPrice": 16500,
+      "finalPrice": 16500
+    },
+    "NOK": {
+      "fullPrice": 165,
+      "finalPrice": 165
+    },
+    "NZD": {
+      "fullPrice": 21.99,
+      "finalPrice": 21.99
+    },
+    "PLN": {
+      "fullPrice": 54.99,
+      "finalPrice": 54.99
+    },
+    "RUB": {
+      "fullPrice": 480,
+      "finalPrice": 480
+    },
+    "SEK": {
+      "fullPrice": 14.79,
+      "finalPrice": 14.79
+    },
+    "SGD": {
+      "fullPrice": 14.5,
+      "finalPrice": 14.5
+    },
+    "THB": {
+      "fullPrice": 315,
+      "finalPrice": 315
+    },
+    "TRY": {
+      "fullPrice": 6.99,
+      "finalPrice": 6.99
+    },
+    "TWD": {
+      "fullPrice": 268,
+      "finalPrice": 268
+    },
+    "USD": {
+      "fullPrice": 14.99,
+      "finalPrice": 14.99
+    }
+  },
+  {
+    "timestamp": 1764412907677,
+    "AUD": {
+      "fullPrice": 21.95,
+      "finalPrice": 19.75
+    },
+    "BRL": {
+      "fullPrice": 46.99,
+      "finalPrice": 42.29
+    },
+    "CAD": {
+      "fullPrice": 19.49,
+      "finalPrice": 17.54
+    },
+    "CHF": {
+      "fullPrice": 16.79,
+      "finalPrice": 15.11
+    },
+    "CNY": {
+      "fullPrice": 55,
+      "finalPrice": 49.5
+    },
+    "CZK": {
+      "fullPrice": 14.79,
+      "finalPrice": 13.31
+    },
+    "EUR": {
+      "fullPrice": 14.79,
+      "finalPrice": 13.31
+    },
+    "GBP": {
+      "fullPrice": 12.79,
+      "finalPrice": 11.51
+    },
+    "HKD": {
+      "fullPrice": 60,
+      "finalPrice": 54
+    },
+    "JPY": {
+      "fullPrice": 1700,
+      "finalPrice": 1530
+    },
+    "KRW": {
+      "fullPrice": 16500,
+      "finalPrice": 14850
+    },
+    "NOK": {
+      "fullPrice": 165,
+      "finalPrice": 148.5
+    },
+    "NZD": {
+      "fullPrice": 21.99,
+      "finalPrice": 19.79
+    },
+    "PLN": {
+      "fullPrice": 54.99,
+      "finalPrice": 49.49
+    },
+    "RUB": {
+      "fullPrice": 480,
+      "finalPrice": 432
+    },
+    "SEK": {
+      "fullPrice": 14.79,
+      "finalPrice": 13.31
+    },
+    "SGD": {
+      "fullPrice": 14.5,
+      "finalPrice": 13.05
+    },
+    "THB": {
+      "fullPrice": 315,
+      "finalPrice": 283.5
+    },
+    "TRY": {
+      "fullPrice": 6.99,
+      "finalPrice": 6.29
+    },
+    "TWD": {
+      "fullPrice": 268,
+      "finalPrice": 241
+    },
+    "USD": {
+      "fullPrice": 14.99,
+      "finalPrice": 13.49
+    }
+  },
+  {
+    "timestamp": 1765622943793,
+    "AUD": {
+      "fullPrice": 21.95,
+      "finalPrice": 21.95
+    },
+    "BRL": {
+      "fullPrice": 46.99,
+      "finalPrice": 46.99
+    },
+    "CAD": {
+      "fullPrice": 19.49,
+      "finalPrice": 19.49
+    },
+    "CHF": {
+      "fullPrice": 16.79,
+      "finalPrice": 16.79
+    },
+    "CNY": {
+      "fullPrice": 55,
+      "finalPrice": 55
+    },
+    "CZK": {
+      "fullPrice": 14.79,
+      "finalPrice": 14.79
+    },
+    "EUR": {
+      "fullPrice": 14.79,
+      "finalPrice": 14.79
+    },
+    "GBP": {
+      "fullPrice": 12.79,
+      "finalPrice": 12.79
+    },
+    "HKD": {
+      "fullPrice": 60,
+      "finalPrice": 60
+    },
+    "JPY": {
+      "fullPrice": 1700,
+      "finalPrice": 1700
+    },
+    "KRW": {
+      "fullPrice": 16500,
+      "finalPrice": 16500
+    },
+    "NOK": {
+      "fullPrice": 165,
+      "finalPrice": 165
+    },
+    "NZD": {
+      "fullPrice": 21.99,
+      "finalPrice": 21.99
+    },
+    "PLN": {
+      "fullPrice": 54.99,
+      "finalPrice": 54.99
+    },
+    "RUB": {
+      "fullPrice": 480,
+      "finalPrice": 480
+    },
+    "SEK": {
+      "fullPrice": 14.79,
+      "finalPrice": 14.79
+    },
+    "SGD": {
+      "fullPrice": 14.5,
+      "finalPrice": 14.5
+    },
+    "THB": {
+      "fullPrice": 315,
+      "finalPrice": 315
+    },
+    "TRY": {
+      "fullPrice": 6.99,
+      "finalPrice": 6.99
+    },
+    "TWD": {
+      "fullPrice": 268,
+      "finalPrice": 268
+    },
+    "USD": {
+      "fullPrice": 14.99,
+      "finalPrice": 14.99
+    }
+  },
+  {
+    "timestamp": 1766146441445,
+    "AUD": {
+      "fullPrice": 21.95,
+      "finalPrice": 17.56
+    },
+    "BRL": {
+      "fullPrice": 46.99,
+      "finalPrice": 37.59
+    },
+    "CAD": {
+      "fullPrice": 19.49,
+      "finalPrice": 15.59
+    },
+    "CHF": {
+      "fullPrice": 16.79,
+      "finalPrice": 13.43
+    },
+    "CNY": {
+      "fullPrice": 55,
+      "finalPrice": 44
+    },
+    "CZK": {
+      "fullPrice": 14.79,
+      "finalPrice": 11.83
+    },
+    "EUR": {
+      "fullPrice": 14.79,
+      "finalPrice": 11.83
+    },
+    "GBP": {
+      "fullPrice": 12.79,
+      "finalPrice": 10.23
+    },
+    "HKD": {
+      "fullPrice": 60,
+      "finalPrice": 48
+    },
+    "JPY": {
+      "fullPrice": 1700,
+      "finalPrice": 1360
+    },
+    "KRW": {
+      "fullPrice": 16500,
+      "finalPrice": 13200
+    },
+    "NOK": {
+      "fullPrice": 165,
+      "finalPrice": 132
+    },
+    "NZD": {
+      "fullPrice": 21.99,
+      "finalPrice": 17.59
+    },
+    "PLN": {
+      "fullPrice": 54.99,
+      "finalPrice": 43.99
+    },
+    "RUB": {
+      "fullPrice": 480,
+      "finalPrice": 384
+    },
+    "SEK": {
+      "fullPrice": 14.79,
+      "finalPrice": 11.83
+    },
+    "SGD": {
+      "fullPrice": 14.5,
+      "finalPrice": 11.6
+    },
+    "THB": {
+      "fullPrice": 315,
+      "finalPrice": 252
+    },
+    "TRY": {
+      "fullPrice": 6.99,
+      "finalPrice": 5.59
+    },
+    "TWD": {
+      "fullPrice": 268,
+      "finalPrice": 214
+    },
+    "USD": {
+      "fullPrice": 14.99,
+      "finalPrice": 11.99
+    }
+  },
+  {
+    "timestamp": 1767700574246,
+    "AUD": {
+      "fullPrice": 21.95,
+      "finalPrice": 21.95
+    },
+    "BRL": {
+      "fullPrice": 46.99,
+      "finalPrice": 46.99
+    },
+    "CAD": {
+      "fullPrice": 19.49,
+      "finalPrice": 19.49
+    },
+    "CHF": {
+      "fullPrice": 16.79,
+      "finalPrice": 16.79
+    },
+    "CNY": {
+      "fullPrice": 55,
+      "finalPrice": 55
+    },
+    "CZK": {
+      "fullPrice": 14.79,
+      "finalPrice": 14.79
+    },
+    "EUR": {
+      "fullPrice": 14.79,
+      "finalPrice": 14.79
+    },
+    "GBP": {
+      "fullPrice": 12.79,
+      "finalPrice": 12.79
+    },
+    "HKD": {
+      "fullPrice": 60,
+      "finalPrice": 60
+    },
+    "JPY": {
+      "fullPrice": 1700,
+      "finalPrice": 1700
+    },
+    "KRW": {
+      "fullPrice": 16500,
+      "finalPrice": 16500
+    },
+    "NOK": {
+      "fullPrice": 165,
+      "finalPrice": 165
+    },
+    "NZD": {
+      "fullPrice": 21.99,
+      "finalPrice": 21.99
+    },
+    "PLN": {
+      "fullPrice": 54.99,
+      "finalPrice": 54.99
+    },
+    "RUB": {
+      "fullPrice": 480,
+      "finalPrice": 480
+    },
+    "SEK": {
+      "fullPrice": 14.79,
+      "finalPrice": 14.79
+    },
+    "SGD": {
+      "fullPrice": 14.5,
+      "finalPrice": 14.5
+    },
+    "THB": {
+      "fullPrice": 315,
+      "finalPrice": 315
+    },
+    "TRY": {
+      "fullPrice": 6.99,
+      "finalPrice": 6.99
+    },
+    "TWD": {
+      "fullPrice": 268,
+      "finalPrice": 268
+    },
+    "USD": {
+      "fullPrice": 14.99,
+      "finalPrice": 14.99
+    }
+  }
+]

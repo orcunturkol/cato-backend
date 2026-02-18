@@ -1,0 +1,55 @@
+services:
+  # ── PostgreSQL ──
+  postgres:
+    image: postgres:16
+    container_name: cato-postgres
+    environment:
+      POSTGRES_DB: cato
+      POSTGRES_USER: cato_user
+      POSTGRES_PASSWORD: cato_dev_password
+    ports:
+      - "5434:5432"
+    volumes:
+      - cato_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cato_user -d cato"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── CATO API ──
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cato-api
+    ports:
+      - "5039:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=cato;Username=cato_user;Password=cato_dev_password"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ── pgAdmin ──
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: cato-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@cato.dev
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "5051:80"
+    volumes:
+      - cato_pgadmin:/var/lib/pgadmin
+      - ./pgadmin-servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  cato_pgdata:
+  cato_pgadmin:

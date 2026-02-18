@@ -1,0 +1,37 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.vs/
+.vscode/
+.idea/
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+
+# NuGet
+*.nupkg
+**/packages/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+.env
+venv/
+
+# Docker volumes
+cato_pgdata/
+cato_pgadmin/
+
+# Secrets
+appsettings.*.json
+!appsettings.json
+!appsettings.Development.json

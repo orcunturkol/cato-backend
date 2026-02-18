@@ -1,0 +1,4226 @@
+{
+  "active_users_history": [
+    {
+      "timestamp": 1693989431925,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1694089413466,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1694163477733,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1694248389217,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1694335804782,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1694422824596,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1694508132517,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1694595957708,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1694682583867,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1694768980518,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1694853662537,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1694941120852,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1695028201089,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1695201108511,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1695287336068,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1695372562825,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1695460543075,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1695547577089,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1695633664547,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1695720946967,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1695805615576,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1695892264283,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1695978833759,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1696064981884,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1696151101438,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1696237945584,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1696323355686,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1696412108916,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1696498408726,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1696584472084,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1696670448541,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1696756756047,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1696843670148,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1696930644221,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1697017801681,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1697103854204,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1697189995981,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1697275609301,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1697362084153,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1697449518683,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1697535814369,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1697622348282,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1697707502857,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1697795090396,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1697880745619,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1697967189231,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1698054223318,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1698139092546,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1698226589275,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1698313117542,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1698398982754,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1698483812108,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1698570118182,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1698658141173,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1698744679930,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1698830037308,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1698917262796,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1699002550952,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1699089338076,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1699178093474,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1699265412384,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1699351877996,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1699439931253,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1699526562764,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1699613164062,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1699697775383,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1699785388304,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1699872062458,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1699958935965,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1700045744160,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1700152369431,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1700224723885,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1700307418382,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1700391917727,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1700479679781,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1700564073350,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1700653064711,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1700736723861,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1700823543403,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1700910014350,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1700996231034,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1701082963023,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1701172975237,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1701258956351,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1701343737439,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1701430154355,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1701513830406,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1701692496755,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1701800557052,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1701863197493,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1701949185420,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1702036389650,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1702123939318,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1702212615570,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1702299344542,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1702389504570,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1702469402864,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1702558837017,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1702644536619,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1702728912248,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1702810308193,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1702900044013,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1702988506900,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1703075111029,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1703161050118,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1703248681170,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1703329438932,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1703420105453,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1703506697161,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1703590947290,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1703678250227,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1703766162600,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1703853467539,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1703943674136,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1704026302831,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1704201586006,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1704290786702,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1704376478883,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1704459038802,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1704459215032,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1704544657731,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1704634701371,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1704720673972,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1704802615335,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1704892627721,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1704978318026,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1705062527405,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1705149739229,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1705234794694,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1705320817197,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1705408439956,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1705495234710,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1705581473232,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1705669837429,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1705756566613,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1705756665851,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1705836574390,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1705836683653,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1705926753771,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1706019926521,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1706185930155,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1706271594354,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1706358927986,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1706445538385,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1706532659415,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1706615896270,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1706706198384,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1706706323772,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1706793121613,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1706876753410,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1706962982596,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1707049964752,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1707135979415,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1707221981060,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1707311103991,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1707394331013,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1707500143524,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1707568963986,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1707656232834,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1707742721344,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1707827002176,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1707921384820,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1708002388504,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1708002474898,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1708087443800,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1708176652918,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1708345229355,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1708433246451,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1708520385885,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1708608386748,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1708695942462,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1708781859491,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1708865851506,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1708865956472,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1708955056454,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1709048981662,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1709127749429,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1709211939356,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1709382415608,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1709467055706,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1709556004030,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1709649991163,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1709728893104,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1709815925772,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1709986878322,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1709986966913,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1710072961105,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1710157716371,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1710330559437,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1710417582980,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1710503294596,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1710588658034,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1710762896388,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1710847027422,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1710931626829,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1711017638335,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1711277395889,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1711363340144,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1711446117302,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1711535178613,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1711622641639,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1711622707497,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1711709102910,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1711795473748,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1711880333810,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1711968896443,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1712059339293,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1712143124005,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1712223235340,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1712316503440,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1712401431455,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1712483282418,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1712576122019,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1712661125370,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1712747414766,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1712837345570,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1712922183196,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1713091934333,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1713182840100,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1713270728210,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1713436247202,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1713528897701,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1713607215825,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1713693387375,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1713693453864,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1713782304294,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1713866361498,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1713951059584,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1714037934495,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1714125193687,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1714125258256,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1714208711461,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1714296064373,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1714383989443,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1714470023873,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1714470090520,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1714559413724,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1714645660903,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1714645704612,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1714732104992,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1714818463767,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1714901632382,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1715075744658,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1715161413433,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1715246435836,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1715335009775,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1715421273545,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1715507863483,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1715593993051,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1715680346876,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1715766696893,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1715852885592,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1715937929533,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1716028500915,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1716111643736,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1716199136224,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1716285312078,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1716371099955,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1716465326358,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1716555297295,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1716637252435,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1716725794715,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1716811533364,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1716897323168,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1716983410665,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1717073204207,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1717155378214,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1717246220282,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1717327470910,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1717414497829,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1717501035728,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1717588776915,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1717676060980,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1717760577724,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1717845394276,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1717936317561,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1718010756244,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1718097315177,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1718192702748,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1718308638700,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1718355453852,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1718441188349,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1718528171066,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1718614241136,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1718704014066,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1718883254138,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1718993811270,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1719046360682,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1719128670235,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1719215426164,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1719301602062,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1719388533346,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1719474529972,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1719562067583,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1719648181944,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1719734297358,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1719821201406,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1719897451645,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1719985138423,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1720069722438,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1720156941426,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1720243757341,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1720328160881,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1720416320638,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1720503567697,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1720589213904,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1720676405783,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1720762258365,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1720848354070,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1720934141345,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1721021391846,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1721108336578,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1721281826258,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1721370114701,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1721457476709,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1721540239069,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1721626118540,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1721713388001,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1721798967433,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1721886196515,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1721972055702,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1722056705983,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1722143595995,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1722230968219,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1722317519782,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1722403661538,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1722489296583,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1722575520968,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1722663461242,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1722747715402,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1722833145296,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1722921917243,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1723005414955,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1723094177957,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1723180703761,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1723267509495,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1723354964373,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1723442018310,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1723531427634,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1723617529021,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1723700522482,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1723786053774,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1723870619874,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1723958813214,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1724045871482,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1724132229780,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1724217017226,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1724304678206,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1724391863278,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1724476095090,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1724564023394,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1724651714684,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1724740106087,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1724828934347,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1724915246060,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1725000339842,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1725087846908,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1725173792511,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1725259292197,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1725345691340,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1725427854596,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1725514866103,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1725603074988,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1725687929723,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1725773837942,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1725863401448,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1725947337599,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1726033352106,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1726118227577,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1726205385679,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1726295691792,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1726378050565,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1726464408240,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1726553483419,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1726638373845,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1726727849257,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1726811875993,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1726897356417,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1726982238555,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1727070771690,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1727157531465,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1727241577853,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1727332032920,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1727418720029,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1727505431490,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1727592146226,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1727679414609,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1727765801255,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1727851123900,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1727936926346,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1728023774197,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1728109240333,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1728194334418,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1728281416892,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1728370351738,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1728457508388,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1728629806920,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1728716551692,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1728799367578,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1728890393311,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1728976136205,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1729148973298,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1729236854915,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1729320994773,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1729406498772,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1729490050053,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1729579986040,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1729670139570,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1729753352538,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1729846500432,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1729926370014,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1730016054951,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1730099247799,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1730188796957,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1730360350327,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1730442929592,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1730529095881,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1730618497619,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1730705374859,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1730790426586,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1730878938754,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1730965128229,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1731050518878,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1731135337882,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1731222346587,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1731309265680,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1731395861040,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1731473155816,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1731557736511,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1731651492074,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1731825345001,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1731913156441,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1731991442822,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1732085594871,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1732173005004,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1732259444129,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1732376506275,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1732457118584,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1732521239468,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1732605615305,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1732691596450,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1732787324379,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1732951027614,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1733036415088,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1733121974598,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1733212146893,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1733296580949,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1733384644132,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1733588068958,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1733642517678,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1733726810287,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1733818362078,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1733906560444,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1733993933792,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1734118124145,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1734161212690,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1734244555818,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1734333727199,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1734507672108,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1734591881921,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1734676822900,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1734850850145,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1734936563387,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1735022948204,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1735109589086,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1735197882358,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1735282555703,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1735367361605,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1735457829126,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1735544797861,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1735627713687,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1735717500943,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1735833427507,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1735975864094,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1736093701800,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1736154390410,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1736260950633,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1736313964820,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1736401322406,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1736487017226,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1736574579307,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1736658534132,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1736749980216,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1736833588139,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1736925192067,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1737017973766,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1737142476282,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1737185574922,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1737265453299,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1737355020969,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1737438420106,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1737525151418,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1737613308492,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1737703704532,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1737782012520,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1737874819275,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1737956947155,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1738040573769,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1738253990834,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1738307979507,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1738391847181,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1738512633220,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1738588656574,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1738647111901,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1738739182183,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1738857834567,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1738914186166,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1738997450302,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1739083659393,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1739280851949,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1739344777598,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1739430348189,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1739511802530,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1739619509140,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1739687439951,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1739769786110,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1739858181798,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1739947109765,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1740029716710,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1740116321868,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1740202113464,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1740317844965,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1740376092418,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1740460898859,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1740552335770,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1740635750955,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1740724158886,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1740808029758,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1740896866432,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1740983604138,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1741065536446,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1741156755062,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1741242735713,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1741330121440,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1741415923734,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1741502076050,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1741586206094,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1741676828921,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1741762103760,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1741849609796,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1741935237665,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1742020078199,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1742105282997,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1742195325273,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1742281492423,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1742363075286,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1742453198803,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1742540323660,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1742625804128,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1742712283407,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1742795661633,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1742885659139,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1742972119941,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1743057798485,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1743144709344,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1743230804188,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1743313880362,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1743404100884,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1743490669291,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1743578891528,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1743663702695,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1743746406748,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1743835170240,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1743923070888,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1744004714565,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1744090584507,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1744180884935,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1744268236260,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1744351029133,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1744434456164,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1744522372080,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1744609940306,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1744700339989,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1744782253774,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1744871633816,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1744959850348,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1745045215588,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1745130979304,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1745215034649,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1745307192732,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1745387765510,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1745476505562,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1745560722428,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1745646847963,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1745732728995,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1745821820376,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1745908592385,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1745994831709,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1746082759039,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1746164037422,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1746254395648,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1746338253146,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1746430463409,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1746515157971,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1746603778619,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1746683027262,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1746774423042,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1746856752877,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1746945870994,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1747033730504,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1747118993506,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1747206735845,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1747291447598,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1747380745814,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1747465488440,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1747547460862,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1747633935638,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1747723738559,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1747811401696,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1747897018115,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1747978694243,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1748072047083,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1748156554316,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1748243369773,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1748321735968,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1748420445248,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1748503888295,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1748589576722,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1748674813510,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1748842602773,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1748936067540,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1749021710827,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1749278834724,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1749365030133,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1749452087653,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1749554835823,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1749637547286,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1749707962115,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1749799105514,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1749880066174,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1749965749292,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1750057049916,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1750144757236,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1750231194562,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1750311987474,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1750402520215,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1750488149733,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1750575681113,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1750663112424,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1750750691065,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1750838932643,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1750924847506,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1751012167509,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1751093729742,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1751182613208,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1751270822140,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1751351212567,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1751462962328,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1751532110153,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1751615566672,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1751694064201,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1751779699655,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1751873504100,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1751873901709,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1751951032201,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1752042158064,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1752133238038,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1752219015120,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1752307157621,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1752385878009,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1752482577047,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1752565093362,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1752735465061,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1752822342430,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1752910673880,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1752995240623,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1753083363606,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1753168873967,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1753257581797,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1753338131824,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1753428264591,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1753428764761,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1753513309039,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1753599476189,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1753691243743,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1753775335721,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1753943298533,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1754026832742,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1754114283744,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1754199014372,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1754286227150,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1754372259100,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1754461384048,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1754546981829,
+      "dau": 0,
+      "mau": 0
+    },
+    {
+      "timestamp": 1754632601002,
+      "dau": 6776,
+      "mau": 7660
+    },
+    {
+      "timestamp": 1754717188040,
+      "dau": 7017,
+      "mau": 8255
+    },
+    {
+      "timestamp": 1754805826509,
+      "dau": 9415,
+      "mau": 11461
+    },
+    {
+      "timestamp": 1754890778807,
+      "dau": 7467,
+      "mau": 14278
+    },
+    {
+      "timestamp": 1754978028498,
+      "dau": 6762,
+      "mau": 14872
+    },
+    {
+      "timestamp": 1755063254368,
+      "dau": 6404,
+      "mau": 16748
+    },
+    {
+      "timestamp": 1755152863580,
+      "dau": 6219,
+      "mau": 17997
+    },
+    {
+      "timestamp": 1755238712403,
+      "dau": 6706,
+      "mau": 20718
+    },
+    {
+      "timestamp": 1755326363085,
+      "dau": 7251,
+      "mau": 22983
+    },
+    {
+      "timestamp": 1755408431362,
+      "dau": 7233,
+      "mau": 24635
+    },
+    {
+      "timestamp": 1755499495280,
+      "dau": 4912,
+      "mau": 25514
+    },
+    {
+      "timestamp": 1755586196606,
+      "dau": 3809,
+      "mau": 26975
+    },
+    {
+      "timestamp": 1755670529143,
+      "dau": 3520,
+      "mau": 27639
+    },
+    {
+      "timestamp": 1755755698299,
+      "dau": 3016,
+      "mau": 27645
+    },
+    {
+      "timestamp": 1755843772015,
+      "dau": 2921,
+      "mau": 27628
+    },
+    {
+      "timestamp": 1755927426078,
+      "dau": 3444,
+      "mau": 27659
+    },
+    {
+      "timestamp": 1756014213765,
+      "dau": 3828,
+      "mau": 27851
+    },
+    {
+      "timestamp": 1756101048157,
+      "dau": 2892,
+      "mau": 28408
+    },
+    {
+      "timestamp": 1756189480737,
+      "dau": 2392,
+      "mau": 28761
+    },
+    {
+      "timestamp": 1756276654739,
+      "dau": 1838,
+      "mau": 29268
+    },
+    {
+      "timestamp": 1756360482758,
+      "dau": 1565,
+      "mau": 29467
+    },
+    {
+      "timestamp": 1756449392050,
+      "dau": 1294,
+      "mau": 29431
+    },
+    {
+      "timestamp": 1756532867736,
+      "dau": 1892,
+      "mau": 29415
+    },
+    {
+      "timestamp": 1756619988643,
+      "dau": 2441,
+      "mau": 29461
+    },
+    {
+      "timestamp": 1756705937305,
+      "dau": 1630,
+      "mau": 29467
+    },
+    {
+      "timestamp": 1756794986795,
+      "dau": 1478,
+      "mau": 29455
+    },
+    {
+      "timestamp": 1756880606479,
+      "dau": 1171,
+      "mau": 29340
+    },
+    {
+      "timestamp": 1756967313449,
+      "dau": 1135,
+      "mau": 28863
+    },
+    {
+      "timestamp": 1757053592086,
+      "dau": 941,
+      "mau": 28672
+    },
+    {
+      "timestamp": 1757138139977,
+      "dau": 1370,
+      "mau": 28769
+    },
+    {
+      "timestamp": 1757224717705,
+      "dau": 1256,
+      "mau": 28629
+    },
+    {
+      "timestamp": 1757311804842,
+      "dau": 1202,
+      "mau": 28622
+    },
+    {
+      "timestamp": 1757398985941,
+      "dau": 861,
+      "mau": 27414
+    },
+    {
+      "timestamp": 1757483653516,
+      "dau": 772,
+      "mau": 25074
+    },
+    {
+      "timestamp": 1757572089261,
+      "dau": 620,
+      "mau": 22155
+    },
+    {
+      "timestamp": 1757658569869,
+      "dau": 537,
+      "mau": 20322
+    },
+    {
+      "timestamp": 1757742742921,
+      "dau": 750,
+      "mau": 19729
+    },
+    {
+      "timestamp": 1757830062537,
+      "dau": 1093,
+      "mau": 18862
+    },
+    {
+      "timestamp": 1757917545812,
+      "dau": 708,
+      "mau": 16938
+    },
+    {
+      "timestamp": 1758004336613,
+      "dau": 628,
+      "mau": 15253
+    },
+    {
+      "timestamp": 1758090655105,
+      "dau": 619,
+      "mau": 13413
+    },
+    {
+      "timestamp": 1758176905754,
+      "dau": 435,
+      "mau": 12393
+    },
+    {
+      "timestamp": 1758261630077,
+      "dau": 501,
+      "mau": 10962
+    },
+    {
+      "timestamp": 1758347658177,
+      "dau": 728,
+      "mau": 10426
+    },
+    {
+      "timestamp": 1758435933624,
+      "dau": 761,
+      "mau": 10098
+    },
+    {
+      "timestamp": 1758523022969,
+      "dau": 528,
+      "mau": 9653
+    },
+    {
+      "timestamp": 1758692995145,
+      "dau": 630,
+      "mau": 9131
+    },
+    {
+      "timestamp": 1758778083988,
+      "dau": 685,
+      "mau": 8735
+    },
+    {
+      "timestamp": 1758865260586,
+      "dau": 592,
+      "mau": 8403
+    },
+    {
+      "timestamp": 1758954251464,
+      "dau": 770,
+      "mau": 8224
+    },
+    {
+      "timestamp": 1759038486241,
+      "dau": 799,
+      "mau": 8016
+    },
+    {
+      "timestamp": 1759126966408,
+      "dau": 681,
+      "mau": 7873
+    },
+    {
+      "timestamp": 1759214304570,
+      "dau": 647,
+      "mau": 7562
+    },
+    {
+      "timestamp": 1759297583150,
+      "dau": 652,
+      "mau": 7055
+    },
+    {
+      "timestamp": 1759387582236,
+      "dau": 691,
+      "mau": 6793
+    },
+    {
+      "timestamp": 1759471154976,
+      "dau": 808,
+      "mau": 6604
+    },
+    {
+      "timestamp": 1759559584246,
+      "dau": 971,
+      "mau": 6548
+    },
+    {
+      "timestamp": 1759645521909,
+      "dau": 815,
+      "mau": 6458
+    },
+    {
+      "timestamp": 1759731884830,
+      "dau": 590,
+      "mau": 6361
+    },
+    {
+      "timestamp": 1759823971205,
+      "dau": 391,
+      "mau": 6087
+    },
+    {
+      "timestamp": 1759902490455,
+      "dau": 428,
+      "mau": 5855
+    },
+    {
+      "timestamp": 1759987959027,
+      "dau": 376,
+      "mau": 5624
+    },
+    {
+      "timestamp": 1760075258351,
+      "dau": 408,
+      "mau": 5496
+    },
+    {
+      "timestamp": 1760161300646,
+      "dau": 514,
+      "mau": 5424
+    },
+    {
+      "timestamp": 1760247371893,
+      "dau": 675,
+      "mau": 5439
+    },
+    {
+      "timestamp": 1760334974266,
+      "dau": 300,
+      "mau": 5373
+    },
+    {
+      "timestamp": 1760420206492,
+      "dau": 446,
+      "mau": 5287
+    },
+    {
+      "timestamp": 1760507841859,
+      "dau": 371,
+      "mau": 5086
+    },
+    {
+      "timestamp": 1760592854565,
+      "dau": 323,
+      "mau": 4978
+    },
+    {
+      "timestamp": 1760682689493,
+      "dau": 214,
+      "mau": 4862
+    },
+    {
+      "timestamp": 1760769509714,
+      "dau": 446,
+      "mau": 4813
+    },
+    {
+      "timestamp": 1760857259999,
+      "dau": 365,
+      "mau": 4793
+    },
+    {
+      "timestamp": 1760943064199,
+      "dau": 389,
+      "mau": 4762
+    },
+    {
+      "timestamp": 1761029828561,
+      "dau": 267,
+      "mau": 4632
+    },
+    {
+      "timestamp": 1761114373362,
+      "dau": 271,
+      "mau": 4495
+    },
+    {
+      "timestamp": 1761202268349,
+      "dau": 223,
+      "mau": 4410
+    },
+    {
+      "timestamp": 1761289476931,
+      "dau": 207,
+      "mau": 4291
+    },
+    {
+      "timestamp": 1761373914073,
+      "dau": 348,
+      "mau": 4196
+    },
+    {
+      "timestamp": 1761460932930,
+      "dau": 285,
+      "mau": 4111
+    },
+    {
+      "timestamp": 1761548615856,
+      "dau": 273,
+      "mau": 3972
+    },
+    {
+      "timestamp": 1761637512303,
+      "dau": 162,
+      "mau": 3792
+    },
+    {
+      "timestamp": 1761726882093,
+      "dau": 168,
+      "mau": 3649
+    },
+    {
+      "timestamp": 1761807856880,
+      "dau": 152,
+      "mau": 3510
+    },
+    {
+      "timestamp": 1761898681880,
+      "dau": 256,
+      "mau": 3400
+    },
+    {
+      "timestamp": 1761979506159,
+      "dau": 261,
+      "mau": 3279
+    },
+    {
+      "timestamp": 1762152248581,
+      "dau": 183,
+      "mau": 3103
+    },
+    {
+      "timestamp": 1762241720504,
+      "dau": 260,
+      "mau": 2904
+    },
+    {
+      "timestamp": 1762331096447,
+      "dau": 271,
+      "mau": 2752
+    },
+    {
+      "timestamp": 1762411875979,
+      "dau": 404,
+      "mau": 2700
+    },
+    {
+      "timestamp": 1762503110190,
+      "dau": 321,
+      "mau": 2681
+    },
+    {
+      "timestamp": 1762584452296,
+      "dau": 369,
+      "mau": 2664
+    },
+    {
+      "timestamp": 1762673414798,
+      "dau": 305,
+      "mau": 2644
+    },
+    {
+      "timestamp": 1762760589801,
+      "dau": 200,
+      "mau": 2586
+    },
+    {
+      "timestamp": 1762843747739,
+      "dau": 250,
+      "mau": 2512
+    },
+    {
+      "timestamp": 1762932642641,
+      "dau": 243,
+      "mau": 2391
+    },
+    {
+      "timestamp": 1763016814408,
+      "dau": 114,
+      "mau": 2339
+    },
+    {
+      "timestamp": 1763103060417,
+      "dau": 179,
+      "mau": 2263
+    },
+    {
+      "timestamp": 1763188892457,
+      "dau": 321,
+      "mau": 2250
+    },
+    {
+      "timestamp": 1763275187722,
+      "dau": 334,
+      "mau": 2253
+    },
+    {
+      "timestamp": 1763362811724,
+      "dau": 241,
+      "mau": 2259
+    },
+    {
+      "timestamp": 1763449045625,
+      "dau": 233,
+      "mau": 2201
+    },
+    {
+      "timestamp": 1763537516438,
+      "dau": 190,
+      "mau": 2152
+    },
+    {
+      "timestamp": 1763621632360,
+      "dau": 245,
+      "mau": 2111
+    },
+    {
+      "timestamp": 1763707247594,
+      "dau": 273,
+      "mau": 2114
+    },
+    {
+      "timestamp": 1763795178762,
+      "dau": 330,
+      "mau": 2129
+    },
+    {
+      "timestamp": 1763898014697,
+      "dau": 297,
+      "mau": 2150
+    },
+    {
+      "timestamp": 1764053898895,
+      "dau": 160,
+      "mau": 2137
+    },
+    {
+      "timestamp": 1764146509759,
+      "dau": 250,
+      "mau": 2110
+    },
+    {
+      "timestamp": 1764229564443,
+      "dau": 338,
+      "mau": 2124
+    },
+    {
+      "timestamp": 1764398884724,
+      "dau": 657,
+      "mau": 2232
+    },
+    {
+      "timestamp": 1764485638414,
+      "dau": 775,
+      "mau": 2404
+    },
+    {
+      "timestamp": 1764575023466,
+      "dau": 520,
+      "mau": 2503
+    },
+    {
+      "timestamp": 1764746188855,
+      "dau": 500,
+      "mau": 2600
+    },
+    {
+      "timestamp": 1764830513016,
+      "dau": 438,
+      "mau": 2651
+    },
+    {
+      "timestamp": 1764916191924,
+      "dau": 451,
+      "mau": 2704
+    },
+    {
+      "timestamp": 1765004169528,
+      "dau": 620,
+      "mau": 2826
+    },
+    {
+      "timestamp": 1765090350758,
+      "dau": 831,
+      "mau": 2986
+    },
+    {
+      "timestamp": 1765179588298,
+      "dau": 532,
+      "mau": 3059
+    },
+    {
+      "timestamp": 1765271792195,
+      "dau": 541,
+      "mau": 3098
+    },
+    {
+      "timestamp": 1765353234041,
+      "dau": 552,
+      "mau": 3163
+    },
+    {
+      "timestamp": 1765436712844,
+      "dau": 494,
+      "mau": 3198
+    },
+    {
+      "timestamp": 1765524001914,
+      "dau": 570,
+      "mau": 3272
+    },
+    {
+      "timestamp": 1765608318343,
+      "dau": 484,
+      "mau": 3351
+    },
+    {
+      "timestamp": 1765697848284,
+      "dau": 466,
+      "mau": 3413
+    },
+    {
+      "timestamp": 1765783118431,
+      "dau": 244,
+      "mau": 3413
+    },
+    {
+      "timestamp": 1765873895018,
+      "dau": 447,
+      "mau": 3506
+    },
+    {
+      "timestamp": 1765955867560,
+      "dau": 245,
+      "mau": 3524
+    },
+    {
+      "timestamp": 1766039811138,
+      "dau": 335,
+      "mau": 3528
+    },
+    {
+      "timestamp": 1766129858863,
+      "dau": 702,
+      "mau": 3631
+    },
+    {
+      "timestamp": 1766213240553,
+      "dau": 1020,
+      "mau": 3849
+    },
+    {
+      "timestamp": 1766300447358,
+      "dau": 925,
+      "mau": 4043
+    },
+    {
+      "timestamp": 1766388780500,
+      "dau": 636,
+      "mau": 4168
+    },
+    {
+      "timestamp": 1766472627079,
+      "dau": 660,
+      "mau": 4285
+    },
+    {
+      "timestamp": 1766559076356,
+      "dau": 799,
+      "mau": 4432
+    },
+    {
+      "timestamp": 1766655002479,
+      "dau": 719,
+      "mau": 4541
+    },
+    {
+      "timestamp": 1766736461802,
+      "dau": 1009,
+      "mau": 4740
+    },
+    {
+      "timestamp": 1766818439464,
+      "dau": 1082,
+      "mau": 4999
+    },
+    {
+      "timestamp": 1766904816479,
+      "dau": 1155,
+      "mau": 5252
+    },
+    {
+      "timestamp": 1766990897013,
+      "dau": 808,
+      "mau": 5383
+    },
+    {
+      "timestamp": 1767074152623,
+      "dau": 951,
+      "mau": 5467
+    },
+    {
+      "timestamp": 1767164353689,
+      "dau": 674,
+      "mau": 5438
+    },
+    {
+      "timestamp": 1767250846911,
+      "dau": 881,
+      "mau": 5539
+    },
+    {
+      "timestamp": 1767347265482,
+      "dau": 976,
+      "mau": 5672
+    },
+    {
+      "timestamp": 1767429816451,
+      "dau": 1014,
+      "mau": 5834
+    },
+    {
+      "timestamp": 1767512574764,
+      "dau": 851,
+      "mau": 5946
+    },
+    {
+      "timestamp": 1767597479034,
+      "dau": 750,
+      "mau": 5983
+    },
+    {
+      "timestamp": 1767683858986,
+      "dau": 742,
+      "mau": 5958
+    },
+    {
+      "timestamp": 1767769069766,
+      "dau": 681,
+      "mau": 6000
+    },
+    {
+      "timestamp": 1767854868468,
+      "dau": 641,
+      "mau": 6027
+    },
+    {
+      "timestamp": 1767948088200,
+      "dau": 485,
+      "mau": 6009
+    },
+    {
+      "timestamp": 1768024123988,
+      "dau": 457,
+      "mau": 5998
+    },
+    {
+      "timestamp": 1768113866567,
+      "dau": 685,
+      "mau": 6029
+    },
+    {
+      "timestamp": 1768195394245,
+      "dau": 399,
+      "mau": 6006
+    },
+    {
+      "timestamp": 1768280182240,
+      "dau": 305,
+      "mau": 5961
+    },
+    {
+      "timestamp": 1768366773335,
+      "dau": 293,
+      "mau": 5975
+    },
+    {
+      "timestamp": 1768454647392,
+      "dau": 371,
+      "mau": 5954
+    },
+    {
+      "timestamp": 1768538936812,
+      "dau": 375,
+      "mau": 5990
+    },
+    {
+      "timestamp": 1768623545648,
+      "dau": 565,
+      "mau": 6054
+    },
+    {
+      "timestamp": 1768711472020,
+      "dau": 604,
+      "mau": 6027
+    },
+    {
+      "timestamp": 1768795746117,
+      "dau": 647,
+      "mau": 5923
+    }
+  ],
+  "game_id": 2429270,
+  "game_name": "The RPG"
+}
