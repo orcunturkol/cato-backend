@@ -34,4 +34,8 @@ public class Game
     public LegalEntity? Publisher { get; set; }
     public ICollection<GameGenre> Genres { get; set; } = [];
     public ICollection<GenreTag> Tags { get; set; } = [];
+    public ICollection<SteamSaleFinancial> SalesFinancials { get; set; } = [];
+    public ICollection<SteamTraffic> TrafficRecords { get; set; } = [];
+    public ICollection<CcuHistory> CcuHistories { get; set; } = [];
+    public ICollection<OwnedGameData> OwnedGameData { get; set; } = [];
 }

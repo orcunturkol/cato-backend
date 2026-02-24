@@ -28,9 +28,35 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=cato;Username=cato_user;Password=cato_dev_password"
+      RabbitMQ__HostName: rabbitmq
+      RabbitMQ__Port: "5672"
+      RabbitMQ__UserName: cato_user
+      RabbitMQ__Password: cato_dev_password
+    volumes:
+      - collector_data:/data:ro
     depends_on:
       postgres:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  # ── RabbitMQ ──
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: cato-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: cato_user
+      RABBITMQ_DEFAULT_PASS: cato_dev_password
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - cato_rabbitmq:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
 
   # ── pgAdmin ──
   pgadmin:
@@ -53,3 +79,5 @@ services:
 volumes:
   cato_pgdata:
   cato_pgadmin:
+  cato_rabbitmq:
+  collector_data:

@@ -37,6 +37,12 @@ builder.Services.AddHttpClient<ISteamApiService, SteamApiService>(client =>
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 
+// ── RabbitMQ ──
+builder.Services.Configure<Cato.API.Services.RabbitMqSettings>(
+    builder.Configuration.GetSection("RabbitMQ"));
+builder.Services.AddScoped<Cato.API.Services.IngestionDispatcher>();
+builder.Services.AddHostedService<Cato.API.Services.RabbitMqConsumerService>();
+
 // ── Swagger / OpenAPI ──
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
