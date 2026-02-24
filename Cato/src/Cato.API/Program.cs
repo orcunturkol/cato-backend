@@ -1,4 +1,3 @@
-using Carter;
 using Cato.Infrastructure.Database;
 using Cato.Infrastructure.Steam;
 using FluentValidation;
@@ -27,8 +26,8 @@ builder.Services.AddMediatR(cfg =>
 // ── FluentValidation ──
 builder.Services.AddValidatorsFromAssembly(typeof(Program).Assembly);
 
-// ── Carter ──
-builder.Services.AddCarter();
+// ── Controllers ──
+builder.Services.AddControllers();
 
 // ── Steam API HttpClient ──
 builder.Services.AddHttpClient<ISteamApiService, SteamApiService>(client =>
@@ -49,6 +48,11 @@ builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new() { Title = "CATO API", Version = "v1" });
     options.CustomSchemaIds(type => type.FullName?.Replace("+", "."));
+
+    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+    if (File.Exists(xmlPath))
+        options.IncludeXmlComments(xmlPath);
 });
 
 var app = builder.Build();
@@ -68,6 +72,6 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseSerilogRequestLogging();
-app.MapCarter();
+app.MapControllers();
 
 app.Run();

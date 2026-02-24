@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Cato.API.Features.Ingestion;
+using Cato.API.Models.Ingestion;
 using MediatR;
 
 namespace Cato.API.Services;
@@ -35,19 +35,19 @@ public class IngestionDispatcher
         switch (message.Source.ToLowerInvariant())
         {
             case "steam_financial":
-                await _mediator.Send(new IngestFinancialData.Command(message.AppId, message.FilePath), ct);
+                await _mediator.Send(new IngestFinancialDataCommand(message.AppId, message.FilePath), ct);
                 break;
 
             case "steamworks_wishlist":
-                await _mediator.Send(new IngestWishlistData.Command(message.AppId, message.FilePath), ct);
+                await _mediator.Send(new IngestWishlistDataCommand(message.AppId, message.FilePath), ct);
                 break;
 
             case "gamalytic_peak_ccu":
-                await _mediator.Send(new IngestPeakCcu.Command(message.AppId, message.FilePath), ct);
+                await _mediator.Send(new IngestPeakCcuCommand(message.AppId, message.FilePath), ct);
                 break;
 
             case "steamworks_owned_game":
-                await _mediator.Send(new IngestOwnedGameData.Command(message.AppId, message.FilePath), ct);
+                await _mediator.Send(new IngestOwnedGameDataCommand(message.AppId, message.FilePath), ct);
                 break;
 
             default:
