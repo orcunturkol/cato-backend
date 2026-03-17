@@ -103,9 +103,22 @@ public sealed class SteamPicsWatcherService : BackgroundService
                 var info = await _steamKit.GetAppInfoAsync(appId, ct);
                 if (info is null) continue;
 
-                // Only auto-save released games (filter out DLCs, tools, demos, etc.)
-                if (!string.Equals(info.Type, "game", StringComparison.OrdinalIgnoreCase)) continue;
-                if (!string.Equals(info.ReleaseState, "released", StringComparison.OrdinalIgnoreCase)) continue;
+                // Allow "game" or "demo" types only
+                if (!string.Equals(info.Type, "game", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(info.Type, "demo", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                // Must be released
+                if (!string.Equals(info.ReleaseState, "released", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                // Must be released after Jan 1, 2023
+                if (info.ReleaseDate is null || info.ReleaseDate < new DateOnly(2023, 1, 1))
+                    continue;
+
+                // Exclude free-to-play games
+                if (info.IsFreeToPlay)
+                    continue;
 
                 _logger.LogInformation("SteamPicsWatcher: Discovered new game AppId={AppId} Name='{Name}'", appId, info.Name);
 

@@ -235,7 +235,9 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
             if (long.TryParse(releaseDateRaw, out var unixSeconds) && unixSeconds > 0)
                 releaseDate = DateOnly.FromDateTime(DateTimeOffset.FromUnixTimeSeconds(unixSeconds).UtcDateTime);
 
-            return new SteamPicsAppInfo(appId, name, type, releaseState, releaseDate);
+            var isFreeToPlay = string.Equals(common["isfreeapp"].Value, "1", StringComparison.Ordinal);
+
+            return new SteamPicsAppInfo(appId, name, type, releaseState, releaseDate, isFreeToPlay);
         }
         catch (Exception ex)
         {

@@ -8,5 +8,6 @@ public record SteamPicsAppInfo(
     string Name,
     string Type,
     string ReleaseState,
-    DateOnly? ReleaseDate
+    DateOnly? ReleaseDate,
+    bool IsFreeToPlay
 );
