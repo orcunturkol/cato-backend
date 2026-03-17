@@ -10,5 +10,6 @@ public interface IIngestionService
     Task<IngestionResult> IngestWishlistDataAsync(IngestWishlistDataCommand command, CancellationToken ct = default);
     Task<IngestionResult> IngestOwnedGameDataAsync(IngestOwnedGameDataCommand command, CancellationToken ct = default);
     Task<IngestionResult> IngestGroupMemberCountAsync(IngestGroupMemberCountCommand command, CancellationToken ct = default);
+    Task<IngestionResult> IngestSteamDbSnapshotAsync(IngestSteamDbSnapshotCommand command, CancellationToken ct = default);
     Task<List<IngestionLogDto>> GetIngestionLogsAsync(GetIngestionLogsQuery query, CancellationToken ct = default);
 }

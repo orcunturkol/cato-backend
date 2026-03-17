@@ -525,6 +525,128 @@ public class IngestionService : IIngestionService
         }
     }
 
+    public async Task<IngestionResult> IngestSteamDbSnapshotAsync(IngestSteamDbSnapshotCommand request, CancellationToken ct = default)
+    {
+        var log = new IngestionLog
+        {
+            Id = Guid.NewGuid(),
+            Source = "steamdb_snapshot",
+            StartTime = DateTime.UtcNow,
+            Status = "Running",
+            FilePath = request.FilePath
+        };
+        _db.IngestionLogs.Add(log);
+        await _db.SaveChangesAsync(ct);
+
+        try
+        {
+            if (!File.Exists(request.FilePath))
+                throw new FileNotFoundException($"File not found: {request.FilePath}");
+
+            var json = await File.ReadAllTextAsync(request.FilePath, ct);
+            var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            var scrapedAt = root.TryGetProperty("scraped_at", out var scrapedAtEl)
+                ? DateTime.SpecifyKind(scrapedAtEl.GetDateTime(), DateTimeKind.Utc)
+                : DateTime.UtcNow;
+
+            var snapshotDate = DateOnly.FromDateTime(scrapedAt);
+            var source = root.GetProperty("source").GetString()!;
+            var rank = root.GetProperty("rank").GetInt32();
+
+            var follows = root.TryGetProperty("follows", out var followsEl) && followsEl.ValueKind != JsonValueKind.Null
+                ? followsEl.GetInt32() : 0;
+            var sevenDayGain = root.TryGetProperty("seven_day_gain", out var gainEl) && gainEl.ValueKind != JsonValueKind.Null
+                ? gainEl.GetInt32() : 0;
+
+            string? price = root.TryGetProperty("price", out var priceEl) && priceEl.ValueKind != JsonValueKind.Null
+                ? priceEl.GetString() : null;
+            string? rating = root.TryGetProperty("rating", out var ratingEl) && ratingEl.ValueKind != JsonValueKind.Null
+                ? ratingEl.GetString() : null;
+            string? release = root.TryGetProperty("release", out var releaseEl) && releaseEl.ValueKind != JsonValueKind.Null
+                ? releaseEl.GetString() : null;
+
+            // Find or create Game
+            var game = await _db.Games.FirstOrDefaultAsync(g => g.AppId == request.AppId, ct);
+            if (game is null)
+            {
+                _logger.LogInformation("Game with AppId {AppId} not found. Creating stub and enriching from Steam.", request.AppId);
+
+                string gameName = root.TryGetProperty("name", out var nameEl) && nameEl.ValueKind != JsonValueKind.Null
+                    ? nameEl.GetString()! : $"App {request.AppId}";
+
+                game = new Game
+                {
+                    Id = Guid.NewGuid(),
+                    AppId = request.AppId,
+                    Name = gameName,
+                    GameType = "Sourcing"
+                };
+                _db.Games.Add(game);
+                await _db.SaveChangesAsync(ct);
+
+                var enrichResult = await _gameService.EnrichGameFromSteamAsync(game.Id, ct);
+                if (!enrichResult.IsSuccess)
+                    _logger.LogWarning("Steam enrich failed for AppId {AppId}: {Error}", request.AppId, enrichResult.ErrorMessage);
+            }
+
+            // Upsert by (GameId, SnapshotDate, Source)
+            var existing = await _db.SteamDbSnapshots
+                .FirstOrDefaultAsync(s => s.GameId == game.Id && s.SnapshotDate == snapshotDate && s.Source == source, ct);
+
+            if (existing is not null)
+            {
+                existing.Rank = rank;
+                existing.Follows = follows;
+                existing.SevenDayGain = sevenDayGain;
+                existing.Price = price;
+                existing.Rating = rating;
+                existing.Release = release;
+                existing.ScrapedAt = scrapedAt;
+            }
+            else
+            {
+                _db.SteamDbSnapshots.Add(new SteamDbSnapshot
+                {
+                    Id = Guid.NewGuid(),
+                    GameId = game.Id,
+                    SnapshotDate = snapshotDate,
+                    Source = source,
+                    Rank = rank,
+                    Price = price,
+                    Rating = rating,
+                    Release = release,
+                    Follows = follows,
+                    SevenDayGain = sevenDayGain,
+                    ScrapedAt = scrapedAt
+                });
+            }
+
+            await _db.SaveChangesAsync(ct);
+
+            log.EndTime = DateTime.UtcNow;
+            log.Status = "Completed";
+            log.RecordsProcessed = 1;
+            log.RecordsInserted = existing is null ? 1 : 0;
+            log.RecordsUpdated = existing is not null ? 1 : 0;
+            await _db.SaveChangesAsync(ct);
+
+            _logger.LogInformation("SteamDB snapshot ingestion complete for AppId {AppId}: source={Source}, rank={Rank}",
+                request.AppId, source, rank);
+
+            return new IngestionResult(1, existing is null ? 1 : 0, existing is not null ? 1 : 0, 0, log.Id);
+        }
+        catch (Exception ex)
+        {
+            log.EndTime = DateTime.UtcNow;
+            log.Status = "Failed";
+            log.ErrorMessage = ex.Message;
+            await _db.SaveChangesAsync(ct);
+            throw;
+        }
+    }
+
     public async Task<List<IngestionLogDto>> GetIngestionLogsAsync(GetIngestionLogsQuery request, CancellationToken ct = default)
     {
         var query = _db.IngestionLogs.AsNoTracking().AsQueryable();

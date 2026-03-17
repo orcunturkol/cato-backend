@@ -1,3 +1,4 @@
+using Cato.API.DTOs;
 using Cato.API.Models.Ingestion;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -60,6 +61,29 @@ public class GameDataController : ControllerBase
         [FromQuery] int? limit)
     {
         var result = await _mediator.Send(new GetOwnedGameDataQuery(appId, limit ?? 30));
+        return Results.Ok(result);
+    }
+
+    /// <summary>Get group member count history for a game.</summary>
+    [HttpGet("group-members")]
+    [ProducesResponseType(typeof(List<GroupMemberCountDto>), StatusCodes.Status200OK)]
+    public async Task<IResult> GetGroupMemberCount(
+        int appId,
+        [FromQuery] int? limit)
+    {
+        var result = await _mediator.Send(new GetGroupMemberCountQuery(appId, limit ?? 100));
+        return Results.Ok(result);
+    }
+
+    /// <summary>Get SteamDB snapshot data for a game.</summary>
+    [HttpGet("steamdb-snapshots")]
+    [ProducesResponseType(typeof(List<SteamDbSnapshotDto>), StatusCodes.Status200OK)]
+    public async Task<IResult> GetSteamDbSnapshots(
+        int appId,
+        [FromQuery] string? source,
+        [FromQuery] int? limit)
+    {
+        var result = await _mediator.Send(new GetSteamDbSnapshotQuery(appId, source, limit ?? 100));
         return Results.Ok(result);
     }
 }

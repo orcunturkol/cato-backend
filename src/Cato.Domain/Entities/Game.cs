@@ -39,4 +39,5 @@ public class Game
     public ICollection<CcuHistory> CcuHistories { get; set; } = [];
     public ICollection<OwnedGameData> OwnedGameData { get; set; } = [];
     public ICollection<GroupMemberCountSnapshot> GroupMemberCountSnapshots { get; set; } = [];
+    public ICollection<SteamDbSnapshot> SteamDbSnapshots { get; set; } = [];
 }

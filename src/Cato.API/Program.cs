@@ -56,6 +56,15 @@ builder.Services.AddScoped<Cato.API.Services.IGameDataService, Cato.API.Services
 builder.Services.AddScoped<Cato.API.Services.IIngestionService, Cato.API.Services.IngestionService>();
 builder.Services.AddScoped<Cato.API.Services.ISteamKitDataService, Cato.API.Services.SteamKitDataService>();
 
+// ── CORS ──
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+        policy.WithOrigins("http://localhost:5173", "http://localhost:3000")
+              .AllowAnyHeader()
+              .AllowAnyMethod());
+});
+
 // ── Swagger / OpenAPI ──
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -86,6 +95,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseSerilogRequestLogging();
+app.UseCors("AllowFrontend");
 app.MapControllers();
 
 app.Run();

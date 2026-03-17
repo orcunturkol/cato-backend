@@ -94,6 +94,27 @@ public class GamesController : ControllerBase
             : Results.NotFound(result.ErrorMessage);
     }
 
+    /// <summary>Bulk import games from a CSV file and enrich from Steam.</summary>
+    [HttpPost("bulk-import")]
+    [ProducesResponseType(typeof(BulkImportResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> BulkImportGames([FromBody] BulkImportGamesCommand command)
+    {
+        var result = await _mediator.Send(command);
+        return result.IsSuccess
+            ? Results.Ok(result.Data)
+            : Results.BadRequest(result.ErrorMessage);
+    }
+
+    /// <summary>Re-enrich all games where enrichment was not successful (HeaderImageUrl is null).</summary>
+    [HttpPost("re-enrich")]
+    [ProducesResponseType(typeof(ReEnrichAllGamesResult), StatusCodes.Status200OK)]
+    public async Task<IResult> ReEnrichAllGames()
+    {
+        var result = await _mediator.Send(new ReEnrichAllGamesCommand());
+        return Results.Ok(result.Data);
+    }
+
     /// <summary>Enrich a game with data from the Steam API.</summary>
     [HttpPost("{id:guid}/enrich")]
     [ProducesResponseType(typeof(GameDto), StatusCodes.Status200OK)]

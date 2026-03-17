@@ -17,6 +17,7 @@ public class CatoDbContext : DbContext
     public DbSet<OwnedGameData> OwnedGameData => Set<OwnedGameData>();
     public DbSet<IngestionLog> IngestionLogs => Set<IngestionLog>();
     public DbSet<GroupMemberCountSnapshot> GroupMemberCountSnapshots => Set<GroupMemberCountSnapshot>();
+    public DbSet<SteamDbSnapshot> SteamDbSnapshots => Set<SteamDbSnapshot>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -219,6 +220,29 @@ public class CatoDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        // ── SteamDbSnapshot ──
+        modelBuilder.Entity<SteamDbSnapshot>(entity =>
+        {
+            entity.ToTable("steamdb_snapshot");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.Source).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.Price).HasMaxLength(50);
+            entity.Property(e => e.Rating).HasMaxLength(50);
+            entity.Property(e => e.Release).HasMaxLength(100);
+
+            entity.HasIndex(e => new { e.GameId, e.SnapshotDate, e.Source })
+                .IsUnique()
+                .HasDatabaseName("unique_steamdb_snapshot");
+            entity.HasIndex(e => e.SnapshotDate).HasDatabaseName("idx_steamdb_snapshot_date");
+            entity.HasIndex(e => e.Source).HasDatabaseName("idx_steamdb_snapshot_source");
+
+            entity.HasOne(e => e.Game)
+                .WithMany(g => g.SteamDbSnapshots)
+                .HasForeignKey(e => e.GameId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         // ── IngestionLog ──
         modelBuilder.Entity<IngestionLog>(entity =>
         {
@@ -320,6 +344,19 @@ public class CatoDbContext : DbContext
         }
 
         foreach (var entry in ChangeTracker.Entries<OwnedGameData>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<SteamDbSnapshot>())
         {
             if (entry.State == EntityState.Added)
             {

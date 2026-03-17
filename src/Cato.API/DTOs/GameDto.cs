@@ -28,6 +28,34 @@ public record GameDto(
 public record GenreDto(string Name, string Type, string Source);
 public record TagDto(string Name, string Type, int Weight, string Source);
 
+public record GroupMemberCountDto(
+    Guid Id,
+    DateOnly SnapshotDate,
+    int MemberCount,
+    string? Error,
+    DateTime ScrapedAt
+);
+
+public record SteamDbSnapshotDto(
+    Guid Id,
+    DateOnly SnapshotDate,
+    string Source,
+    int Rank,
+    string? Price,
+    string? Rating,
+    string? Release,
+    int Follows,
+    int SevenDayGain,
+    DateTime ScrapedAt
+);
+
+public record SteamDbRankingDto(
+    Guid SnapshotId, int AppId, Guid GameId, string GameName,
+    string? HeaderImageUrl, DateOnly SnapshotDate, string Source,
+    int Rank, string? Price, string? Rating, string? Release,
+    int Follows, int SevenDayGain, DateTime ScrapedAt
+);
+
 public static class GameMappings
 {
     public static GameDto ToDto(this Game game) => new(

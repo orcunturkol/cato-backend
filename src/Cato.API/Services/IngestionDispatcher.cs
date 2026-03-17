@@ -55,6 +55,11 @@ public class IngestionDispatcher : IIngestionDispatcher
                 await _mediator.Send(new IngestGroupMemberCountCommand(message.AppId, message.FilePath), ct);
                 break;
 
+            case "steamdb_most_wished":
+            case "steamdb_wishlist_activity":
+                await _mediator.Send(new IngestSteamDbSnapshotCommand(message.AppId, message.FilePath), ct);
+                break;
+
             default:
                 _logger.LogWarning("Unknown ingestion source: {Source}. Skipping.", message.Source);
                 break;

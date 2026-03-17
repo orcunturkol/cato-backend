@@ -1,4 +1,6 @@
+using Cato.API.DTOs;
 using Cato.API.Models.Ingestion;
+using Cato.API.Models.SteamDb;
 using Cato.Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 
@@ -81,6 +83,88 @@ public class GameDataService : IGameDataService
                 o.WishlistAdditions, o.WishlistDeletions,
                 o.PurchasesAndActivations, o.Gifts,
                 o.PeriodWishlistBalance))
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<GroupMemberCountDto>> GetGroupMemberCountAsync(GetGroupMemberCountQuery request, CancellationToken ct = default)
+    {
+        return await _db.GroupMemberCountSnapshots
+            .AsNoTracking()
+            .Include(g => g.Game)
+            .Where(g => g.Game.AppId == request.AppId)
+            .OrderByDescending(g => g.SnapshotDate)
+            .Take(request.Limit)
+            .Select(g => new GroupMemberCountDto(
+                g.Id, g.SnapshotDate, g.MemberCount, g.Error, g.ScrapedAt))
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<SteamDbSnapshotDto>> GetSteamDbSnapshotsAsync(GetSteamDbSnapshotQuery request, CancellationToken ct = default)
+    {
+        var query = _db.SteamDbSnapshots
+            .AsNoTracking()
+            .Include(s => s.Game)
+            .Where(s => s.Game.AppId == request.AppId);
+
+        if (!string.IsNullOrWhiteSpace(request.Source))
+            query = query.Where(s => s.Source == request.Source);
+
+        return await query
+            .OrderByDescending(s => s.SnapshotDate)
+            .Take(request.Limit)
+            .Select(s => new SteamDbSnapshotDto(
+                s.Id, s.SnapshotDate, s.Source, s.Rank,
+                s.Price, s.Rating, s.Release,
+                s.Follows, s.SevenDayGain, s.ScrapedAt))
+            .ToListAsync(ct);
+    }
+
+    public async Task<PagedResult<SteamDbRankingDto>> GetSteamDbRankingsAsync(GetSteamDbRankingsQuery request, CancellationToken ct = default)
+    {
+        var date = request.Date ?? await _db.SteamDbSnapshots
+            .AsNoTracking()
+            .Where(s => s.Source == request.Source)
+            .MaxAsync(s => s.SnapshotDate, ct);
+
+        var query = _db.SteamDbSnapshots
+            .AsNoTracking()
+            .Include(s => s.Game)
+            .Where(s => s.Source == request.Source && s.SnapshotDate == date);
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+            query = query.Where(s => EF.Functions.ILike(s.Game.Name, $"%{request.Search}%"));
+
+        var totalCount = await query.CountAsync(ct);
+
+        var items = await query
+            .OrderBy(s => s.Rank)
+            .Skip((request.Page - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .Select(s => new SteamDbRankingDto(
+                s.Id, s.Game.AppId, s.GameId, s.Game.Name,
+                s.Game.HeaderImageUrl, s.SnapshotDate, s.Source,
+                s.Rank, s.Price, s.Rating, s.Release,
+                s.Follows, s.SevenDayGain, s.ScrapedAt))
+            .ToListAsync(ct);
+
+        return new PagedResult<SteamDbRankingDto>
+        {
+            Items = items,
+            TotalCount = totalCount,
+            Page = request.Page,
+            PageSize = request.PageSize
+        };
+    }
+
+    public async Task<List<DateOnly>> GetAvailableDatesAsync(GetAvailableDatesQuery request, CancellationToken ct = default)
+    {
+        return await _db.SteamDbSnapshots
+            .AsNoTracking()
+            .Where(s => s.Source == request.Source)
+            .Select(s => s.SnapshotDate)
+            .Distinct()
+            .OrderByDescending(d => d)
+            .Take(90)
             .ToListAsync(ct);
     }
 }
