@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Read(//usr/local/share/dotnet/sdk/**)",
-      "Read(//Users/orcun.turkol/.dotnet/**)"
+      "Read(//Users/orcun.turkol/.dotnet/**)",
+      "Bash(dotnet build:*)",
+      "Bash(dotnet:*)"
     ]
   }
 }

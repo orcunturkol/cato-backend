@@ -21,6 +21,17 @@ public interface ISteamKitService
     /// </summary>
     Task<SteamPicsAppInfo?> GetAppInfoAsync(uint appId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Returns the full raw PICS KeyValue tree for an app, including the per-app change number.
+    /// </summary>
+    Task<SteamPicsRawAppInfo?> GetRawAppInfoAsync(uint appId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Batch-fetches raw PICS KeyValue trees for multiple apps in a single request.
+    /// </summary>
+    Task<IReadOnlyList<SteamPicsRawAppInfo>> GetRawAppInfoBatchAsync(
+        IEnumerable<uint> appIds, CancellationToken ct = default);
+
     /// <summary>Returns true if SteamKit2 is currently connected and logged in.</summary>
     bool IsConnected { get; }
 }

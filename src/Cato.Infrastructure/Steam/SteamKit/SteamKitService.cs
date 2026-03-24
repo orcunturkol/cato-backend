@@ -246,6 +246,74 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
         }
     }
 
+    public async Task<SteamPicsRawAppInfo?> GetRawAppInfoAsync(uint appId, CancellationToken ct = default)
+    {
+        if (!_isLoggedOn)
+        {
+            _logger.LogWarning("SteamKit2: Cannot get raw app info — not logged in.");
+            return null;
+        }
+
+        try
+        {
+            var request = new SteamApps.PICSRequest(appId);
+            var result = await _steamApps.PICSGetProductInfo(new[] { request }, Enumerable.Empty<SteamApps.PICSRequest>())
+                .ToTask().WaitAsync(TimeSpan.FromSeconds(20), ct);
+
+            var appInfo = result.Results?.FirstOrDefault()?.Apps.GetValueOrDefault(appId);
+            if (appInfo is null) return null;
+
+            var kvDict = KeyValueDiffUtility.KeyValueToDict(appInfo.KeyValues);
+            return new SteamPicsRawAppInfo(appId, appInfo.ChangeNumber, kvDict);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "SteamKit2: Exception fetching raw app info for AppId {AppId}", appId);
+            return null;
+        }
+    }
+
+    public async Task<IReadOnlyList<SteamPicsRawAppInfo>> GetRawAppInfoBatchAsync(
+        IEnumerable<uint> appIds, CancellationToken ct = default)
+    {
+        if (!_isLoggedOn)
+        {
+            _logger.LogWarning("SteamKit2: Cannot get raw app info batch — not logged in.");
+            return Array.Empty<SteamPicsRawAppInfo>();
+        }
+
+        var results = new List<SteamPicsRawAppInfo>();
+        var allAppIds = appIds.ToList();
+
+        // Process in batches of 50 (Steam's practical limit per request)
+        foreach (var batch in allAppIds.Chunk(50))
+        {
+            try
+            {
+                var requests = batch.Select(id => new SteamApps.PICSRequest(id));
+                var response = await _steamApps.PICSGetProductInfo(requests, Enumerable.Empty<SteamApps.PICSRequest>())
+                    .ToTask().WaitAsync(TimeSpan.FromSeconds(30), ct);
+
+                if (response.Results is null) continue;
+
+                foreach (var resultSet in response.Results)
+                {
+                    foreach (var (id, appInfo) in resultSet.Apps)
+                    {
+                        var kvDict = KeyValueDiffUtility.KeyValueToDict(appInfo.KeyValues);
+                        results.Add(new SteamPicsRawAppInfo(id, appInfo.ChangeNumber, kvDict));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SteamKit2: Exception fetching raw app info batch ({Count} apps)", batch.Length);
+            }
+        }
+
+        return results;
+    }
+
     public void Dispose()
     {
         _cts.Dispose();

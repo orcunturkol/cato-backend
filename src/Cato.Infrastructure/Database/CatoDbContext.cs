@@ -19,6 +19,8 @@ public class CatoDbContext : DbContext
     public DbSet<GroupMemberCountSnapshot> GroupMemberCountSnapshots => Set<GroupMemberCountSnapshot>();
     public DbSet<SteamDbSnapshot> SteamDbSnapshots => Set<SteamDbSnapshot>();
     public DbSet<PriceSnapshot> PriceSnapshots => Set<PriceSnapshot>();
+    public DbSet<AppKeyValueSnapshot> AppKeyValueSnapshots => Set<AppKeyValueSnapshot>();
+    public DbSet<AppChangeRecord> AppChangeRecords => Set<AppChangeRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -265,6 +267,52 @@ public class CatoDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        // ── AppKeyValueSnapshot ──
+        modelBuilder.Entity<AppKeyValueSnapshot>(entity =>
+        {
+            entity.ToTable("app_kv_snapshot");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.RawKeyValuesJson).HasColumnType("jsonb").IsRequired();
+
+            entity.HasIndex(e => e.AppId).HasDatabaseName("idx_app_kv_snapshot_appid");
+            entity.HasIndex(e => new { e.AppId, e.ChangeNumber })
+                .IsUnique()
+                .HasDatabaseName("unique_app_kv_snapshot");
+
+            entity.HasOne(e => e.Game)
+                .WithMany(g => g.AppKeyValueSnapshots)
+                .HasForeignKey(e => e.GameId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ── AppChangeRecord ──
+        modelBuilder.Entity<AppChangeRecord>(entity =>
+        {
+            entity.ToTable("app_change_record");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.Section).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.KeyPath).HasMaxLength(500).IsRequired();
+            entity.Property(e => e.Action).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.OldValue).HasColumnType("text");
+            entity.Property(e => e.NewValue).HasColumnType("text");
+
+            entity.HasIndex(e => new { e.AppId, e.ChangeNumber })
+                .HasDatabaseName("idx_app_change_record_app_change");
+            entity.HasIndex(e => new { e.AppId, e.DetectedAt })
+                .IsDescending(false, true)
+                .HasDatabaseName("idx_app_change_record_app_detected");
+            entity.HasIndex(e => new { e.GameId, e.DetectedAt })
+                .IsDescending(false, true)
+                .HasDatabaseName("idx_app_change_record_game_detected");
+
+            entity.HasOne(e => e.Game)
+                .WithMany(g => g.AppChangeRecords)
+                .HasForeignKey(e => e.GameId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
         // ── IngestionLog ──
         modelBuilder.Entity<IngestionLog>(entity =>
         {
@@ -392,6 +440,18 @@ public class CatoDbContext : DbContext
         }
 
         foreach (var entry in ChangeTracker.Entries<PriceSnapshot>())
+        {
+            if (entry.State == EntityState.Added)
+                entry.Entity.CreatedAt = now;
+        }
+
+        foreach (var entry in ChangeTracker.Entries<AppKeyValueSnapshot>())
+        {
+            if (entry.State == EntityState.Added)
+                entry.Entity.CreatedAt = now;
+        }
+
+        foreach (var entry in ChangeTracker.Entries<AppChangeRecord>())
         {
             if (entry.State == EntityState.Added)
                 entry.Entity.CreatedAt = now;

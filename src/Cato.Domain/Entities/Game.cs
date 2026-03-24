@@ -41,4 +41,6 @@ public class Game
     public ICollection<GroupMemberCountSnapshot> GroupMemberCountSnapshots { get; set; } = [];
     public ICollection<SteamDbSnapshot> SteamDbSnapshots { get; set; } = [];
     public ICollection<PriceSnapshot> PriceSnapshots { get; set; } = [];
+    public ICollection<AppKeyValueSnapshot> AppKeyValueSnapshots { get; set; } = [];
+    public ICollection<AppChangeRecord> AppChangeRecords { get; set; } = [];
 }
