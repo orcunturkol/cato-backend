@@ -76,6 +76,16 @@ services:
       postgres:
         condition: service_healthy
 
+  # ── EF Migration Helper (run with: docker compose run --rm ef-migration) ──
+  ef-migration:
+    image: mcr.microsoft.com/dotnet/sdk:10.0
+    working_dir: /src
+    volumes:
+      - .:/src
+    entrypoint: ["bash", "/src/generate-migration.sh"]
+    profiles:
+      - tools
+
 volumes:
   cato_pgdata:
   cato_pgadmin:
