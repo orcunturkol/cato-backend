@@ -468,7 +468,7 @@ public class IngestionService : IIngestionService
                     Id = Guid.NewGuid(),
                     AppId = request.AppId,
                     Name = $"App {request.AppId}",
-                    GameType = "Sourcing"
+                    GameType = "Other"
                 };
                 _db.Games.Add(game);
                 await _db.SaveChangesAsync(ct);
@@ -581,7 +581,7 @@ public class IngestionService : IIngestionService
                     Id = Guid.NewGuid(),
                     AppId = request.AppId,
                     Name = gameName,
-                    GameType = "Sourcing"
+                    GameType = "Other"
                 };
                 _db.Games.Add(game);
                 await _db.SaveChangesAsync(ct);

@@ -90,7 +90,9 @@ public sealed class SteamPicsChangeHistoryService : BackgroundService
             .ToListAsync(ct);
 
         var trackedGames = await db.Games
-            .Where(g => g.GameType != "Sourcing")
+            .Where(g => g.IsReleased)
+            .Where(g => g.ReleaseDate != null && g.ReleaseDate >= new DateOnly(2023, 1, 1))
+            .Where(g => g.PriceUsd != null && g.PriceUsd > 0)
             .Select(g => new { g.AppId, g.Id })
             .ToListAsync(ct);
 
@@ -147,8 +149,11 @@ public sealed class SteamPicsChangeHistoryService : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CatoDbContext>();
 
-        // Intersect with tracked games
+        // Intersect with tracked games (same filters as discovery: released, paid, post-2023)
         var trackedGames = await db.Games
+            .Where(g => g.IsReleased)
+            .Where(g => g.ReleaseDate != null && g.ReleaseDate >= new DateOnly(2023, 1, 1))
+            .Where(g => g.PriceUsd != null && g.PriceUsd > 0)
             .Select(g => new { g.AppId, g.Id })
             .ToListAsync(ct);
 

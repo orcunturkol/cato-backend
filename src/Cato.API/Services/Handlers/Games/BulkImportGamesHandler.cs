@@ -45,7 +45,7 @@ public class BulkImportGamesHandler : IRequestHandler<BulkImportGamesCommand, Re
         {
             // Step 1: Create the game
             var createResult = await _gameService.CreateGameAsync(
-                new CreateGameCommand(appId, null, "Owned", null, null), ct);
+                new CreateGameCommand(appId, null, "Sourcing", null, null), ct);
 
             if (!createResult.IsSuccess)
             {

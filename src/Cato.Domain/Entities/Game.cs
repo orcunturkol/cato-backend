@@ -7,7 +7,7 @@ public class Game
     public Guid Id { get; set; }
     public int AppId { get; set; }
     public string Name { get; set; } = string.Empty;
-    public string GameType { get; set; } = "Owned"; // Owned, Competitor, Sourcing
+    public string GameType { get; set; } = "Owned"; // Owned, Competitor, Sourcing, Other
     public DateOnly? ReleaseDate { get; set; }
     public decimal? PriceUsd { get; set; }
     public int DiscountPercent { get; set; }

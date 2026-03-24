@@ -127,7 +127,7 @@ public sealed class SteamPicsWatcherService : BackgroundService
                     Id = Guid.NewGuid(),
                     AppId = (int)appId,
                     Name = info.Name,
-                    GameType = "Sourcing",
+                    GameType = "Other",
                     IsReleased = true,
                     ReleaseDate = info.ReleaseDate,
                     CreatedAt = DateTime.UtcNow,

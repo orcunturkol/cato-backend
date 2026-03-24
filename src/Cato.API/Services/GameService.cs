@@ -188,6 +188,9 @@ public class GameService : IGameService
         if (steamData is null)
             return Result<GameDto>.Failure($"Could not fetch Steam data for AppId {game.AppId}.");
 
+        // 2b. Fetch user-defined tags from store page
+        var userTags = await _steam.GetUserTagsAsync(game.AppId, ct);
+
         // 3. Map core fields
         if (!string.IsNullOrWhiteSpace(steamData.Name))
             game.Name = steamData.Name;
@@ -301,21 +304,40 @@ public class GameService : IGameService
             await _db.SaveChangesAsync(ct);
         }
 
-        if (steamData.Categories is not null)
         {
             var addedTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var cat in steamData.Categories)
+
+            if (steamData.Categories is not null)
             {
-                if (string.IsNullOrWhiteSpace(cat.Description)) continue;
-                if (!addedTags.Add(cat.Description)) continue;
+                foreach (var cat in steamData.Categories)
+                {
+                    if (string.IsNullOrWhiteSpace(cat.Description)) continue;
+                    if (!addedTags.Add(cat.Description)) continue;
+
+                    _db.GenreTags.Add(new GenreTag
+                    {
+                        Id = Guid.NewGuid(),
+                        GameId = game.Id,
+                        TagName = cat.Description,
+                        TagType = "Mechanic",
+                        Weight = 0,
+                        Source = "Steam"
+                    });
+                }
+            }
+
+            foreach (var tag in userTags)
+            {
+                if (string.IsNullOrWhiteSpace(tag.Name)) continue;
+                if (!addedTags.Add(tag.Name)) continue;
 
                 _db.GenreTags.Add(new GenreTag
                 {
                     Id = Guid.NewGuid(),
                     GameId = game.Id,
-                    TagName = cat.Description,
-                    TagType = "Mechanic",
-                    Weight = 0,
+                    TagName = tag.Name,
+                    TagType = "UserTag",
+                    Weight = tag.Rank,
                     Source = "Steam"
                 });
             }

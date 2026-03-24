@@ -136,3 +136,9 @@ public class SteamMetacritic
     [JsonPropertyName("score")]
     public int? Score { get; set; }
 }
+
+public class SteamUserTag
+{
+    public string Name { get; set; } = string.Empty;
+    public int Rank { get; set; }
+}

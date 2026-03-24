@@ -4,7 +4,8 @@
       "Read(//usr/local/share/dotnet/sdk/**)",
       "Read(//Users/orcun.turkol/.dotnet/**)",
       "Bash(dotnet build:*)",
-      "Bash(dotnet:*)"
+      "Bash(dotnet:*)",
+      "Bash(ls -lah /home/ofturkol/Documents/cato-backend/src/Cato.Infrastructure/Database/Migrations/*.cs)"
     ]
   }
 }

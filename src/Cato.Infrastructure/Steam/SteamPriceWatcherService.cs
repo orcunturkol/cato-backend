@@ -63,7 +63,9 @@ public sealed class SteamPriceWatcherService : BackgroundService
         var steam = scope.ServiceProvider.GetRequiredService<ISteamApiService>();
 
         var games = await db.Games
-            .Where(g => g.GameType != "Sourcing")
+            .Where(g => g.IsReleased)
+            .Where(g => g.ReleaseDate != null && g.ReleaseDate >= new DateOnly(2023, 1, 1))
+            .Where(g => g.PriceUsd != null && g.PriceUsd > 0)
             .OrderBy(g => g.AppId)
             .ToListAsync(ct);
 
