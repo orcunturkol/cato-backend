@@ -18,27 +18,27 @@ services:
       retries: 5
 
   # ── CATO API ──
-  # api:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile
-  #   container_name: cato-api
-  #   ports:
-  #     - "5039:8080"
-  #   environment:
-  #     ASPNETCORE_ENVIRONMENT: Development
-  #     ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=cato;Username=cato_user;Password=cato_dev_password"
-  #     RabbitMQ__HostName: rabbitmq
-  #     RabbitMQ__Port: "5672"
-  #     RabbitMQ__UserName: cato_user
-  #     RabbitMQ__Password: cato_dev_password
-  #   volumes:
-  #     - collector_data:/data:ro
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     rabbitmq:
-  #       condition: service_healthy
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cato-api
+    ports:
+      - "5039:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=cato;Username=cato_user;Password=cato_dev_password"
+      RabbitMQ__HostName: rabbitmq
+      RabbitMQ__Port: "5672"
+      RabbitMQ__UserName: cato_user
+      RabbitMQ__Password: cato_dev_password
+    volumes:
+      - collector_data:/data:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
 
   # ── RabbitMQ ──
   rabbitmq:
