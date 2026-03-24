@@ -18,6 +18,7 @@ public class CatoDbContext : DbContext
     public DbSet<IngestionLog> IngestionLogs => Set<IngestionLog>();
     public DbSet<GroupMemberCountSnapshot> GroupMemberCountSnapshots => Set<GroupMemberCountSnapshot>();
     public DbSet<SteamDbSnapshot> SteamDbSnapshots => Set<SteamDbSnapshot>();
+    public DbSet<PriceSnapshot> PriceSnapshots => Set<PriceSnapshot>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -243,6 +244,27 @@ public class CatoDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        // ── PriceSnapshot ──
+        modelBuilder.Entity<PriceSnapshot>(entity =>
+        {
+            entity.ToTable("price_snapshot");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.BasePriceUsd).HasColumnType("decimal(10,2)");
+            entity.Property(e => e.FinalPriceUsd).HasColumnType("decimal(10,2)");
+            entity.Property(e => e.Currency).HasMaxLength(10);
+
+            entity.HasIndex(e => new { e.GameId, e.CapturedAt })
+                .IsUnique()
+                .HasDatabaseName("unique_price_snapshot");
+            entity.HasIndex(e => e.CapturedAt).HasDatabaseName("idx_price_snapshot_captured_at");
+
+            entity.HasOne(e => e.Game)
+                .WithMany(g => g.PriceSnapshots)
+                .HasForeignKey(e => e.GameId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         // ── IngestionLog ──
         modelBuilder.Entity<IngestionLog>(entity =>
         {
@@ -367,6 +389,12 @@ public class CatoDbContext : DbContext
             {
                 entry.Entity.UpdatedAt = now;
             }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<PriceSnapshot>())
+        {
+            if (entry.State == EntityState.Added)
+                entry.Entity.CreatedAt = now;
         }
 
         foreach (var entry in ChangeTracker.Entries<IngestionLog>())

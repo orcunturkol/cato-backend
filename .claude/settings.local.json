@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//usr/local/share/dotnet/sdk/**)",
+      "Read(//Users/orcun.turkol/.dotnet/**)"
+    ]
+  }
+}

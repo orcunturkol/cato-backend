@@ -40,4 +40,5 @@ public class Game
     public ICollection<OwnedGameData> OwnedGameData { get; set; } = [];
     public ICollection<GroupMemberCountSnapshot> GroupMemberCountSnapshots { get; set; } = [];
     public ICollection<SteamDbSnapshot> SteamDbSnapshots { get; set; } = [];
+    public ICollection<PriceSnapshot> PriceSnapshots { get; set; } = [];
 }

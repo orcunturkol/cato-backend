@@ -49,6 +49,7 @@ builder.Services.AddSingleton<SteamKitService>();
 builder.Services.AddSingleton<ISteamKitService>(sp => sp.GetRequiredService<SteamKitService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<SteamKitService>());
 builder.Services.AddHostedService<SteamPicsWatcherService>();
+builder.Services.AddHostedService<SteamPriceWatcherService>();
 
 // ── Application Services ──
 builder.Services.AddScoped<Cato.API.Services.IGameService, Cato.API.Services.GameService>();

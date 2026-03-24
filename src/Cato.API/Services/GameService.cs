@@ -201,7 +201,7 @@ public class GameService : IGameService
 
         if (steamData.PriceOverview is not null)
         {
-            game.PriceUsd = steamData.PriceOverview.FinalUsd;
+            game.PriceUsd = steamData.PriceOverview.InitialUsd;
             game.DiscountPercent = steamData.PriceOverview.DiscountPercent ?? 0;
         }
 

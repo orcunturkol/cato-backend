@@ -85,6 +85,9 @@ public class SteamPriceOverview
     [JsonPropertyName("discount_percent")]
     public int? DiscountPercent { get; set; }
 
+    /// <summary>Base price in USD (derived from "initial" cents / 100).</summary>
+    public decimal? InitialUsd => Initial.HasValue ? Initial.Value / 100m : null;
+
     /// <summary>Price in USD (derived from "final" cents / 100).</summary>
     public decimal? FinalUsd => Final.HasValue ? Final.Value / 100m : null;
 }
