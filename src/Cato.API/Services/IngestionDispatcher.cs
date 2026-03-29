@@ -47,6 +47,10 @@ public class IngestionDispatcher : IIngestionDispatcher
                 await _mediator.Send(new IngestPeakCcuCommand(message.AppId, message.FilePath), ct);
                 break;
 
+            case "steam_current_players":
+                await _mediator.Send(new IngestCcuCommand(message.AppId, message.FilePath), ct);
+                break;
+
             case "steamworks_owned_game":
                 await _mediator.Send(new IngestOwnedGameDataCommand(message.AppId, message.FilePath), ct);
                 break;

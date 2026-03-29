@@ -134,6 +134,98 @@ public class IngestionService : IIngestionService
         }
     }
 
+    public async Task<IngestionResult> IngestCcuAsync(IngestCcuCommand request, CancellationToken ct = default)
+    {
+        var log = new IngestionLog
+        {
+            Id = Guid.NewGuid(),
+            Source = "steam_current_players",
+            StartTime = DateTime.UtcNow,
+            Status = "Running",
+            FilePath = request.FilePath
+        };
+        _db.IngestionLogs.Add(log);
+        await _db.SaveChangesAsync(ct);
+
+        try
+        {
+            var game = await _db.Games.FirstOrDefaultAsync(g => g.AppId == request.AppId, ct);
+            if (game is null)
+                throw new InvalidOperationException($"Game with AppId {request.AppId} not found. Create the game first.");
+
+            if (!File.Exists(request.FilePath))
+                throw new FileNotFoundException($"File not found: {request.FilePath}");
+
+            var json = await File.ReadAllTextAsync(request.FilePath, ct);
+            var doc = JsonDocument.Parse(json);
+
+            int processed = 0, inserted = 0, failed = 0;
+
+            if (!doc.RootElement.TryGetProperty("response", out var responseEl))
+                throw new InvalidOperationException("Unrecognized CCU file format: missing 'response' property");
+
+            processed++;
+            try
+            {
+                var playerCount = responseEl.TryGetProperty("player_count", out var pcEl) ? pcEl.GetInt32() : 0;
+
+                DateTime timestamp;
+                if (responseEl.TryGetProperty("timestamp", out var tsEl))
+                {
+                    timestamp = DateTime.Parse(tsEl.GetString()!, null,
+                        System.Globalization.DateTimeStyles.AdjustToUniversal);
+                }
+                else
+                {
+                    timestamp = DateTime.UtcNow;
+                }
+
+                var exists = await _db.CcuHistories.AnyAsync(
+                    c => c.GameId == game.Id && c.Timestamp == timestamp && c.Source == "Steam API", ct);
+
+                if (!exists)
+                {
+                    _db.CcuHistories.Add(new CcuHistory
+                    {
+                        Id = Guid.NewGuid(),
+                        GameId = game.Id,
+                        Timestamp = timestamp,
+                        CcuCount = playerCount,
+                        Source = "Steam API"
+                    });
+                    inserted++;
+                }
+            }
+            catch (Exception ex)
+            {
+                failed++;
+                _logger.LogWarning(ex, "Failed to process CCU entry");
+            }
+
+            await _db.SaveChangesAsync(ct);
+
+            log.EndTime = DateTime.UtcNow;
+            log.Status = "Completed";
+            log.RecordsProcessed = processed;
+            log.RecordsInserted = inserted;
+            log.RecordsFailed = failed;
+            await _db.SaveChangesAsync(ct);
+
+            _logger.LogInformation("CCU ingestion complete: {Processed} processed, {Inserted} inserted, {Failed} failed",
+                processed, inserted, failed);
+
+            return new IngestionResult(processed, inserted, 0, failed, log.Id);
+        }
+        catch (Exception ex)
+        {
+            log.EndTime = DateTime.UtcNow;
+            log.Status = "Failed";
+            log.ErrorMessage = ex.Message;
+            await _db.SaveChangesAsync(ct);
+            throw;
+        }
+    }
+
     public async Task<IngestionResult> IngestFinancialDataAsync(IngestFinancialDataCommand request, CancellationToken ct = default)
     {
         var log = new IngestionLog

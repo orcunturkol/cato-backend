@@ -6,6 +6,7 @@ namespace Cato.API.Services;
 public interface IIngestionService
 {
     Task<IngestionResult> IngestPeakCcuAsync(IngestPeakCcuCommand command, CancellationToken ct = default);
+    Task<IngestionResult> IngestCcuAsync(IngestCcuCommand command, CancellationToken ct = default);
     Task<IngestionResult> IngestFinancialDataAsync(IngestFinancialDataCommand command, CancellationToken ct = default);
     Task<IngestionResult> IngestWishlistDataAsync(IngestWishlistDataCommand command, CancellationToken ct = default);
     Task<IngestionResult> IngestOwnedGameDataAsync(IngestOwnedGameDataCommand command, CancellationToken ct = default);
