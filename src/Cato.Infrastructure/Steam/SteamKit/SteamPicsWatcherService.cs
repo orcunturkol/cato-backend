@@ -87,6 +87,7 @@ public sealed class SteamPicsWatcherService : BackgroundService
         _logger.LogInformation("SteamPicsWatcher: Processing {Count} changed AppIds", changedAppIds.Count);
 
         int discovered = 0;
+        var newGameIds = new List<Guid>();
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CatoDbContext>();
 
@@ -122,9 +123,10 @@ public sealed class SteamPicsWatcherService : BackgroundService
 
                 _logger.LogInformation("SteamPicsWatcher: Discovered new game AppId={AppId} Name='{Name}'", appId, info.Name);
 
+                var gameId = Guid.NewGuid();
                 db.Games.Add(new Game
                 {
-                    Id = Guid.NewGuid(),
+                    Id = gameId,
                     AppId = (int)appId,
                     Name = info.Name,
                     GameType = "Other",
@@ -133,6 +135,7 @@ public sealed class SteamPicsWatcherService : BackgroundService
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 });
+                newGameIds.Add(gameId);
 
                 discovered++;
             }
@@ -144,6 +147,31 @@ public sealed class SteamPicsWatcherService : BackgroundService
 
         if (discovered > 0)
             await db.SaveChangesAsync(ct);
+
+        // Enrich newly created games with full Steam Store data
+        if (newGameIds.Count > 0)
+        {
+            var enrichment = scope.ServiceProvider.GetRequiredService<ISteamGameEnrichmentService>();
+            int enriched = 0;
+
+            foreach (var gameId in newGameIds)
+            {
+                if (ct.IsCancellationRequested) break;
+
+                try
+                {
+                    var success = await enrichment.EnrichGameAsync(gameId, ct);
+                    if (success) enriched++;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "SteamPicsWatcher: Failed to enrich game {GameId}", gameId);
+                }
+            }
+
+            _logger.LogInformation("SteamPicsWatcher: Enriched {Enriched}/{Total} newly discovered games",
+                enriched, newGameIds.Count);
+        }
 
         SaveLastChangeNumber(latestChangeNumber);
 

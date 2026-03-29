@@ -53,6 +53,7 @@ builder.Services.AddHostedService<SteamPriceWatcherService>();
 builder.Services.AddHostedService<SteamPicsChangeHistoryService>();
 
 // ── Application Services ──
+builder.Services.AddScoped<ISteamGameEnrichmentService, SteamGameEnrichmentService>();
 builder.Services.AddScoped<Cato.API.Services.IGameService, Cato.API.Services.GameService>();
 builder.Services.AddScoped<Cato.API.Services.IGameDataService, Cato.API.Services.GameDataService>();
 builder.Services.AddScoped<Cato.API.Services.IIngestionService, Cato.API.Services.IngestionService>();

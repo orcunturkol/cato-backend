@@ -106,13 +106,14 @@ public class GamesController : ControllerBase
             : Results.BadRequest(result.ErrorMessage);
     }
 
-    /// <summary>Re-enrich all games where enrichment was not successful (HeaderImageUrl is null).</summary>
+    /// <summary>Re-enrich all games where enrichment was not successful (HeaderImageUrl is null).
+    /// Returns immediately with the count of queued games; enrichment runs in the background.</summary>
     [HttpPost("re-enrich")]
-    [ProducesResponseType(typeof(ReEnrichAllGamesResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ReEnrichAllGamesBackgroundResult), StatusCodes.Status202Accepted)]
     public async Task<IResult> ReEnrichAllGames()
     {
-        var result = await _mediator.Send(new ReEnrichAllGamesCommand());
-        return Results.Ok(result.Data);
+        var result = await _mediator.Send(new ReEnrichAllGamesBackgroundCommand());
+        return Results.Accepted(null, result.Data);
     }
 
     /// <summary>Enrich a game with data from the Steam API.</summary>
