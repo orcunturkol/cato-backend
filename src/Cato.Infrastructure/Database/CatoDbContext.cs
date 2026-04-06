@@ -21,6 +21,14 @@ public class CatoDbContext : DbContext
     public DbSet<PriceSnapshot> PriceSnapshots => Set<PriceSnapshot>();
     public DbSet<AppKeyValueSnapshot> AppKeyValueSnapshots => Set<AppKeyValueSnapshot>();
     public DbSet<AppChangeRecord> AppChangeRecords => Set<AppChangeRecord>();
+    public DbSet<User> Users => Set<User>();
+    public DbSet<UserProfile> UserProfiles => Set<UserProfile>();
+    public DbSet<MarketingTarget> MarketingTargets => Set<MarketingTarget>();
+    public DbSet<MarketingAction> MarketingActions => Set<MarketingAction>();
+    public DbSet<GameAction> GameActions => Set<GameAction>();
+    public DbSet<ActionTarget> ActionTargets => Set<ActionTarget>();
+    public DbSet<TargetMatch> TargetMatches => Set<TargetMatch>();
+    public DbSet<ActionImpact> ActionImpacts => Set<ActionImpact>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -326,6 +334,189 @@ public class CatoDbContext : DbContext
             entity.HasIndex(e => e.StartTime).HasDatabaseName("idx_ingestion_log_start_time");
             entity.HasIndex(e => e.Status).HasDatabaseName("idx_ingestion_log_status");
         });
+
+        // ── User ──
+        modelBuilder.Entity<User>(entity =>
+        {
+            entity.ToTable("users");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Username).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Email).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.FirstName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.LastName).HasMaxLength(100).IsRequired();
+            entity.HasIndex(e => e.Email).IsUnique();
+        });
+
+        // ── UserProfile ──
+        modelBuilder.Entity<UserProfile>(entity =>
+        {
+            entity.ToTable("user_profile");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Bio).HasColumnType("text");
+            entity.Property(e => e.AvatarUrl).HasColumnType("text");
+            entity.HasOne(e => e.User)
+                .WithMany(u => u.Profiles)
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── MarketingTarget ──
+        modelBuilder.Entity<MarketingTarget>(entity =>
+        {
+            entity.ToTable("marketing_target");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.Name).HasMaxLength(500).IsRequired();
+            entity.Property(e => e.TargetType).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.ContactEmail).HasMaxLength(255);
+            entity.Property(e => e.ContactTwitter).HasMaxLength(255);
+            entity.Property(e => e.ContactDiscord).HasMaxLength(255);
+            entity.Property(e => e.PreferredGenres).HasColumnType("jsonb");
+            entity.Property(e => e.PreferredTags).HasColumnType("jsonb");
+            entity.Property(e => e.AudienceRegion).HasMaxLength(100);
+            entity.Property(e => e.Platform).HasMaxLength(100);
+            entity.Property(e => e.EngagementRate).HasColumnType("decimal(5,2)");
+            entity.Property(e => e.CostEstimateUsd).HasColumnType("decimal(15,2)");
+            entity.Property(e => e.ResponseRate).HasColumnType("decimal(5,2)");
+            entity.Property(e => e.Notes).HasColumnType("text");
+
+            entity.HasIndex(e => e.TargetType).HasDatabaseName("idx_marketing_target_type");
+            entity.HasIndex(e => e.Name).HasDatabaseName("idx_marketing_target_name");
+            entity.HasIndex(e => e.Platform).HasDatabaseName("idx_marketing_target_platform");
+        });
+
+        // ── MarketingAction (table: action) ──
+        modelBuilder.Entity<MarketingAction>(entity =>
+        {
+            entity.ToTable("action");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.ActionType).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.DecisionSource).HasMaxLength(50).HasDefaultValue("Manual");
+            entity.Property(e => e.Status).HasMaxLength(50).HasDefaultValue("Planned");
+            entity.Property(e => e.Description).HasColumnType("text").IsRequired();
+            entity.Property(e => e.BudgetUsd).HasColumnType("decimal(15,2)");
+            entity.Property(e => e.ActualCostUsd).HasColumnType("decimal(15,2)");
+            entity.Property(e => e.Notes).HasColumnType("text");
+            entity.Property(e => e.CreatedBy).HasMaxLength(255);
+
+            entity.HasIndex(e => e.ActionType).HasDatabaseName("idx_action_type");
+            entity.HasIndex(e => e.Status).HasDatabaseName("idx_action_status");
+            entity.HasIndex(e => e.PlannedDate).HasDatabaseName("idx_action_planned_date");
+            entity.HasIndex(e => e.ActionDate).HasDatabaseName("idx_action_date");
+        });
+
+        // ── GameAction ──
+        modelBuilder.Entity<GameAction>(entity =>
+        {
+            entity.ToTable("game_action");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.GameRole).HasMaxLength(50).HasDefaultValue("Primary");
+            entity.Property(e => e.Notes).HasColumnType("text");
+
+            entity.HasIndex(e => e.ActionId).HasDatabaseName("idx_game_action_action");
+            entity.HasIndex(e => e.GameId).HasDatabaseName("idx_game_action_game");
+            entity.HasIndex(e => new { e.ActionId, e.GameId }).IsUnique().HasDatabaseName("unique_game_action");
+
+            entity.HasOne(e => e.Action)
+                .WithMany(a => a.GameActions)
+                .HasForeignKey(e => e.ActionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Game)
+                .WithMany(g => g.GameActions)
+                .HasForeignKey(e => e.GameId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── ActionTarget ──
+        modelBuilder.Entity<ActionTarget>(entity =>
+        {
+            entity.ToTable("action_target");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.Status).HasMaxLength(50).HasDefaultValue("Planned");
+            entity.Property(e => e.DeliverableUrl).HasColumnType("text");
+            entity.Property(e => e.CostUsd).HasColumnType("decimal(15,2)");
+            entity.Property(e => e.Notes).HasColumnType("text");
+
+            entity.HasIndex(e => e.ActionId).HasDatabaseName("idx_action_target_action");
+            entity.HasIndex(e => e.TargetId).HasDatabaseName("idx_action_target_target");
+            entity.HasIndex(e => e.Status).HasDatabaseName("idx_action_target_status");
+            entity.HasIndex(e => new { e.ActionId, e.TargetId }).IsUnique().HasDatabaseName("unique_action_target");
+
+            entity.HasOne(e => e.Action)
+                .WithMany(a => a.ActionTargets)
+                .HasForeignKey(e => e.ActionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Target)
+                .WithMany(t => t.ActionTargets)
+                .HasForeignKey(e => e.TargetId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── TargetMatch ──
+        modelBuilder.Entity<TargetMatch>(entity =>
+        {
+            entity.ToTable("target_match");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.LifecycleStage).HasMaxLength(50);
+            entity.Property(e => e.RelevanceScore).HasColumnType("decimal(5,2)");
+            entity.Property(e => e.GenreMatchScore).HasColumnType("decimal(5,2)");
+            entity.Property(e => e.TagMatchScore).HasColumnType("decimal(5,2)");
+            entity.Property(e => e.HistoricalPerformanceScore).HasColumnType("decimal(5,2)");
+            entity.Property(e => e.MatchingGenres).HasColumnType("jsonb");
+            entity.Property(e => e.MatchingTags).HasColumnType("jsonb");
+
+            entity.HasIndex(e => e.GameId).HasDatabaseName("idx_target_match_game");
+            entity.HasIndex(e => e.TargetId).HasDatabaseName("idx_target_match_target");
+            entity.HasIndex(e => e.RelevanceScore).HasDatabaseName("idx_target_match_score");
+            entity.HasIndex(e => new { e.GameId, e.TargetId, e.LifecycleStage })
+                .IsUnique().HasDatabaseName("unique_target_match");
+
+            entity.HasOne(e => e.Game)
+                .WithMany(g => g.TargetMatches)
+                .HasForeignKey(e => e.GameId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Target)
+                .WithMany(t => t.TargetMatches)
+                .HasForeignKey(e => e.TargetId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── ActionImpact ──
+        modelBuilder.Entity<ActionImpact>(entity =>
+        {
+            entity.ToTable("action_impact");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.WishlistChangePercent).HasColumnType("decimal(10,2)");
+            entity.Property(e => e.SalesChangePercent).HasColumnType("decimal(10,2)");
+            entity.Property(e => e.BaselineRevenueUsd).HasColumnType("decimal(15,2)");
+            entity.Property(e => e.ResultRevenueUsd).HasColumnType("decimal(15,2)");
+            entity.Property(e => e.RevenueChangeUsd).HasColumnType("decimal(15,2)");
+            entity.Property(e => e.RevenueChangePercent).HasColumnType("decimal(10,2)");
+            entity.Property(e => e.TrafficChangePercent).HasColumnType("decimal(10,2)");
+            entity.Property(e => e.BaselineConversionRate).HasColumnType("decimal(5,2)");
+            entity.Property(e => e.ResultConversionRate).HasColumnType("decimal(5,2)");
+            entity.Property(e => e.ConversionRateChange).HasColumnType("decimal(5,2)");
+            entity.Property(e => e.TotalCostUsd).HasColumnType("decimal(15,2)");
+            entity.Property(e => e.Roi).HasColumnType("decimal(10,2)");
+            entity.Property(e => e.Notes).HasColumnType("text");
+            entity.Property(e => e.CalculatedBy).HasMaxLength(255);
+
+            entity.HasIndex(e => e.ActionId).IsUnique().HasDatabaseName("unique_action_impact");
+            entity.HasIndex(e => e.Roi).HasDatabaseName("idx_action_impact_roi");
+
+            entity.HasOne(e => e.Action)
+                .WithOne(a => a.Impact)
+                .HasForeignKey<ActionImpact>(e => e.ActionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
     }
 
     public override int SaveChanges()
@@ -461,6 +652,77 @@ public class CatoDbContext : DbContext
         {
             if (entry.State == EntityState.Added)
                 entry.Entity.CreatedAt = now;
+        }
+
+        foreach (var entry in ChangeTracker.Entries<User>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<UserProfile>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<MarketingTarget>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<MarketingAction>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<GameAction>())
+        {
+            if (entry.State == EntityState.Added)
+                entry.Entity.CreatedAt = now;
+        }
+
+        foreach (var entry in ChangeTracker.Entries<ActionTarget>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
         }
     }
 }

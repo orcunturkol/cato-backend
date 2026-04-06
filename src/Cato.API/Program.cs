@@ -23,6 +23,11 @@ builder.Services.AddDbContext<CatoDbContext>(options =>
 // ── MediatR ──
 builder.Services.AddMediatR(cfg =>
     cfg.RegisterServicesFromAssembly(typeof(Program).Assembly));
+    
+// ── User Handlers ──
+builder.Services.AddScoped<Cato.API.Services.Handlers.Users.CreateUserCommandHandler>();
+builder.Services.AddScoped<Cato.API.Services.Handlers.Users.GetUserQueryHandler>();
+builder.Services.AddScoped<Cato.API.Services.Handlers.Users.ListUsersQueryHandler>();
 
 // ── FluentValidation ──
 builder.Services.AddValidatorsFromAssembly(typeof(Program).Assembly);
@@ -58,6 +63,8 @@ builder.Services.AddScoped<Cato.API.Services.IGameService, Cato.API.Services.Gam
 builder.Services.AddScoped<Cato.API.Services.IGameDataService, Cato.API.Services.GameDataService>();
 builder.Services.AddScoped<Cato.API.Services.IIngestionService, Cato.API.Services.IngestionService>();
 builder.Services.AddScoped<Cato.API.Services.ISteamKitDataService, Cato.API.Services.SteamKitDataService>();
+builder.Services.AddScoped<Cato.API.Services.IMarketingTargetService, Cato.API.Services.MarketingTargetService>();
+builder.Services.AddScoped<Cato.API.Services.IMarketingActionService, Cato.API.Services.MarketingActionService>();
 
 // ── CORS ──
 builder.Services.AddCors(options =>

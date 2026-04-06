@@ -43,4 +43,6 @@ public class Game
     public ICollection<PriceSnapshot> PriceSnapshots { get; set; } = [];
     public ICollection<AppKeyValueSnapshot> AppKeyValueSnapshots { get; set; } = [];
     public ICollection<AppChangeRecord> AppChangeRecords { get; set; } = [];
+    public ICollection<GameAction> GameActions { get; set; } = [];
+    public ICollection<TargetMatch> TargetMatches { get; set; } = [];
 }
