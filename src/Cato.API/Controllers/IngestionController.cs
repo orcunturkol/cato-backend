@@ -53,6 +53,33 @@ public class IngestionController : ControllerBase
         return Results.Ok(result);
     }
 
+    /// <summary>Ingest regional price history from JSON file (per-currency, multi-snapshot).</summary>
+    [HttpPost("regional-prices")]
+    [ProducesResponseType(typeof(IngestionResult), StatusCodes.Status200OK)]
+    public async Task<IResult> IngestRegionalPrices([FromBody] IngestRegionalPricesCommand command)
+    {
+        var result = await _mediator.Send(command);
+        return Results.Ok(result);
+    }
+
+    /// <summary>Ingest wishlist insights (also-wishlisted related games) from JSON file.</summary>
+    [HttpPost("wishlist-insights")]
+    [ProducesResponseType(typeof(IngestionResult), StatusCodes.Status200OK)]
+    public async Task<IResult> IngestWishlistInsights([FromBody] IngestWishlistInsightsCommand command)
+    {
+        var result = await _mediator.Send(command);
+        return Results.Ok(result);
+    }
+
+    /// <summary>Ingest store traffic breakdown from Steamworks CSV file (per-feature impressions/visits).</summary>
+    [HttpPost("store-traffic")]
+    [ProducesResponseType(typeof(IngestionResult), StatusCodes.Status200OK)]
+    public async Task<IResult> IngestStoreTraffic([FromBody] IngestStoreTrafficCommand command)
+    {
+        var result = await _mediator.Send(command);
+        return Results.Ok(result);
+    }
+
     /// <summary>Query ingestion logs for monitoring pipeline health.</summary>
     [HttpGet("logs")]
     [ProducesResponseType(typeof(List<IngestionLogDto>), StatusCodes.Status200OK)]

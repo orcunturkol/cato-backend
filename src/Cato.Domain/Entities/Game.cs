@@ -45,4 +45,6 @@ public class Game
     public ICollection<AppChangeRecord> AppChangeRecords { get; set; } = [];
     public ICollection<GameAction> GameActions { get; set; } = [];
     public ICollection<TargetMatch> TargetMatches { get; set; } = [];
+    public ICollection<WishlistInsight> WishlistInsights { get; set; } = [];
+    public ICollection<SteamTrafficBreakdown> TrafficBreakdowns { get; set; } = [];
 }

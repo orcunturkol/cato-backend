@@ -29,6 +29,8 @@ public class CatoDbContext : DbContext
     public DbSet<ActionTarget> ActionTargets => Set<ActionTarget>();
     public DbSet<TargetMatch> TargetMatches => Set<TargetMatch>();
     public DbSet<ActionImpact> ActionImpacts => Set<ActionImpact>();
+    public DbSet<WishlistInsight> WishlistInsights => Set<WishlistInsight>();
+    public DbSet<SteamTrafficBreakdown> SteamTrafficBreakdowns => Set<SteamTrafficBreakdown>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -264,13 +266,54 @@ public class CatoDbContext : DbContext
             entity.Property(e => e.FinalPriceUsd).HasColumnType("decimal(10,2)");
             entity.Property(e => e.Currency).HasMaxLength(10);
 
-            entity.HasIndex(e => new { e.GameId, e.CapturedAt })
+            entity.HasIndex(e => new { e.GameId, e.CapturedAt, e.Currency })
                 .IsUnique()
                 .HasDatabaseName("unique_price_snapshot");
             entity.HasIndex(e => e.CapturedAt).HasDatabaseName("idx_price_snapshot_captured_at");
 
             entity.HasOne(e => e.Game)
                 .WithMany(g => g.PriceSnapshots)
+                .HasForeignKey(e => e.GameId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── WishlistInsight ──
+        modelBuilder.Entity<WishlistInsight>(entity =>
+        {
+            entity.ToTable("wishlist_insight");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.RelatedName).HasMaxLength(500);
+            entity.Property(e => e.LinkScore).HasColumnType("decimal(5,4)");
+            entity.Property(e => e.Price).HasColumnType("decimal(10,2)");
+            entity.Property(e => e.Revenue).HasColumnType("decimal(14,2)");
+            entity.Property(e => e.Genres).HasColumnType("jsonb");
+
+            entity.HasIndex(e => new { e.GameId, e.SnapshotDate, e.RelatedAppId })
+                .IsUnique()
+                .HasDatabaseName("unique_wishlist_insight");
+
+            entity.HasOne(e => e.Game)
+                .WithMany(g => g.WishlistInsights)
+                .HasForeignKey(e => e.GameId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── SteamTrafficBreakdown ──
+        modelBuilder.Entity<SteamTrafficBreakdown>(entity =>
+        {
+            entity.ToTable("steam_traffic_breakdown");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.PageCategory).HasMaxLength(200);
+            entity.Property(e => e.PageFeature).HasMaxLength(300);
+
+            entity.HasIndex(e => new { e.GameId, e.SnapshotDate, e.PageCategory, e.PageFeature })
+                .IsUnique()
+                .HasDatabaseName("unique_traffic_breakdown");
+
+            entity.HasOne(e => e.Game)
+                .WithMany(g => g.TrafficBreakdowns)
                 .HasForeignKey(e => e.GameId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
@@ -631,6 +674,25 @@ public class CatoDbContext : DbContext
         }
 
         foreach (var entry in ChangeTracker.Entries<PriceSnapshot>())
+        {
+            if (entry.State == EntityState.Added)
+                entry.Entity.CreatedAt = now;
+        }
+
+        foreach (var entry in ChangeTracker.Entries<WishlistInsight>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<SteamTrafficBreakdown>())
         {
             if (entry.State == EntityState.Added)
                 entry.Entity.CreatedAt = now;

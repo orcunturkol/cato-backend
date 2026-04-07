@@ -1,6 +1,6 @@
 # CATO MVP Document vs Codebase - Completion Report
 
-**Date:** 2026-04-06 (updated)
+**Date:** 2026-04-07 (updated)
 **Source Document:** CATO'dan SelfPub'a Data Yapisi MVP.pdf
 **Project:** cato-backend
 
@@ -18,7 +18,6 @@
 | **STEAM SALE FINANCIAL** | Done | Done | Done (Ingest + Query) | Done |
 | **STEAM TRAFFIC** | Done | Done | Done (Ingest + Query) | Done |
 | ~~**ACTION**~~ | ~~Done~~ | ~~Missing~~ | ~~Missing~~ | ~~**Missing**~~ → **Done** |
-| ~~**GAME ACTION**~~ | ~~Done~~ | ~~Missing~~ | ~~Missing~~ | ~~**Missing**~~ → **Done** |
 | ~~**ACTION TARGET**~~ | ~~Done~~ | ~~Missing~~ | ~~Missing~~ | ~~**Missing**~~ → **Done** |
 | ~~**ACTION IMPACT**~~ | ~~Done~~ | ~~Missing~~ | ~~Missing~~ | ~~**Missing**~~ → **Done** |
 | **LEGAL ENTITY** | Done | Done | Done (via game) | Done |
@@ -39,8 +38,8 @@
 
 | Story | Status | Notes |
 |---|---|---|
-| **1.1 Otomatik CCU Takibi** (15dk) | Partial | SteamKit live CCU exists, but **no automated 15-min cron job**. Manual `POST /steamkit/ccu/{appId}/save` only. |
-| **1.2 Gunluk Finansal Senkronizasyon** | Partial | Ingestion endpoint exists, but **no scheduled 04:00 UTC auto-sync**. File-based only, no direct IPartnerFinancialsService API call. |
+| **1.1 Otomatik CCU Takibi** (15dk) | Partial | Automated via external Python orchestrator `catoptric-data-collector/orchestrators/run_ccu.py` on cron `0 */4 * * *` → publishes to RabbitMQ → backend consumer ingests to `ccu_history`. **Granularity is every 4h, not 15 min** as the MVP doc asks. |
+| **1.2 Gunluk Finansal Senkronizasyon** | Partial | `steam_financial_data_collector.py` module exists in collector repo (uses `IPartnerFinancialsService.GetDetailedSales`), but **no `run_daily_financial.py` orchestrator script and no 04:00 UTC cron entry** yet. Ingestion endpoint on backend is ready. |
 | **1.3 Otomatik Oyun Tanimlama (Enrichment)** | Done | `POST /games/{id}/enrich` + `POST /games/re-enrich` + Genre/Tag auto-fill |
 
 ---
@@ -82,7 +81,7 @@
 | **User Stories** | 8 | 4 | 3 | 1 |
 | **Non-functional** | 3 | 3 | 0 | 0 |
 
-### Overall Completion: ~72%
+### Overall Completion: ~80%
 
 ---
 
@@ -98,33 +97,54 @@
 
 ---
 
+## ✅ Completed Since Last Report (2026-04-07)
+
+### Priority 1 — New Ingestion Endpoints
+
+| Endpoint | Route | Entity / Table | Notes |
+|---|---|---|---|
+| **Regional Price History** | `POST /api/ingestion/regional-prices` | `PriceSnapshot` / `price_snapshot` | Parses per-currency JSON (`regional_price_history.json`). Unique index extended to `(GameId, CapturedAt, Currency)`. Inserts one row per currency per snapshot. |
+| **Wishlist Insights** | `POST /api/ingestion/wishlist-insights` | `WishlistInsight` / `wishlist_insight` (**new table**) | Parses `alsoWishlisted` array from `wishlist_insights.json`. Stores related AppId, link score, price, genres (JSONB), revenue. Upsert on `(GameId, SnapshotDate, RelatedAppId)`. |
+| **Store Traffic Breakdown** | `POST /api/ingestion/store-traffic` | `SteamTrafficBreakdown` / `steam_traffic_breakdown` (**new table**) | Parses Steamworks per-feature CSV (`Page / Category`, `Page / Feature`, `Impressions`, `Visits`). Handles quoted numeric cells. Upsert on `(GameId, SnapshotDate, PageCategory, PageFeature)`. |
+
+All three endpoints follow the standard `IngestCommand → Handler → Validator → IIngestionService` MediatR pattern and write to `ingestion_log`.
+
+Migration `20260407163709_AddNewIngestionTables` covers all schema changes.
+
+**Still deferred from Priority 1:**
+- **Active Users History** (`active_users_history.json`, dau/mau fields) — schema decision pending (new table vs. nullable columns on `ccu_history`).
+
+---
+
 ## 🔜 NEXT: What Remains
 
-### Priority 1 — Missing Ingestion Endpoints (tables/entities already exist, just need handlers)
+### Priority 1 — Missing Ingestion Endpoints ~~(tables/entities already exist, just need handlers)~~
 
-These are the quickest wins — the database table, EF entity, and DTO pattern are all already in place.
-
-| Task | What's needed | Data file available? |
-|---|---|---|
-| **Store Traffic CSV ingestion** | `POST /api/ingestion/traffic` — reads `steam_traffic` CSV from partner portal | No sample file in `Data Pulled/` |
-| **Active Users History ingestion** | `POST /api/ingestion/active-users` — maps to `ccu_history` table | Yes — `Data Pulled/active_users_history.json` |
-| **Wishlist Insights ingestion** | `POST /api/ingestion/wishlist-insights` — maps to `owned_game_data` | Yes — `Data Pulled/wishlist_insights.json` |
-| **Regional Price CSV ingestion** | `POST /api/ingestion/regional-prices` — enrich `price_snapshot` with per-region rows | Yes — `Data Pulled/regional_price_history.json` |
-
-**Pattern to follow:** `src/Cato.API/Services/Handlers/Ingestion/IngestPeakCcuCommandHandler.cs` (reads JSON file, upserts to DB via EF).
+| Task | Status |
+|---|---|
+| ~~**Store Traffic CSV ingestion**~~ | ~~Missing~~ → **Done** (`POST /api/ingestion/store-traffic`) |
+| ~~**Wishlist Insights ingestion**~~ | ~~Missing~~ → **Done** (`POST /api/ingestion/wishlist-insights`) |
+| ~~**Regional Price ingestion**~~ | ~~Missing~~ → **Done** (`POST /api/ingestion/regional-prices`) |
+| **Active Users History ingestion** | **Still missing** — dau/mau schema decision needed before implementing |
 
 ---
 
 ### Priority 2 — Scheduled Jobs (automation for existing ingestion)
 
-Both are documented in MVP Story 1.1 and 1.2.
+**Architecture note:** scheduling is handled **externally** via the Python `catoptric-data-collector` repo (cron → collector script → RabbitMQ → backend consumer), not via .NET `IHostedService`. Orchestrator scripts live in `catoptric-data-collector/orchestrators/` and cron entries are documented in `orchestrators/orchestrator_commands.txt`.
 
+#### ✅ Already automated
+| Job | Orchestrator | Cron | Target |
+|---|---|---|---|
+| CCU collection | `run_ccu.py` | `0 */4 * * *` | `ccu_history` via `steam_current_players` messages |
+| Daily group member count | `run_daily_db.py` | `0 3 * * *` | `group_member_count_snapshot` |
+| SteamDB snapshots | `run_daily_steamdb.py` | `30 3 * * *` | `steamdb_snapshot` |
+
+#### 🔜 Still needed
 | Task | What's needed |
 |---|---|
-| **15-min CCU cron** | `IHostedService` that calls `SteamKitDataService.SaveCcuAsync()` for all active games every 15 min. Use `PeriodicTimer`. Register in `Program.cs`. |
-| **Daily financial sync at 04:00 UTC** | `IHostedService` with `PeriodicTimer` (daily). Currently ingestion is file-based — either keep file-watching or integrate `IPartnerFinancialsService` API if credentials available. |
-
-**Pattern to follow:** `src/Cato.Infrastructure/Background/SteamPicsWatcherService.cs` (IHostedService with loop + CancellationToken).
+| **Daily financial sync at 04:00 UTC** (Story 1.2) | Write `orchestrators/run_daily_financial.py` following the `run_ccu.py` pattern: load games from DB → call `steam_financial_data_collector` (`IPartnerFinancialsService.GetDetailedSales`) → save JSON → publish `steam_financial` messages to RabbitMQ. Add `0 4 * * *` cron entry to `orchestrator_commands.txt`. Backend ingestion endpoint is already in place. |
+| **Tighten CCU cadence to 15 min** (Story 1.1, optional) | Current cron is every 4h. If MVP literally requires 15 min granularity, change cron to `*/15 * * * *` and confirm Steam API rate limits + DB volume are acceptable. |
 
 ---
 
@@ -162,9 +182,11 @@ Both are documented in MVP Story 1.1 and 1.2.
 
 | Purpose | Path |
 |---|---|
-| Ingestion handler pattern | `src/Cato.API/Services/Handlers/Ingestion/IngestPeakCcuCommandHandler.cs` |
+| Ingestion handler pattern | `src/Cato.API/Services/Handlers/Ingestion/IngestPeakCcuHandler.cs` |
 | Background service pattern | `src/Cato.Infrastructure/Background/SteamPicsWatcherService.cs` |
 | Ingestion controller | `src/Cato.API/Controllers/IngestionController.cs` |
+| Ingestion service | `src/Cato.API/Services/IngestionService.cs` + `IIngestionService.cs` |
 | DbContext (add new tables here) | `src/Cato.Infrastructure/Database/CatoDbContext.cs` |
+| New entities (2026-04-07) | `src/Cato.Domain/Entities/WishlistInsight.cs`, `SteamTrafficBreakdown.cs` |
 | Data files | `Data Pulled/` directory |
 | EF migration command | `dotnet ef migrations add <Name> --project src/Cato.Infrastructure --startup-project src/Cato.API` |

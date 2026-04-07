@@ -739,6 +739,345 @@ public class IngestionService : IIngestionService
         }
     }
 
+    public async Task<IngestionResult> IngestRegionalPricesAsync(IngestRegionalPricesCommand request, CancellationToken ct = default)
+    {
+        var log = new IngestionLog
+        {
+            Id = Guid.NewGuid(),
+            Source = "regional_price_history",
+            StartTime = DateTime.UtcNow,
+            Status = "Running",
+            FilePath = request.FilePath
+        };
+        _db.IngestionLogs.Add(log);
+        await _db.SaveChangesAsync(ct);
+
+        try
+        {
+            var game = await _db.Games.FirstOrDefaultAsync(g => g.AppId == request.AppId, ct);
+            if (game is null)
+                throw new InvalidOperationException($"Game with AppId {request.AppId} not found. Create the game first.");
+
+            if (!File.Exists(request.FilePath))
+                throw new FileNotFoundException($"File not found: {request.FilePath}");
+
+            var json = await File.ReadAllTextAsync(request.FilePath, ct);
+            var snapshots = JsonSerializer.Deserialize<List<Dictionary<string, JsonElement>>>(json)
+                ?? throw new InvalidOperationException("Unrecognized regional price file format");
+
+            // Known non-currency keys to skip
+            var skipKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "timestamp" };
+
+            int processed = 0, inserted = 0, updated = 0, failed = 0;
+
+            foreach (var snapshot in snapshots)
+            {
+                if (!snapshot.TryGetValue("timestamp", out var tsEl)) continue;
+                var capturedAt = DateTimeOffset.FromUnixTimeMilliseconds(tsEl.GetInt64()).UtcDateTime;
+
+                foreach (var (key, value) in snapshot)
+                {
+                    if (skipKeys.Contains(key)) continue;
+
+                    processed++;
+                    try
+                    {
+                        if (!value.TryGetProperty("fullPrice", out var fullPriceEl) ||
+                            !value.TryGetProperty("finalPrice", out var finalPriceEl))
+                        {
+                            failed++;
+                            continue;
+                        }
+
+                        var fullPrice = fullPriceEl.GetDecimal();
+                        var finalPrice = finalPriceEl.GetDecimal();
+                        var discountPct = fullPrice > 0
+                            ? (int)Math.Round((fullPrice - finalPrice) / fullPrice * 100)
+                            : 0;
+
+                        // BasePriceUsd/FinalPriceUsd store the per-currency price (not always USD)
+                        var existing = await _db.PriceSnapshots.FirstOrDefaultAsync(
+                            p => p.GameId == game.Id && p.CapturedAt == capturedAt && p.Currency == key, ct);
+
+                        if (existing is null)
+                        {
+                            _db.PriceSnapshots.Add(new PriceSnapshot
+                            {
+                                Id = Guid.NewGuid(),
+                                GameId = game.Id,
+                                CapturedAt = capturedAt,
+                                Currency = key,
+                                BasePriceUsd = fullPrice,
+                                FinalPriceUsd = finalPrice,
+                                DiscountPercent = discountPct
+                            });
+                            inserted++;
+                        }
+                        else
+                        {
+                            existing.BasePriceUsd = fullPrice;
+                            existing.FinalPriceUsd = finalPrice;
+                            existing.DiscountPercent = discountPct;
+                            updated++;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        failed++;
+                        _logger.LogWarning(ex, "Failed to process price entry for currency {Currency} at {Timestamp}", key, capturedAt);
+                    }
+                }
+            }
+
+            await _db.SaveChangesAsync(ct);
+
+            log.EndTime = DateTime.UtcNow;
+            log.Status = "Completed";
+            log.RecordsProcessed = processed;
+            log.RecordsInserted = inserted;
+            log.RecordsUpdated = updated;
+            log.RecordsFailed = failed;
+            await _db.SaveChangesAsync(ct);
+
+            _logger.LogInformation("Regional prices ingestion complete: {Processed} processed, {Inserted} inserted, {Updated} updated, {Failed} failed",
+                processed, inserted, updated, failed);
+
+            return new IngestionResult(processed, inserted, updated, failed, log.Id);
+        }
+        catch (Exception ex)
+        {
+            log.EndTime = DateTime.UtcNow;
+            log.Status = "Failed";
+            log.ErrorMessage = ex.Message;
+            await _db.SaveChangesAsync(ct);
+            throw;
+        }
+    }
+
+    public async Task<IngestionResult> IngestWishlistInsightsAsync(IngestWishlistInsightsCommand request, CancellationToken ct = default)
+    {
+        var log = new IngestionLog
+        {
+            Id = Guid.NewGuid(),
+            Source = "wishlist_insights",
+            StartTime = DateTime.UtcNow,
+            Status = "Running",
+            FilePath = request.FilePath
+        };
+        _db.IngestionLogs.Add(log);
+        await _db.SaveChangesAsync(ct);
+
+        try
+        {
+            var game = await _db.Games.FirstOrDefaultAsync(g => g.AppId == request.AppId, ct);
+            if (game is null)
+                throw new InvalidOperationException($"Game with AppId {request.AppId} not found. Create the game first.");
+
+            if (!File.Exists(request.FilePath))
+                throw new FileNotFoundException($"File not found: {request.FilePath}");
+
+            var json = await File.ReadAllTextAsync(request.FilePath, ct);
+            var doc = JsonDocument.Parse(json);
+
+            if (!doc.RootElement.TryGetProperty("alsoWishlisted", out var alsoWishlisted))
+                throw new InvalidOperationException("Unrecognized wishlist insights format: missing 'alsoWishlisted' property");
+
+            var snapshotDate = DateOnly.FromDateTime(DateTime.UtcNow);
+            int processed = 0, inserted = 0, updated = 0, failed = 0;
+
+            foreach (var entry in alsoWishlisted.EnumerateArray())
+            {
+                processed++;
+                try
+                {
+                    var steamIdStr = entry.GetProperty("steamId").GetString() ?? "";
+                    if (!int.TryParse(steamIdStr, out var relatedAppId))
+                    {
+                        failed++;
+                        continue;
+                    }
+
+                    var name = entry.TryGetProperty("name", out var nameEl) ? nameEl.GetString() ?? "" : "";
+                    var link = entry.TryGetProperty("link", out var linkEl) ? linkEl.GetDecimal() : 0m;
+                    var price = entry.TryGetProperty("price", out var priceEl) ? priceEl.GetDecimal() : 0m;
+                    var copiesSold = entry.TryGetProperty("copiesSold", out var copiesEl) ? copiesEl.GetInt64() : 0L;
+                    var revenue = entry.TryGetProperty("revenue", out var revenueEl) ? revenueEl.GetDecimal() : 0m;
+
+                    DateTime? releaseDate = null;
+                    if (entry.TryGetProperty("releaseDate", out var releaseDateEl) && releaseDateEl.ValueKind == JsonValueKind.Number)
+                        releaseDate = DateTimeOffset.FromUnixTimeMilliseconds(releaseDateEl.GetInt64()).UtcDateTime;
+
+                    var genres = Array.Empty<string>();
+                    if (entry.TryGetProperty("genres", out var genresEl) && genresEl.ValueKind == JsonValueKind.Array)
+                        genres = genresEl.EnumerateArray().Select(g => g.GetString() ?? "").ToArray();
+
+                    var existing = await _db.WishlistInsights.FirstOrDefaultAsync(
+                        w => w.GameId == game.Id && w.SnapshotDate == snapshotDate && w.RelatedAppId == relatedAppId, ct);
+
+                    if (existing is null)
+                    {
+                        _db.WishlistInsights.Add(new WishlistInsight
+                        {
+                            Id = Guid.NewGuid(),
+                            GameId = game.Id,
+                            SnapshotDate = snapshotDate,
+                            RelatedAppId = relatedAppId,
+                            RelatedName = name,
+                            LinkScore = link,
+                            Price = price,
+                            ReleaseDate = releaseDate,
+                            Genres = genres,
+                            CopiesSold = copiesSold,
+                            Revenue = revenue
+                        });
+                        inserted++;
+                    }
+                    else
+                    {
+                        existing.RelatedName = name;
+                        existing.LinkScore = link;
+                        existing.Price = price;
+                        existing.ReleaseDate = releaseDate;
+                        existing.Genres = genres;
+                        existing.CopiesSold = copiesSold;
+                        existing.Revenue = revenue;
+                        updated++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    failed++;
+                    _logger.LogWarning(ex, "Failed to process wishlist insight entry");
+                }
+            }
+
+            await _db.SaveChangesAsync(ct);
+
+            log.EndTime = DateTime.UtcNow;
+            log.Status = "Completed";
+            log.RecordsProcessed = processed;
+            log.RecordsInserted = inserted;
+            log.RecordsUpdated = updated;
+            log.RecordsFailed = failed;
+            await _db.SaveChangesAsync(ct);
+
+            _logger.LogInformation("Wishlist insights ingestion complete: {Processed} processed, {Inserted} inserted, {Updated} updated, {Failed} failed",
+                processed, inserted, updated, failed);
+
+            return new IngestionResult(processed, inserted, updated, failed, log.Id);
+        }
+        catch (Exception ex)
+        {
+            log.EndTime = DateTime.UtcNow;
+            log.Status = "Failed";
+            log.ErrorMessage = ex.Message;
+            await _db.SaveChangesAsync(ct);
+            throw;
+        }
+    }
+
+    public async Task<IngestionResult> IngestStoreTrafficAsync(IngestStoreTrafficCommand request, CancellationToken ct = default)
+    {
+        var log = new IngestionLog
+        {
+            Id = Guid.NewGuid(),
+            Source = "store_traffic_breakdown",
+            StartTime = DateTime.UtcNow,
+            Status = "Running",
+            FilePath = request.FilePath
+        };
+        _db.IngestionLogs.Add(log);
+        await _db.SaveChangesAsync(ct);
+
+        try
+        {
+            var game = await _db.Games.FirstOrDefaultAsync(g => g.AppId == request.AppId, ct);
+            if (game is null)
+                throw new InvalidOperationException($"Game with AppId {request.AppId} not found. Create the game first.");
+
+            if (!File.Exists(request.FilePath))
+                throw new FileNotFoundException($"File not found: {request.FilePath}");
+
+            var lines = await File.ReadAllLinesAsync(request.FilePath, ct);
+            var snapshotDate = DateOnly.FromDateTime(DateTime.UtcNow);
+            int processed = 0, inserted = 0, updated = 0, failed = 0;
+
+            // Skip header row
+            for (int i = 1; i < lines.Length; i++)
+            {
+                var line = lines[i].Trim();
+                if (string.IsNullOrEmpty(line)) continue;
+
+                processed++;
+                try
+                {
+                    // CSV columns: Page / Category, Page / Feature, Impressions, Visits
+                    // Values may be quoted and contain commas (e.g. "12,755")
+                    var cols = ParseCsvLine(line);
+                    if (cols.Length < 4) { failed++; continue; }
+
+                    var category = cols[0].Trim();
+                    var feature = cols[1].Trim();
+                    var impressions = ParseFormattedLong(cols[2]);
+                    var visits = ParseFormattedLong(cols[3]);
+
+                    var existing = await _db.SteamTrafficBreakdowns.FirstOrDefaultAsync(
+                        t => t.GameId == game.Id && t.SnapshotDate == snapshotDate
+                             && t.PageCategory == category && t.PageFeature == feature, ct);
+
+                    if (existing is null)
+                    {
+                        _db.SteamTrafficBreakdowns.Add(new SteamTrafficBreakdown
+                        {
+                            Id = Guid.NewGuid(),
+                            GameId = game.Id,
+                            SnapshotDate = snapshotDate,
+                            PageCategory = category,
+                            PageFeature = feature,
+                            Impressions = impressions,
+                            Visits = visits
+                        });
+                        inserted++;
+                    }
+                    else
+                    {
+                        existing.Impressions = impressions;
+                        existing.Visits = visits;
+                        updated++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    failed++;
+                    _logger.LogWarning(ex, "Failed to parse store traffic CSV line {Line}", i);
+                }
+            }
+
+            await _db.SaveChangesAsync(ct);
+
+            log.EndTime = DateTime.UtcNow;
+            log.Status = "Completed";
+            log.RecordsProcessed = processed;
+            log.RecordsInserted = inserted;
+            log.RecordsUpdated = updated;
+            log.RecordsFailed = failed;
+            await _db.SaveChangesAsync(ct);
+
+            _logger.LogInformation("Store traffic breakdown ingestion complete: {Processed} processed, {Inserted} inserted, {Updated} updated, {Failed} failed",
+                processed, inserted, updated, failed);
+
+            return new IngestionResult(processed, inserted, updated, failed, log.Id);
+        }
+        catch (Exception ex)
+        {
+            log.EndTime = DateTime.UtcNow;
+            log.Status = "Failed";
+            log.ErrorMessage = ex.Message;
+            await _db.SaveChangesAsync(ct);
+            throw;
+        }
+    }
+
     public async Task<List<IngestionLogDto>> GetIngestionLogsAsync(GetIngestionLogsQuery request, CancellationToken ct = default)
     {
         var query = _db.IngestionLogs.AsNoTracking().AsQueryable();
@@ -761,5 +1100,40 @@ public class IngestionService : IIngestionService
     {
         if (string.IsNullOrWhiteSpace(value)) return 0;
         return int.Parse(value.Replace(",", ""), CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>Parses long integers formatted with commas like "1,497,394" → 1497394</summary>
+    private static long ParseFormattedLong(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return 0;
+        return long.Parse(value.Trim().Replace(",", ""), CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>Splits a CSV line respecting double-quoted fields that may contain commas.</summary>
+    private static string[] ParseCsvLine(string line)
+    {
+        var result = new List<string>();
+        var current = new System.Text.StringBuilder();
+        bool inQuotes = false;
+
+        for (int i = 0; i < line.Length; i++)
+        {
+            char c = line[i];
+            if (c == '"')
+            {
+                inQuotes = !inQuotes;
+            }
+            else if (c == ',' && !inQuotes)
+            {
+                result.Add(current.ToString());
+                current.Clear();
+            }
+            else
+            {
+                current.Append(c);
+            }
+        }
+        result.Add(current.ToString());
+        return result.ToArray();
     }
 }
