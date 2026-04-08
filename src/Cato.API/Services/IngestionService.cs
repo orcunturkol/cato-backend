@@ -308,7 +308,8 @@ public class IngestionService : IIngestionService
                                 CountryCode     = countryCode,
                                 Platform        = platform,
                                 PackageId       = packageId,
-                                SalesUnits      = txn.TryGetProperty("gross_units_sold",     out var guEl) && guEl.ValueKind != JsonValueKind.Null ? guEl.GetInt32() : 0,
+                                SalesUnits      = txn.TryGetProperty("gross_units_sold",      out var guEl) && guEl.ValueKind != JsonValueKind.Null ? guEl.GetInt32()
+                                              : txn.TryGetProperty("gross_units_activated", out var gaEl) && gaEl.ValueKind != JsonValueKind.Null ? gaEl.GetInt32() : 0,
                                 ReturnsUnits    = txn.TryGetProperty("gross_units_returned", out var grEl) && grEl.ValueKind != JsonValueKind.Null ? grEl.GetInt32() : 0,
                                 GrossRevenueUsd = txn.TryGetProperty("gross_sales_usd",      out var gsEl) ? ParseMoney(gsEl) : 0m,
                                 GrossReturnsUsd = txn.TryGetProperty("gross_returns_usd",    out var gRetEl) ? ParseMoney(gRetEl) : 0m,
