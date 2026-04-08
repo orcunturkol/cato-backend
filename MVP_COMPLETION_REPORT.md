@@ -39,7 +39,7 @@
 | Story | Status | Notes |
 |---|---|---|
 | **1.1 Otomatik CCU Takibi** (15dk) | Partial | Automated via external Python orchestrator `catoptric-data-collector/orchestrators/run_ccu.py` on cron `0 */4 * * *` → publishes to RabbitMQ → backend consumer ingests to `ccu_history`. **Granularity is every 4h, not 15 min** as the MVP doc asks. |
-| **1.2 Gunluk Finansal Senkronizasyon** | Partial | `steam_financial_data_collector.py` module exists in collector repo (uses `IPartnerFinancialsService.GetDetailedSales`), but **no `run_daily_financial.py` orchestrator script and no 04:00 UTC cron entry** yet. Ingestion endpoint on backend is ready. |
+| **1.2 Gunluk Finansal Senkronizasyon** | Complete | `orchestrators/run_daily_financial.py` orchestrator added; cron entry `0 4 * * *` documented in `orchestrator_commands.txt`. Calls `IPartnerFinancialsService.GetChangedDatesForPartner` + `GetDetailedSales` (paginated), saves per-app JSON, publishes `steam_financial` messages to RabbitMQ → backend ingests to `steam_sale_financial`. |
 | **1.3 Otomatik Oyun Tanimlama (Enrichment)** | Done | `POST /games/{id}/enrich` + `POST /games/re-enrich` + Genre/Tag auto-fill |
 
 ---
@@ -143,7 +143,7 @@ Migration `20260407163709_AddNewIngestionTables` covers all schema changes.
 #### 🔜 Still needed
 | Task | What's needed |
 |---|---|
-| **Daily financial sync at 04:00 UTC** (Story 1.2) | Write `orchestrators/run_daily_financial.py` following the `run_ccu.py` pattern: load games from DB → call `steam_financial_data_collector` (`IPartnerFinancialsService.GetDetailedSales`) → save JSON → publish `steam_financial` messages to RabbitMQ. Add `0 4 * * *` cron entry to `orchestrator_commands.txt`. Backend ingestion endpoint is already in place. |
+| ~~**Daily financial sync at 04:00 UTC** (Story 1.2)~~ | ✅ Done — `orchestrators/run_daily_financial.py` created, cron `0 4 * * *` documented. |
 | **Tighten CCU cadence to 15 min** (Story 1.1, optional) | Current cron is every 4h. If MVP literally requires 15 min granularity, change cron to `*/15 * * * *` and confirm Steam API rate limits + DB volume are acceptable. |
 
 ---

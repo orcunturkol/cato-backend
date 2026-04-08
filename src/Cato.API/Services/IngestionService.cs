@@ -243,7 +243,23 @@ public class IngestionService : IIngestionService
         {
             var game = await _db.Games.FirstOrDefaultAsync(g => g.AppId == request.AppId, ct);
             if (game is null)
-                throw new InvalidOperationException($"Game with AppId {request.AppId} not found. Create the game first.");
+            {
+                _logger.LogInformation("Game with AppId {AppId} not found. Creating stub and enriching from Steam.", request.AppId);
+
+                game = new Cato.Domain.Entities.Game
+                {
+                    Id = Guid.NewGuid(),
+                    AppId = request.AppId,
+                    Name = $"App {request.AppId}",
+                    GameType = "Other"
+                };
+                _db.Games.Add(game);
+                await _db.SaveChangesAsync(ct);
+
+                var enrichResult = await _gameService.EnrichGameFromSteamAsync(game.Id, ct);
+                if (!enrichResult.IsSuccess)
+                    _logger.LogWarning("Steam enrich failed for AppId {AppId}: {Error}", request.AppId, enrichResult.ErrorMessage);
+            }
 
             if (!File.Exists(request.FilePath))
                 throw new FileNotFoundException($"File not found: {request.FilePath}");
