@@ -269,45 +269,65 @@ public class IngestionService : IIngestionService
 
             int processed = 0, inserted = 0, failed = 0;
 
-            if (doc.RootElement.TryGetProperty("regionalHistory", out var regionalHistory))
+            if (doc.RootElement.TryGetProperty("transactions", out var transactions))
             {
-                foreach (var country in regionalHistory.EnumerateObject())
+                foreach (var txn in transactions.EnumerateArray())
                 {
-                    var countryCode = country.Name;
-                    foreach (var entry in country.Value.EnumerateArray())
+                    processed++;
+                    try
                     {
-                        processed++;
-                        try
+                        var dateStr = txn.GetProperty("date").GetString() ?? string.Empty;
+                        var saleDate = DateOnly.ParseExact(
+                            dateStr.Replace("/", "-"),
+                            ["yyyy-MM-dd", "yyyyMMdd"],
+                            System.Globalization.CultureInfo.InvariantCulture);
+
+                        var countryCode = txn.TryGetProperty("country_code", out var ccEl) ? ccEl.GetString() ?? "XX" : "XX";
+                        var platform    = txn.TryGetProperty("platform",     out var plEl) && plEl.GetString() is { Length: > 0 } pl ? pl : "Steam";
+                        var packageId   = txn.TryGetProperty("packageid",    out var pkEl) && pkEl.ValueKind != JsonValueKind.Null ? pkEl.GetInt32() : (int?)null;
+
+                        var exists = await _db.SteamSaleFinancials.AnyAsync(
+                            s => s.GameId == game.Id
+                              && s.SaleDate == saleDate
+                              && s.CountryCode == countryCode
+                              && s.PackageId == packageId
+                              && s.Platform == platform, ct);
+
+                        if (!exists)
                         {
-                            var timestamp = entry.GetProperty("timestamp").GetInt64();
-                            var saleDate = DateOnly.FromDateTime(
-                                DateTimeOffset.FromUnixTimeMilliseconds(timestamp).UtcDateTime);
-                            var copiesSold = entry.GetProperty("copiesSold").GetInt32();
-                            var revenue = entry.GetProperty("revenue").GetDecimal();
+                            static decimal ParseMoney(JsonElement el) =>
+                                el.ValueKind == JsonValueKind.Null ? 0m
+                                : el.ValueKind == JsonValueKind.String ? decimal.TryParse(el.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : 0m
+                                : el.GetDecimal();
 
-                            var exists = await _db.SteamSaleFinancials.AnyAsync(
-                                s => s.GameId == game.Id && s.SaleDate == saleDate && s.CountryCode == countryCode, ct);
-
-                            if (!exists)
+                            _db.SteamSaleFinancials.Add(new SteamSaleFinancial
                             {
-                                _db.SteamSaleFinancials.Add(new SteamSaleFinancial
-                                {
-                                    Id = Guid.NewGuid(),
-                                    GameId = game.Id,
-                                    SaleDate = saleDate,
-                                    CountryCode = countryCode,
-                                    SalesUnits = copiesSold,
-                                    GrossRevenueUsd = revenue,
-                                    NetRevenueUsd = revenue
-                                });
-                                inserted++;
-                            }
+                                Id              = Guid.NewGuid(),
+                                GameId          = game.Id,
+                                SaleDate        = saleDate,
+                                CountryCode     = countryCode,
+                                Platform        = platform,
+                                PackageId       = packageId,
+                                SalesUnits      = txn.TryGetProperty("gross_units_sold",     out var guEl) && guEl.ValueKind != JsonValueKind.Null ? guEl.GetInt32() : 0,
+                                ReturnsUnits    = txn.TryGetProperty("gross_units_returned", out var grEl) && grEl.ValueKind != JsonValueKind.Null ? grEl.GetInt32() : 0,
+                                GrossRevenueUsd = txn.TryGetProperty("gross_sales_usd",      out var gsEl) ? ParseMoney(gsEl) : 0m,
+                                GrossReturnsUsd = txn.TryGetProperty("gross_returns_usd",    out var gRetEl) ? ParseMoney(gRetEl) : 0m,
+                                TaxUsd          = txn.TryGetProperty("net_tax_usd",          out var taxEl) ? ParseMoney(taxEl) : 0m,
+                                NetRevenueUsd   = txn.TryGetProperty("net_sales_usd",        out var nsEl) ? ParseMoney(nsEl) : 0m,
+                                Currency        = txn.TryGetProperty("currency",             out var curEl) ? curEl.GetString() : null,
+                                BasePrice       = txn.TryGetProperty("base_price",           out var bpEl)  ? bpEl.GetString()  : null,
+                                SalePrice       = txn.TryGetProperty("sale_price",           out var spEl)  ? spEl.GetString()  : null,
+                                SaleType        = txn.TryGetProperty("package_sale_type",    out var stEl)  ? stEl.GetString()  : null,
+                                CombinedDiscountId    = txn.TryGetProperty("combined_discount_id",         out var cdEl) && cdEl.ValueKind != JsonValueKind.Null ? cdEl.GetInt32() : (int?)null,
+                                RevenueShareTier      = txn.TryGetProperty("additional_revenue_share_tier", out var rsEl) && rsEl.ValueKind != JsonValueKind.Null ? rsEl.GetInt32() : (int?)null,
+                            });
+                            inserted++;
                         }
-                        catch (Exception ex)
-                        {
-                            failed++;
-                            _logger.LogWarning(ex, "Failed to process financial entry for {Country}", countryCode);
-                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        failed++;
+                        _logger.LogWarning(ex, "Failed to process financial transaction in {FilePath}", request.FilePath);
                     }
                 }
             }
