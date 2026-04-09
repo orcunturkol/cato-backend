@@ -60,7 +60,7 @@ public class IngestionDispatcher : IIngestionDispatcher
             case "steamworks_owned_game":
             {
                 await using var fs = File.OpenRead(message.FilePath);
-                await _mediator.Send(new IngestOwnedGameDataCommand(message.AppId, Path.GetFileName(message.FilePath), fs), ct);
+                await _mediator.Send(new IngestOwnedGameDataCommand(Path.GetFileName(message.FilePath), fs), ct);
                 break;
             }
             case "group_member_count":

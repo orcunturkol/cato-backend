@@ -56,16 +56,16 @@ public class IngestionController : ControllerBase
         return Results.Ok(result);
     }
 
-    /// <summary>Ingest owned game wishlist/activation data from an uploaded JSON file.</summary>
+    /// <summary>Ingest owned game wishlist/activation data from an uploaded JSON file. AppId is read from the file's game_id field.</summary>
     [HttpPost("owned-game")]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(IngestionResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IResult> IngestOwnedGameData([FromForm] int appId, IFormFile file, CancellationToken ct)
+    public async Task<IResult> IngestOwnedGameData(IFormFile file, CancellationToken ct)
     {
         if (file is null || file.Length == 0) return Results.BadRequest("File is required.");
         await using var stream = file.OpenReadStream();
-        var result = await _mediator.Send(new IngestOwnedGameDataCommand(appId, file.FileName, stream), ct);
+        var result = await _mediator.Send(new IngestOwnedGameDataCommand(file.FileName, stream), ct);
         return Results.Ok(result);
     }
 

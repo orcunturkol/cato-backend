@@ -7,7 +7,6 @@ public class IngestOwnedGameDataValidator : AbstractValidator<IngestOwnedGameDat
 {
     public IngestOwnedGameDataValidator()
     {
-        RuleFor(x => x.AppId).GreaterThan(0);
         RuleFor(x => x.FileName).NotEmpty();
     }
 }

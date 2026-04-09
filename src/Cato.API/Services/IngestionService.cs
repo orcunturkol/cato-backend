@@ -468,12 +468,16 @@ public class IngestionService : IIngestionService
 
         try
         {
-            var game = await _db.Games.FirstOrDefaultAsync(g => g.AppId == request.AppId, ct);
-            if (game is null)
-                throw new InvalidOperationException($"Game with AppId {request.AppId} not found. Create the game first.");
-
             var doc = await JsonDocument.ParseAsync(request.Content, cancellationToken: ct);
             var root = doc.RootElement;
+
+            if (!root.TryGetProperty("game_id", out var gameIdEl) ||
+                !int.TryParse(gameIdEl.GetString() ?? gameIdEl.GetRawText().Trim('"'), out var appId))
+                throw new InvalidOperationException("File is missing required 'game_id' field.");
+
+            var game = await _db.Games.FirstOrDefaultAsync(g => g.AppId == appId, ct);
+            if (game is null)
+                throw new InvalidOperationException($"Game with AppId {appId} not found. Create the game first.");
 
             int processed = 1, inserted = 0, failed = 0;
 
