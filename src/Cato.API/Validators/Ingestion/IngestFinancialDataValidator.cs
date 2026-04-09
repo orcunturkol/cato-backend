@@ -8,6 +8,6 @@ public class IngestFinancialDataValidator : AbstractValidator<IngestFinancialDat
     public IngestFinancialDataValidator()
     {
         RuleFor(x => x.AppId).GreaterThan(0);
-        RuleFor(x => x.FilePath).NotEmpty();
+        RuleFor(x => x.FileName).NotEmpty();
     }
 }

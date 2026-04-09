@@ -3,4 +3,4 @@ using MediatR;
 
 namespace Cato.API.Models.Ingestion;
 
-public record IngestFinancialDataCommand(int AppId, string FilePath) : IRequest<IngestionResult>;
+public record IngestFinancialDataCommand(int AppId, string FileName, Stream Content) : IRequest<IngestionResult>;

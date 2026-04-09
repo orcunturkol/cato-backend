@@ -36,25 +36,33 @@ public class IngestionDispatcher : IIngestionDispatcher
         switch (message.Source.ToLowerInvariant())
         {
             case "steam_financial":
-                await _mediator.Send(new IngestFinancialDataCommand(message.AppId, message.FilePath), ct);
+            {
+                await using var fs = File.OpenRead(message.FilePath);
+                await _mediator.Send(new IngestFinancialDataCommand(message.AppId, Path.GetFileName(message.FilePath), fs), ct);
                 break;
-
+            }
             case "steamworks_wishlist":
-                await _mediator.Send(new IngestWishlistDataCommand(message.AppId, message.FilePath), ct);
+            {
+                await using var fs = File.OpenRead(message.FilePath);
+                await _mediator.Send(new IngestWishlistDataCommand(message.AppId, Path.GetFileName(message.FilePath), fs), ct);
                 break;
-
+            }
             case "gamalytic_peak_ccu":
-                await _mediator.Send(new IngestPeakCcuCommand(message.AppId, message.FilePath), ct);
+            {
+                await using var fs = File.OpenRead(message.FilePath);
+                await _mediator.Send(new IngestPeakCcuCommand(message.AppId, Path.GetFileName(message.FilePath), fs), ct);
                 break;
-
+            }
             case "steam_current_players":
                 await _mediator.Send(new IngestCcuCommand(message.AppId, message.FilePath), ct);
                 break;
 
             case "steamworks_owned_game":
-                await _mediator.Send(new IngestOwnedGameDataCommand(message.AppId, message.FilePath), ct);
+            {
+                await using var fs = File.OpenRead(message.FilePath);
+                await _mediator.Send(new IngestOwnedGameDataCommand(message.AppId, Path.GetFileName(message.FilePath), fs), ct);
                 break;
-
+            }
             case "group_member_count":
                 await _mediator.Send(new IngestGroupMemberCountCommand(message.AppId, message.FilePath), ct);
                 break;

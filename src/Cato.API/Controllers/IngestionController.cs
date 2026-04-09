@@ -17,66 +17,94 @@ public class IngestionController : ControllerBase
         _mediator = mediator;
     }
 
-    /// <summary>Ingest peak CCU history from JSON file.</summary>
+    /// <summary>Ingest peak CCU history from an uploaded JSON file.</summary>
     [HttpPost("peak-ccu")]
+    [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(IngestionResult), StatusCodes.Status200OK)]
-    public async Task<IResult> IngestPeakCcu([FromBody] IngestPeakCcuCommand command)
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> IngestPeakCcu([FromForm] int appId, IFormFile file, CancellationToken ct)
     {
-        var result = await _mediator.Send(command);
+        if (file is null || file.Length == 0) return Results.BadRequest("File is required.");
+        await using var stream = file.OpenReadStream();
+        var result = await _mediator.Send(new IngestPeakCcuCommand(appId, file.FileName, stream), ct);
         return Results.Ok(result);
     }
 
-    /// <summary>Ingest regional sales history from JSON file.</summary>
+    /// <summary>Ingest regional sales history from an uploaded JSON file.</summary>
     [HttpPost("financial")]
+    [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(IngestionResult), StatusCodes.Status200OK)]
-    public async Task<IResult> IngestFinancialData([FromBody] IngestFinancialDataCommand command)
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> IngestFinancialData([FromForm] int appId, IFormFile file, CancellationToken ct)
     {
-        var result = await _mediator.Send(command);
+        if (file is null || file.Length == 0) return Results.BadRequest("File is required.");
+        await using var stream = file.OpenReadStream();
+        var result = await _mediator.Send(new IngestFinancialDataCommand(appId, file.FileName, stream), ct);
         return Results.Ok(result);
     }
 
-    /// <summary>Ingest Steamworks wishlist CSV data.</summary>
+    /// <summary>Ingest Steamworks wishlist CSV data from an uploaded file.</summary>
     [HttpPost("wishlists")]
+    [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(IngestionResult), StatusCodes.Status200OK)]
-    public async Task<IResult> IngestWishlistData([FromBody] IngestWishlistDataCommand command)
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> IngestWishlistData([FromForm] int appId, IFormFile file, CancellationToken ct)
     {
-        var result = await _mediator.Send(command);
+        if (file is null || file.Length == 0) return Results.BadRequest("File is required.");
+        await using var stream = file.OpenReadStream();
+        var result = await _mediator.Send(new IngestWishlistDataCommand(appId, file.FileName, stream), ct);
         return Results.Ok(result);
     }
 
-    /// <summary>Ingest owned game wishlist/activation data from JSON.</summary>
+    /// <summary>Ingest owned game wishlist/activation data from an uploaded JSON file.</summary>
     [HttpPost("owned-game")]
+    [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(IngestionResult), StatusCodes.Status200OK)]
-    public async Task<IResult> IngestOwnedGameData([FromBody] IngestOwnedGameDataCommand command)
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> IngestOwnedGameData([FromForm] int appId, IFormFile file, CancellationToken ct)
     {
-        var result = await _mediator.Send(command);
+        if (file is null || file.Length == 0) return Results.BadRequest("File is required.");
+        await using var stream = file.OpenReadStream();
+        var result = await _mediator.Send(new IngestOwnedGameDataCommand(appId, file.FileName, stream), ct);
         return Results.Ok(result);
     }
 
-    /// <summary>Ingest regional price history from JSON file (per-currency, multi-snapshot).</summary>
+    /// <summary>Ingest regional price history from an uploaded JSON file (per-currency, multi-snapshot).</summary>
     [HttpPost("regional-prices")]
+    [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(IngestionResult), StatusCodes.Status200OK)]
-    public async Task<IResult> IngestRegionalPrices([FromBody] IngestRegionalPricesCommand command)
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> IngestRegionalPrices([FromForm] int appId, IFormFile file, CancellationToken ct)
     {
-        var result = await _mediator.Send(command);
+        if (file is null || file.Length == 0) return Results.BadRequest("File is required.");
+        await using var stream = file.OpenReadStream();
+        var result = await _mediator.Send(new IngestRegionalPricesCommand(appId, file.FileName, stream), ct);
         return Results.Ok(result);
     }
 
-    /// <summary>Ingest wishlist insights (also-wishlisted related games) from JSON file.</summary>
+    /// <summary>Ingest wishlist insights (also-wishlisted related games) from an uploaded JSON file.</summary>
     [HttpPost("wishlist-insights")]
+    [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(IngestionResult), StatusCodes.Status200OK)]
-    public async Task<IResult> IngestWishlistInsights([FromBody] IngestWishlistInsightsCommand command)
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> IngestWishlistInsights([FromForm] int appId, IFormFile file, CancellationToken ct)
     {
-        var result = await _mediator.Send(command);
+        if (file is null || file.Length == 0) return Results.BadRequest("File is required.");
+        await using var stream = file.OpenReadStream();
+        var result = await _mediator.Send(new IngestWishlistInsightsCommand(appId, file.FileName, stream), ct);
         return Results.Ok(result);
     }
 
-    /// <summary>Ingest store traffic breakdown from Steamworks CSV file (per-feature impressions/visits).</summary>
+    /// <summary>Ingest store traffic breakdown from an uploaded Steamworks CSV file (per-feature impressions/visits).</summary>
     [HttpPost("store-traffic")]
+    [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(IngestionResult), StatusCodes.Status200OK)]
-    public async Task<IResult> IngestStoreTraffic([FromBody] IngestStoreTrafficCommand command)
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> IngestStoreTraffic([FromForm] int appId, IFormFile file, CancellationToken ct)
     {
-        var result = await _mediator.Send(command);
+        if (file is null || file.Length == 0) return Results.BadRequest("File is required.");
+        await using var stream = file.OpenReadStream();
+        var result = await _mediator.Send(new IngestStoreTrafficCommand(appId, file.FileName, stream), ct);
         return Results.Ok(result);
     }
 

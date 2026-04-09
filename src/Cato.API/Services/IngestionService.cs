@@ -29,7 +29,7 @@ public class IngestionService : IIngestionService
             Source = "gamalytic_peak_ccu",
             StartTime = DateTime.UtcNow,
             Status = "Running",
-            FilePath = request.FilePath
+            FilePath = request.FileName
         };
         _db.IngestionLogs.Add(log);
         await _db.SaveChangesAsync(ct);
@@ -40,11 +40,7 @@ public class IngestionService : IIngestionService
             if (game is null)
                 throw new InvalidOperationException($"Game with AppId {request.AppId} not found. Create the game first.");
 
-            if (!File.Exists(request.FilePath))
-                throw new FileNotFoundException($"File not found: {request.FilePath}");
-
-            var json = await File.ReadAllTextAsync(request.FilePath, ct);
-            var doc = JsonDocument.Parse(json);
+            var doc = await JsonDocument.ParseAsync(request.Content, cancellationToken: ct);
 
             int processed = 0, inserted = 0, failed = 0;
 
@@ -234,7 +230,7 @@ public class IngestionService : IIngestionService
             Source = "steam_financial",
             StartTime = DateTime.UtcNow,
             Status = "Running",
-            FilePath = request.FilePath
+            FilePath = request.FileName
         };
         _db.IngestionLogs.Add(log);
         await _db.SaveChangesAsync(ct);
@@ -261,11 +257,7 @@ public class IngestionService : IIngestionService
                     _logger.LogWarning("Steam enrich failed for AppId {AppId}: {Error}", request.AppId, enrichResult.ErrorMessage);
             }
 
-            if (!File.Exists(request.FilePath))
-                throw new FileNotFoundException($"File not found: {request.FilePath}");
-
-            var json = await File.ReadAllTextAsync(request.FilePath, ct);
-            var doc = JsonDocument.Parse(json);
+            var doc = await JsonDocument.ParseAsync(request.Content, cancellationToken: ct);
 
             int processed = 0, inserted = 0, failed = 0;
 
@@ -328,7 +320,7 @@ public class IngestionService : IIngestionService
                     catch (Exception ex)
                     {
                         failed++;
-                        _logger.LogWarning(ex, "Failed to process financial transaction in {FilePath}", request.FilePath);
+                        _logger.LogWarning(ex, "Failed to process financial transaction in {FileName}", request.FileName);
                     }
                 }
             }
@@ -365,7 +357,7 @@ public class IngestionService : IIngestionService
             Source = "steamworks_wishlist",
             StartTime = DateTime.UtcNow,
             Status = "Running",
-            FilePath = request.FilePath
+            FilePath = request.FileName
         };
         _db.IngestionLogs.Add(log);
         await _db.SaveChangesAsync(ct);
@@ -376,10 +368,11 @@ public class IngestionService : IIngestionService
             if (game is null)
                 throw new InvalidOperationException($"Game with AppId {request.AppId} not found. Create the game first.");
 
-            if (!File.Exists(request.FilePath))
-                throw new FileNotFoundException($"File not found: {request.FilePath}");
-
-            var lines = await File.ReadAllLinesAsync(request.FilePath, ct);
+            using var wishlistCsvReader = new StreamReader(request.Content);
+            var wishlistLinesList = new List<string>();
+            string? wishlistLn;
+            while ((wishlistLn = await wishlistCsvReader.ReadLineAsync(ct)) is not null) wishlistLinesList.Add(wishlistLn);
+            var lines = wishlistLinesList.ToArray();
 
             int processed = 0, inserted = 0, failed = 0;
 
@@ -468,7 +461,7 @@ public class IngestionService : IIngestionService
             Source = "steamworks_owned_game",
             StartTime = DateTime.UtcNow,
             Status = "Running",
-            FilePath = request.FilePath
+            FilePath = request.FileName
         };
         _db.IngestionLogs.Add(log);
         await _db.SaveChangesAsync(ct);
@@ -479,11 +472,7 @@ public class IngestionService : IIngestionService
             if (game is null)
                 throw new InvalidOperationException($"Game with AppId {request.AppId} not found. Create the game first.");
 
-            if (!File.Exists(request.FilePath))
-                throw new FileNotFoundException($"File not found: {request.FilePath}");
-
-            var json = await File.ReadAllTextAsync(request.FilePath, ct);
-            var doc = JsonDocument.Parse(json);
+            var doc = await JsonDocument.ParseAsync(request.Content, cancellationToken: ct);
             var root = doc.RootElement;
 
             int processed = 1, inserted = 0, failed = 0;
@@ -784,7 +773,7 @@ public class IngestionService : IIngestionService
             Source = "regional_price_history",
             StartTime = DateTime.UtcNow,
             Status = "Running",
-            FilePath = request.FilePath
+            FilePath = request.FileName
         };
         _db.IngestionLogs.Add(log);
         await _db.SaveChangesAsync(ct);
@@ -795,11 +784,7 @@ public class IngestionService : IIngestionService
             if (game is null)
                 throw new InvalidOperationException($"Game with AppId {request.AppId} not found. Create the game first.");
 
-            if (!File.Exists(request.FilePath))
-                throw new FileNotFoundException($"File not found: {request.FilePath}");
-
-            var json = await File.ReadAllTextAsync(request.FilePath, ct);
-            var snapshots = JsonSerializer.Deserialize<List<Dictionary<string, JsonElement>>>(json)
+            var snapshots = await JsonSerializer.DeserializeAsync<List<Dictionary<string, JsonElement>>>(request.Content, cancellationToken: ct)
                 ?? throw new InvalidOperationException("Unrecognized regional price file format");
 
             // Known non-currency keys to skip
@@ -899,7 +884,7 @@ public class IngestionService : IIngestionService
             Source = "wishlist_insights",
             StartTime = DateTime.UtcNow,
             Status = "Running",
-            FilePath = request.FilePath
+            FilePath = request.FileName
         };
         _db.IngestionLogs.Add(log);
         await _db.SaveChangesAsync(ct);
@@ -910,11 +895,7 @@ public class IngestionService : IIngestionService
             if (game is null)
                 throw new InvalidOperationException($"Game with AppId {request.AppId} not found. Create the game first.");
 
-            if (!File.Exists(request.FilePath))
-                throw new FileNotFoundException($"File not found: {request.FilePath}");
-
-            var json = await File.ReadAllTextAsync(request.FilePath, ct);
-            var doc = JsonDocument.Parse(json);
+            var doc = await JsonDocument.ParseAsync(request.Content, cancellationToken: ct);
 
             if (!doc.RootElement.TryGetProperty("alsoWishlisted", out var alsoWishlisted))
                 throw new InvalidOperationException("Unrecognized wishlist insights format: missing 'alsoWishlisted' property");
@@ -1021,7 +1002,7 @@ public class IngestionService : IIngestionService
             Source = "store_traffic_breakdown",
             StartTime = DateTime.UtcNow,
             Status = "Running",
-            FilePath = request.FilePath
+            FilePath = request.FileName
         };
         _db.IngestionLogs.Add(log);
         await _db.SaveChangesAsync(ct);
@@ -1032,10 +1013,11 @@ public class IngestionService : IIngestionService
             if (game is null)
                 throw new InvalidOperationException($"Game with AppId {request.AppId} not found. Create the game first.");
 
-            if (!File.Exists(request.FilePath))
-                throw new FileNotFoundException($"File not found: {request.FilePath}");
-
-            var lines = await File.ReadAllLinesAsync(request.FilePath, ct);
+            using var trafficCsvReader = new StreamReader(request.Content);
+            var trafficLinesList = new List<string>();
+            string? trafficLn;
+            while ((trafficLn = await trafficCsvReader.ReadLineAsync(ct)) is not null) trafficLinesList.Add(trafficLn);
+            var lines = trafficLinesList.ToArray();
             var snapshotDate = DateOnly.FromDateTime(DateTime.UtcNow);
             int processed = 0, inserted = 0, updated = 0, failed = 0;
 

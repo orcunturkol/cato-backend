@@ -3,4 +3,4 @@ using MediatR;
 
 namespace Cato.API.Models.Ingestion;
 
-public record IngestRegionalPricesCommand(int AppId, string FilePath) : IRequest<IngestionResult>;
+public record IngestRegionalPricesCommand(int AppId, string FileName, Stream Content) : IRequest<IngestionResult>;
