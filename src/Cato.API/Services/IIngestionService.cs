@@ -15,5 +15,9 @@ public interface IIngestionService
     Task<IngestionResult> IngestRegionalPricesAsync(IngestRegionalPricesCommand command, CancellationToken ct = default);
     Task<IngestionResult> IngestWishlistInsightsAsync(IngestWishlistInsightsCommand command, CancellationToken ct = default);
     Task<IngestionResult> IngestStoreTrafficAsync(IngestStoreTrafficCommand command, CancellationToken ct = default);
+    Task<IngestionResult> IngestNewsAsync(IngestNewsCommand command, CancellationToken ct = default);
+    Task<IngestionResult> IngestPatchNotesAsync(IngestPatchNotesCommand command, CancellationToken ct = default);
+    Task<IngestionResult> IngestActiveUsersHistoryAsync(IngestActiveUsersHistoryCommand command, CancellationToken ct = default);
+    Task<IngestionResult> IngestDemoDownloadsAsync(IngestDemoDownloadsCommand command, CancellationToken ct = default);
     Task<List<IngestionLogDto>> GetIngestionLogsAsync(GetIngestionLogsQuery query, CancellationToken ct = default);
 }

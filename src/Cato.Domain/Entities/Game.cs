@@ -47,4 +47,7 @@ public class Game
     public ICollection<TargetMatch> TargetMatches { get; set; } = [];
     public ICollection<WishlistInsight> WishlistInsights { get; set; } = [];
     public ICollection<SteamTrafficBreakdown> TrafficBreakdowns { get; set; } = [];
+    public ICollection<GameNews> News { get; set; } = [];
+    public ICollection<ActiveUsersHistory> ActiveUsersHistories { get; set; } = [];
+    public ICollection<DemoDownload> DemoDownloads { get; set; } = [];
 }

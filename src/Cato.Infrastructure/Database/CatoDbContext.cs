@@ -31,6 +31,9 @@ public class CatoDbContext : DbContext
     public DbSet<ActionImpact> ActionImpacts => Set<ActionImpact>();
     public DbSet<WishlistInsight> WishlistInsights => Set<WishlistInsight>();
     public DbSet<SteamTrafficBreakdown> SteamTrafficBreakdowns => Set<SteamTrafficBreakdown>();
+    public DbSet<GameNews> GameNews => Set<GameNews>();
+    public DbSet<ActiveUsersHistory> ActiveUsersHistories => Set<ActiveUsersHistory>();
+    public DbSet<DemoDownload> DemoDownloads => Set<DemoDownload>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -531,6 +534,69 @@ public class CatoDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        // ── GameNews ──
+        modelBuilder.Entity<GameNews>(entity =>
+        {
+            entity.ToTable("game_news");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.ExternalId).HasMaxLength(500).IsRequired();
+            entity.Property(e => e.Source).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.Title).HasMaxLength(500).IsRequired();
+            entity.Property(e => e.Url).HasMaxLength(1000);
+            entity.Property(e => e.Author).HasMaxLength(200);
+            entity.Property(e => e.Contents).HasColumnType("text");
+            entity.Property(e => e.FeedLabel).HasMaxLength(200);
+
+            entity.HasIndex(e => new { e.GameId, e.ExternalId })
+                .IsUnique()
+                .HasDatabaseName("unique_game_news");
+            entity.HasIndex(e => e.PublishedAt).HasDatabaseName("idx_game_news_published_at");
+
+            entity.HasOne(e => e.Game)
+                .WithMany(g => g.News)
+                .HasForeignKey(e => e.GameId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── ActiveUsersHistory ──
+        modelBuilder.Entity<ActiveUsersHistory>(entity =>
+        {
+            entity.ToTable("active_users_history");
+            entity.HasKey(e => e.Id);
+
+            entity.HasIndex(e => new { e.GameId, e.RecordedAt })
+                .IsUnique()
+                .HasDatabaseName("unique_active_users_history");
+            entity.HasIndex(e => e.RecordedAt).HasDatabaseName("idx_active_users_history_recorded_at");
+
+            entity.HasOne(e => e.Game)
+                .WithMany(g => g.ActiveUsersHistories)
+                .HasForeignKey(e => e.GameId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── DemoDownload ──
+        modelBuilder.Entity<DemoDownload>(entity =>
+        {
+            entity.ToTable("demo_download");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.GeoType).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.GeoName).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.SharePercent).HasColumnType("decimal(6,3)");
+
+            entity.HasIndex(e => new { e.GameId, e.SnapshotDate, e.GeoType, e.GeoName })
+                .IsUnique()
+                .HasDatabaseName("unique_demo_download");
+            entity.HasIndex(e => e.SnapshotDate).HasDatabaseName("idx_demo_download_snapshot_date");
+
+            entity.HasOne(e => e.Game)
+                .WithMany(g => g.DemoDownloads)
+                .HasForeignKey(e => e.GameId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         // ── ActionImpact ──
         modelBuilder.Entity<ActionImpact>(entity =>
         {
@@ -693,6 +759,31 @@ public class CatoDbContext : DbContext
         }
 
         foreach (var entry in ChangeTracker.Entries<SteamTrafficBreakdown>())
+        {
+            if (entry.State == EntityState.Added)
+                entry.Entity.CreatedAt = now;
+        }
+
+        foreach (var entry in ChangeTracker.Entries<GameNews>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<ActiveUsersHistory>())
+        {
+            if (entry.State == EntityState.Added)
+                entry.Entity.CreatedAt = now;
+        }
+
+        foreach (var entry in ChangeTracker.Entries<DemoDownload>())
         {
             if (entry.State == EntityState.Added)
                 entry.Entity.CreatedAt = now;

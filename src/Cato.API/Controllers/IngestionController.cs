@@ -108,6 +108,58 @@ public class IngestionController : ControllerBase
         return Results.Ok(result);
     }
 
+    /// <summary>Ingest Steam news announcements from an uploaded JSON file (ISteamNews/GetNewsForApp format).</summary>
+    [HttpPost("news")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(typeof(IngestionResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> IngestNews([FromForm] int appId, IFormFile file, CancellationToken ct)
+    {
+        if (file is null || file.Length == 0) return Results.BadRequest("File is required.");
+        await using var stream = file.OpenReadStream();
+        var result = await _mediator.Send(new IngestNewsCommand(appId, file.FileName, stream), ct);
+        return Results.Ok(result);
+    }
+
+    /// <summary>Ingest patch notes from an uploaded RSS-feed JSON file.</summary>
+    [HttpPost("patch-notes")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(typeof(IngestionResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> IngestPatchNotes([FromForm] int appId, IFormFile file, CancellationToken ct)
+    {
+        if (file is null || file.Length == 0) return Results.BadRequest("File is required.");
+        await using var stream = file.OpenReadStream();
+        var result = await _mediator.Send(new IngestPatchNotesCommand(appId, file.FileName, stream), ct);
+        return Results.Ok(result);
+    }
+
+    /// <summary>Ingest DAU/MAU active users history from an uploaded JSON file.</summary>
+    [HttpPost("active-users")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(typeof(IngestionResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> IngestActiveUsersHistory([FromForm] int appId, IFormFile file, CancellationToken ct)
+    {
+        if (file is null || file.Length == 0) return Results.BadRequest("File is required.");
+        await using var stream = file.OpenReadStream();
+        var result = await _mediator.Send(new IngestActiveUsersHistoryCommand(appId, file.FileName, stream), ct);
+        return Results.Ok(result);
+    }
+
+    /// <summary>Ingest demo downloads by region/country from an uploaded Steamworks CSV file.</summary>
+    [HttpPost("demo-downloads")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(typeof(IngestionResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> IngestDemoDownloads([FromForm] int appId, [FromForm] int? demoAppId, IFormFile file, CancellationToken ct)
+    {
+        if (file is null || file.Length == 0) return Results.BadRequest("File is required.");
+        await using var stream = file.OpenReadStream();
+        var result = await _mediator.Send(new IngestDemoDownloadsCommand(appId, demoAppId, file.FileName, stream), ct);
+        return Results.Ok(result);
+    }
+
     /// <summary>Query ingestion logs for monitoring pipeline health.</summary>
     [HttpGet("logs")]
     [ProducesResponseType(typeof(List<IngestionLogDto>), StatusCodes.Status200OK)]

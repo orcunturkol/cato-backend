@@ -1,6 +1,6 @@
 # CATO MVP Document vs Codebase - Completion Report
 
-**Date:** 2026-04-07 (updated)
+**Date:** 2026-04-09 (updated)
 **Source Document:** CATO'dan SelfPub'a Data Yapisi MVP.pdf
 **Project:** cato-backend
 
@@ -97,6 +97,21 @@
 
 ---
 
+## ✅ Completed Since Last Report (2026-04-09)
+
+### Priority 4 — New Tables (+ deferred Priority 1 item)
+
+| Endpoint | Route | Entity / Table | Notes |
+|---|---|---|---|
+| **News ingestion** | `POST /api/ingestion/news` | `GameNews` / `game_news` | Parses `appnews.newsitems[]` from Steam API JSON. Upsert on `(GameId, ExternalId)`. Source = `"news"`. |
+| **Patch Notes ingestion** | `POST /api/ingestion/patch-notes` | `GameNews` / `game_news` | Parses `entries[]` from RSS-feed JSON. ExternalId = `id` URL field. Source = `"patch_notes"`. RFC 2822 date parsing. |
+| **Active Users History** | `POST /api/ingestion/active-users` | `ActiveUsersHistory` / `active_users_history` | Parses `active_users_history[]` array (unix ms timestamps, dau, mau). Upsert on `(GameId, RecordedAt)`. |
+| **Demo Downloads** | `POST /api/ingestion/demo-downloads` | `DemoDownload` / `demo_download` | Parses two-section Steamworks CSV (Region block then Country block, split by `Country,0,` separator row). Optional `demoAppId` form param. Upsert on `(GameId, SnapshotDate, GeoType, GeoName)`. |
+
+Migration `AddPriority4Tables` covers all schema changes.
+
+---
+
 ## ✅ Completed Since Last Report (2026-04-07)
 
 ### Priority 1 — New Ingestion Endpoints
@@ -125,7 +140,7 @@ Migration `20260407163709_AddNewIngestionTables` covers all schema changes.
 | ~~**Store Traffic CSV ingestion**~~ | ~~Missing~~ → **Done** (`POST /api/ingestion/store-traffic`) |
 | ~~**Wishlist Insights ingestion**~~ | ~~Missing~~ → **Done** (`POST /api/ingestion/wishlist-insights`) |
 | ~~**Regional Price ingestion**~~ | ~~Missing~~ → **Done** (`POST /api/ingestion/regional-prices`) |
-| **Active Users History ingestion** | **Still missing** — dau/mau schema decision needed before implementing |
+| ~~**Active Users History ingestion**~~ | ~~**Still missing**~~ → **Done** (`POST /api/ingestion/active-users`, `active_users_history` table) |
 
 ---
 
@@ -159,11 +174,12 @@ Migration `20260407163709_AddNewIngestionTables` covers all schema changes.
 
 ### Priority 4 — New Tables from Excel (not in MVP doc, but in Excel sheet)
 
-| Task | Schema needed | Data source |
-|---|---|---|
-| **GAME DEMO table** | `game_demo(id, parent_game_id FK, demo_app_id, demo_type, release_date, deactivate_date, review_count, review_score, ccu_peak, downloads_by_region JSONB)` | `store.steampowered.com/api/appdetails/?appids={demoAppId}` (public) + partner CSV for downloads |
-| **News / Patch Notes table** | `game_news(id, game_id FK, gid, title, url, author, contents, date, feed_label)` | `ISteamNews/GetNewsForApp` (public API) — file in `Data Pulled/news.json` + `patch_notes.json` |
-| **Active Users by Region table** | `player_region(id, game_id FK, snapshot_date, region_code, player_count)` | `Data Pulled/active_users_regions.json` already available |
+| Task | Schema needed | Data source | Status |
+|---|---|---|---|
+| ~~**GAME DEMO table**~~ | ~~`game_demo(...)`~~ | ~~partner CSV for downloads~~ | → **Done** — `demo_download` table, `POST /api/ingestion/demo-downloads` (CSV with Region/Country sections, optional `demoAppId` form param) |
+| ~~**News / Patch Notes table**~~ | ~~`game_news(...)`~~ | ~~`news.json` + `patch_notes.json`~~ | → **Done** — `game_news` table with `source` discriminator, `POST /api/ingestion/news` + `POST /api/ingestion/patch-notes` |
+| ~~**Active Users History (DAU/MAU)**~~ | ~~deferred from Priority 1~~ | ~~`active_users_history.json`~~ | → **Done** — `active_users_history` table, `POST /api/ingestion/active-users` |
+| **Active Users by Region table** | `player_region(id, game_id FK, snapshot_date, region_code, player_count)` | `Data Pulled/active_users_regions.json` — file only has metadata (timestamp, game_id, game_name), no actual regional breakdown | **Deferred** — no regional data available |
 
 ---
 

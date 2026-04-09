@@ -1101,6 +1101,435 @@ public class IngestionService : IIngestionService
         }
     }
 
+    public async Task<IngestionResult> IngestNewsAsync(IngestNewsCommand request, CancellationToken ct = default)
+    {
+        var log = new IngestionLog
+        {
+            Id = Guid.NewGuid(),
+            Source = "game_news",
+            StartTime = DateTime.UtcNow,
+            Status = "Running",
+            FilePath = request.FileName
+        };
+        _db.IngestionLogs.Add(log);
+        await _db.SaveChangesAsync(ct);
+
+        try
+        {
+            var game = await _db.Games.FirstOrDefaultAsync(g => g.AppId == request.AppId, ct);
+            if (game is null)
+                throw new InvalidOperationException($"Game with AppId {request.AppId} not found. Create the game first.");
+
+            var doc = await JsonDocument.ParseAsync(request.Content, cancellationToken: ct);
+
+            if (!doc.RootElement.TryGetProperty("appnews", out var appnews) ||
+                !appnews.TryGetProperty("newsitems", out var newsItems))
+                throw new InvalidOperationException("Unrecognized news format: missing 'appnews.newsitems' property.");
+
+            int processed = 0, inserted = 0, updated = 0, failed = 0;
+
+            foreach (var item in newsItems.EnumerateArray())
+            {
+                processed++;
+                try
+                {
+                    var externalId = item.TryGetProperty("gid", out var gidEl) ? gidEl.GetString() ?? "" : "";
+                    if (string.IsNullOrEmpty(externalId)) { failed++; continue; }
+
+                    var title = item.TryGetProperty("title", out var titleEl) ? titleEl.GetString() ?? "" : "";
+                    var url = item.TryGetProperty("url", out var urlEl) ? urlEl.GetString() : null;
+                    var author = item.TryGetProperty("author", out var authorEl) ? authorEl.GetString() : null;
+                    var contents = item.TryGetProperty("contents", out var contentsEl) ? contentsEl.GetString() : null;
+                    var feedLabel = item.TryGetProperty("feedlabel", out var feedLabelEl) ? feedLabelEl.GetString() : null;
+                    var publishedAt = item.TryGetProperty("date", out var dateEl)
+                        ? DateTimeOffset.FromUnixTimeSeconds(dateEl.GetInt64()).UtcDateTime
+                        : DateTime.UtcNow;
+
+                    var existing = await _db.GameNews.FirstOrDefaultAsync(
+                        n => n.GameId == game.Id && n.ExternalId == externalId, ct);
+
+                    if (existing is null)
+                    {
+                        _db.GameNews.Add(new GameNews
+                        {
+                            Id = Guid.NewGuid(),
+                            GameId = game.Id,
+                            ExternalId = externalId,
+                            Source = "news",
+                            Title = title,
+                            Url = url,
+                            Author = author,
+                            Contents = contents,
+                            PublishedAt = publishedAt,
+                            FeedLabel = feedLabel
+                        });
+                        inserted++;
+                    }
+                    else
+                    {
+                        existing.Title = title;
+                        existing.Url = url;
+                        existing.Author = author;
+                        existing.Contents = contents;
+                        existing.PublishedAt = publishedAt;
+                        existing.FeedLabel = feedLabel;
+                        updated++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    failed++;
+                    _logger.LogWarning(ex, "Failed to process news item");
+                }
+            }
+
+            await _db.SaveChangesAsync(ct);
+
+            log.EndTime = DateTime.UtcNow;
+            log.Status = "Completed";
+            log.RecordsProcessed = processed;
+            log.RecordsInserted = inserted;
+            log.RecordsUpdated = updated;
+            log.RecordsFailed = failed;
+            await _db.SaveChangesAsync(ct);
+
+            _logger.LogInformation("News ingestion complete: {Processed} processed, {Inserted} inserted, {Updated} updated, {Failed} failed",
+                processed, inserted, updated, failed);
+
+            return new IngestionResult(processed, inserted, updated, failed, log.Id);
+        }
+        catch (Exception ex)
+        {
+            log.EndTime = DateTime.UtcNow;
+            log.Status = "Failed";
+            log.ErrorMessage = ex.Message;
+            await _db.SaveChangesAsync(ct);
+            throw;
+        }
+    }
+
+    public async Task<IngestionResult> IngestPatchNotesAsync(IngestPatchNotesCommand request, CancellationToken ct = default)
+    {
+        var log = new IngestionLog
+        {
+            Id = Guid.NewGuid(),
+            Source = "patch_notes",
+            StartTime = DateTime.UtcNow,
+            Status = "Running",
+            FilePath = request.FileName
+        };
+        _db.IngestionLogs.Add(log);
+        await _db.SaveChangesAsync(ct);
+
+        try
+        {
+            var game = await _db.Games.FirstOrDefaultAsync(g => g.AppId == request.AppId, ct);
+            if (game is null)
+                throw new InvalidOperationException($"Game with AppId {request.AppId} not found. Create the game first.");
+
+            var doc = await JsonDocument.ParseAsync(request.Content, cancellationToken: ct);
+
+            if (!doc.RootElement.TryGetProperty("entries", out var entries))
+                throw new InvalidOperationException("Unrecognized patch notes format: missing 'entries' property.");
+
+            int processed = 0, inserted = 0, updated = 0, failed = 0;
+
+            foreach (var entry in entries.EnumerateArray())
+            {
+                processed++;
+                try
+                {
+                    var externalId = entry.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? "" : "";
+                    if (string.IsNullOrEmpty(externalId)) { failed++; continue; }
+
+                    var title = entry.TryGetProperty("title", out var titleEl) ? titleEl.GetString() ?? "" : "";
+                    var url = entry.TryGetProperty("link", out var linkEl) ? linkEl.GetString() : null;
+                    var contents = entry.TryGetProperty("summary", out var summaryEl) ? summaryEl.GetString() : null;
+
+                    DateTime publishedAt = DateTime.UtcNow;
+                    if (entry.TryGetProperty("published", out var publishedEl))
+                    {
+                        var publishedStr = publishedEl.GetString() ?? "";
+                        if (!string.IsNullOrEmpty(publishedStr))
+                        {
+                            if (!DateTime.TryParseExact(publishedStr, "ddd, dd MMM yyyy HH:mm:ss zzz",
+                                    CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out publishedAt))
+                            {
+                                DateTime.TryParse(publishedStr, CultureInfo.InvariantCulture,
+                                    DateTimeStyles.AdjustToUniversal, out publishedAt);
+                            }
+                        }
+                    }
+
+                    var existing = await _db.GameNews.FirstOrDefaultAsync(
+                        n => n.GameId == game.Id && n.ExternalId == externalId, ct);
+
+                    if (existing is null)
+                    {
+                        _db.GameNews.Add(new GameNews
+                        {
+                            Id = Guid.NewGuid(),
+                            GameId = game.Id,
+                            ExternalId = externalId,
+                            Source = "patch_notes",
+                            Title = title,
+                            Url = url,
+                            Author = null,
+                            Contents = contents,
+                            PublishedAt = publishedAt,
+                            FeedLabel = "Patch Notes"
+                        });
+                        inserted++;
+                    }
+                    else
+                    {
+                        existing.Title = title;
+                        existing.Url = url;
+                        existing.Contents = contents;
+                        existing.PublishedAt = publishedAt;
+                        updated++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    failed++;
+                    _logger.LogWarning(ex, "Failed to process patch notes entry");
+                }
+            }
+
+            await _db.SaveChangesAsync(ct);
+
+            log.EndTime = DateTime.UtcNow;
+            log.Status = "Completed";
+            log.RecordsProcessed = processed;
+            log.RecordsInserted = inserted;
+            log.RecordsUpdated = updated;
+            log.RecordsFailed = failed;
+            await _db.SaveChangesAsync(ct);
+
+            _logger.LogInformation("Patch notes ingestion complete: {Processed} processed, {Inserted} inserted, {Updated} updated, {Failed} failed",
+                processed, inserted, updated, failed);
+
+            return new IngestionResult(processed, inserted, updated, failed, log.Id);
+        }
+        catch (Exception ex)
+        {
+            log.EndTime = DateTime.UtcNow;
+            log.Status = "Failed";
+            log.ErrorMessage = ex.Message;
+            await _db.SaveChangesAsync(ct);
+            throw;
+        }
+    }
+
+    public async Task<IngestionResult> IngestActiveUsersHistoryAsync(IngestActiveUsersHistoryCommand request, CancellationToken ct = default)
+    {
+        var log = new IngestionLog
+        {
+            Id = Guid.NewGuid(),
+            Source = "active_users_history",
+            StartTime = DateTime.UtcNow,
+            Status = "Running",
+            FilePath = request.FileName
+        };
+        _db.IngestionLogs.Add(log);
+        await _db.SaveChangesAsync(ct);
+
+        try
+        {
+            var game = await _db.Games.FirstOrDefaultAsync(g => g.AppId == request.AppId, ct);
+            if (game is null)
+                throw new InvalidOperationException($"Game with AppId {request.AppId} not found. Create the game first.");
+
+            var doc = await JsonDocument.ParseAsync(request.Content, cancellationToken: ct);
+
+            if (!doc.RootElement.TryGetProperty("active_users_history", out var historyArray))
+                throw new InvalidOperationException("Unrecognized format: missing 'active_users_history' property.");
+
+            int processed = 0, inserted = 0, updated = 0, failed = 0;
+
+            foreach (var entry in historyArray.EnumerateArray())
+            {
+                processed++;
+                try
+                {
+                    if (!entry.TryGetProperty("timestamp", out var tsEl)) { failed++; continue; }
+                    var recordedAt = DateTimeOffset.FromUnixTimeMilliseconds(tsEl.GetInt64()).UtcDateTime;
+                    var dau = entry.TryGetProperty("dau", out var dauEl) ? dauEl.GetInt32() : 0;
+                    var mau = entry.TryGetProperty("mau", out var mauEl) ? mauEl.GetInt32() : 0;
+
+                    var existing = await _db.ActiveUsersHistories.FirstOrDefaultAsync(
+                        a => a.GameId == game.Id && a.RecordedAt == recordedAt, ct);
+
+                    if (existing is null)
+                    {
+                        _db.ActiveUsersHistories.Add(new ActiveUsersHistory
+                        {
+                            Id = Guid.NewGuid(),
+                            GameId = game.Id,
+                            RecordedAt = recordedAt,
+                            Dau = dau,
+                            Mau = mau
+                        });
+                        inserted++;
+                    }
+                    else
+                    {
+                        existing.Dau = dau;
+                        existing.Mau = mau;
+                        updated++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    failed++;
+                    _logger.LogWarning(ex, "Failed to process active users history entry");
+                }
+            }
+
+            await _db.SaveChangesAsync(ct);
+
+            log.EndTime = DateTime.UtcNow;
+            log.Status = "Completed";
+            log.RecordsProcessed = processed;
+            log.RecordsInserted = inserted;
+            log.RecordsUpdated = updated;
+            log.RecordsFailed = failed;
+            await _db.SaveChangesAsync(ct);
+
+            _logger.LogInformation("Active users history ingestion complete: {Processed} processed, {Inserted} inserted, {Updated} updated, {Failed} failed",
+                processed, inserted, updated, failed);
+
+            return new IngestionResult(processed, inserted, updated, failed, log.Id);
+        }
+        catch (Exception ex)
+        {
+            log.EndTime = DateTime.UtcNow;
+            log.Status = "Failed";
+            log.ErrorMessage = ex.Message;
+            await _db.SaveChangesAsync(ct);
+            throw;
+        }
+    }
+
+    public async Task<IngestionResult> IngestDemoDownloadsAsync(IngestDemoDownloadsCommand request, CancellationToken ct = default)
+    {
+        var log = new IngestionLog
+        {
+            Id = Guid.NewGuid(),
+            Source = "demo_downloads",
+            StartTime = DateTime.UtcNow,
+            Status = "Running",
+            FilePath = request.FileName
+        };
+        _db.IngestionLogs.Add(log);
+        await _db.SaveChangesAsync(ct);
+
+        try
+        {
+            var game = await _db.Games.FirstOrDefaultAsync(g => g.AppId == request.AppId, ct);
+            if (game is null)
+                throw new InvalidOperationException($"Game with AppId {request.AppId} not found. Create the game first.");
+
+            using var reader = new StreamReader(request.Content);
+            var allLines = new List<string>();
+            string? ln;
+            while ((ln = await reader.ReadLineAsync(ct)) is not null) allLines.Add(ln);
+
+            var snapshotDate = DateOnly.FromDateTime(DateTime.UtcNow);
+            int processed = 0, inserted = 0, updated = 0, failed = 0;
+
+            // Skip header; first section = Region rows, switch to Country after separator "Country,0[,]"
+            var geoType = "Region";
+            for (int i = 1; i < allLines.Count; i++)
+            {
+                var line = allLines[i].Trim();
+                if (string.IsNullOrEmpty(line)) continue;
+
+                var cols = ParseCsvLine(line);
+                if (cols.Length < 2) continue;
+
+                var geoName = cols[0].Trim();
+                var rawDownloads = cols[1].Trim();
+
+                // Detect section separator: "Country,0," row
+                if (geoName == "Country" && rawDownloads == "0")
+                {
+                    geoType = "Country";
+                    continue;
+                }
+
+                processed++;
+                try
+                {
+                    var totalDownloads = ParseFormattedLong(rawDownloads);
+                    decimal? sharePercent = null;
+                    if (cols.Length >= 3 && !string.IsNullOrWhiteSpace(cols[2]))
+                    {
+                        var shareStr = cols[2].Trim().TrimEnd('%');
+                        if (decimal.TryParse(shareStr, NumberStyles.Any, CultureInfo.InvariantCulture, out var share))
+                            sharePercent = share;
+                    }
+
+                    var existing = await _db.DemoDownloads.FirstOrDefaultAsync(
+                        d => d.GameId == game.Id && d.SnapshotDate == snapshotDate
+                             && d.GeoType == geoType && d.GeoName == geoName, ct);
+
+                    if (existing is null)
+                    {
+                        _db.DemoDownloads.Add(new DemoDownload
+                        {
+                            Id = Guid.NewGuid(),
+                            GameId = game.Id,
+                            DemoAppId = request.DemoAppId,
+                            SnapshotDate = snapshotDate,
+                            GeoType = geoType,
+                            GeoName = geoName,
+                            TotalDownloads = totalDownloads,
+                            SharePercent = sharePercent
+                        });
+                        inserted++;
+                    }
+                    else
+                    {
+                        existing.TotalDownloads = totalDownloads;
+                        existing.SharePercent = sharePercent;
+                        if (request.DemoAppId.HasValue) existing.DemoAppId = request.DemoAppId;
+                        updated++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    failed++;
+                    _logger.LogWarning(ex, "Failed to parse demo downloads CSV line {Line}", i);
+                }
+            }
+
+            await _db.SaveChangesAsync(ct);
+
+            log.EndTime = DateTime.UtcNow;
+            log.Status = "Completed";
+            log.RecordsProcessed = processed;
+            log.RecordsInserted = inserted;
+            log.RecordsUpdated = updated;
+            log.RecordsFailed = failed;
+            await _db.SaveChangesAsync(ct);
+
+            _logger.LogInformation("Demo downloads ingestion complete: {Processed} processed, {Inserted} inserted, {Updated} updated, {Failed} failed",
+                processed, inserted, updated, failed);
+
+            return new IngestionResult(processed, inserted, updated, failed, log.Id);
+        }
+        catch (Exception ex)
+        {
+            log.EndTime = DateTime.UtcNow;
+            log.Status = "Failed";
+            log.ErrorMessage = ex.Message;
+            await _db.SaveChangesAsync(ct);
+            throw;
+        }
+    }
+
     public async Task<List<IngestionLogDto>> GetIngestionLogsAsync(GetIngestionLogsQuery request, CancellationToken ct = default)
     {
         var query = _db.IngestionLogs.AsNoTracking().AsQueryable();
