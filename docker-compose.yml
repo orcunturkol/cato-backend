@@ -50,7 +50,9 @@ services:
       RABBITMQ_DEFAULT_PASS: cato_dev_password
     ports:
       - "${TAILSCALE_IP}:5672:5672"
+      - "127.0.0.1:5672:5672"
       - "${TAILSCALE_IP}:15672:15672"
+      - "127.0.0.1:15672:15672"
     volumes:
       - cato_rabbitmq:/var/lib/rabbitmq
     healthcheck:
