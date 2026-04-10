@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: cato_user
       POSTGRES_PASSWORD: cato_dev_password
     ports:
-      - "5434:5432"
+      - "${TAILSCALE_IP}:5434:5432"
     volumes:
       - cato_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -24,7 +24,7 @@ services:
       dockerfile: Dockerfile
     container_name: cato-api
     ports:
-      - "5039:8080"
+      - "${TAILSCALE_IP}:5039:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=cato;Username=cato_user;Password=cato_dev_password"
@@ -48,8 +48,8 @@ services:
       RABBITMQ_DEFAULT_USER: cato_user
       RABBITMQ_DEFAULT_PASS: cato_dev_password
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "${TAILSCALE_IP}:5672:5672"
+      - "${TAILSCALE_IP}:15672:15672"
     volumes:
       - cato_rabbitmq:/var/lib/rabbitmq
     healthcheck:
@@ -68,13 +68,25 @@ services:
       PGADMIN_CONFIG_SERVER_MODE: "False"
       PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
     ports:
-      - "5051:80"
+      - "${TAILSCALE_IP}:5051:80"
     volumes:
       - cato_pgadmin:/var/lib/pgadmin
       - ./pgadmin-servers.json:/pgadmin4/servers.json:ro
     depends_on:
       postgres:
         condition: service_healthy
+
+  # ── Frontend ──
+  frontend:
+    build:
+      context: ../cato-frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:5039}
+    container_name: cato-frontend
+    ports:
+      - "${TAILSCALE_IP}:5173:80"
+    restart: unless-stopped
 
   # ── EF Migration Helper (run with: docker compose run --rm ef-migration) ──
   ef-migration:

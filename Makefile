@@ -1,4 +1,4 @@
-.PHONY: build run migrate migration db-update infra up down restore clean
+.PHONY: build run migrate migration db-update infra up down restore clean ts-env
 
 # Build the solution
 build:
@@ -36,3 +36,15 @@ down:
 # Clean build artifacts
 clean:
 	dotnet clean
+
+# Detect Tailscale IP and write/update TAILSCALE_IP in .env
+ts-env:
+	@TS_IP=$$(tailscale ip -4 2>/dev/null); \
+	if [ -z "$$TS_IP" ]; then echo "ERROR: Tailscale not running"; exit 1; fi; \
+	if [ -f .env ]; then \
+		sed -i "s|^TAILSCALE_IP=.*|TAILSCALE_IP=$$TS_IP|" .env; \
+		sed -i "s|^VITE_API_URL=.*|VITE_API_URL=http://$$TS_IP:5039|" .env; \
+	else \
+		printf "TAILSCALE_IP=$$TS_IP\nVITE_API_URL=http://$$TS_IP:5039\nCOLLECTOR_DATA_PATH=/home/ofturkol/catoptric-data-collector/data\n" > .env; \
+	fi; \
+	echo "TAILSCALE_IP set to $$TS_IP"

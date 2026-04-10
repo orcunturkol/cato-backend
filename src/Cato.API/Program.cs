@@ -70,9 +70,14 @@ builder.Services.AddScoped<Cato.API.Services.IMarketingActionService, Cato.API.S
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
-        policy.WithOrigins("http://localhost:5173", "http://localhost:3000")
-              .AllowAnyHeader()
-              .AllowAnyMethod());
+    {
+        if (builder.Environment.IsDevelopment())
+            policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
+        else
+            policy.WithOrigins("https://your-prod-origin.com")
+                  .AllowAnyHeader()
+                  .AllowAnyMethod();
+    });
 });
 
 // ── Swagger / OpenAPI ──
