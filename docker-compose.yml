@@ -8,6 +8,7 @@ services:
       POSTGRES_USER: cato_user
       POSTGRES_PASSWORD: cato_dev_password
     ports:
+      - "127.0.0.1:5434:5432"
       - "${TAILSCALE_IP}:5434:5432"
     volumes:
       - cato_pgdata:/var/lib/postgresql/data
