@@ -94,10 +94,11 @@ public class GamesController : ControllerBase
             : Results.NotFound(result.ErrorMessage);
     }
 
-    /// <summary>Bulk import games from an uploaded CSV or XLSX file and enrich from Steam.</summary>
+    /// <summary>Bulk import games from an uploaded CSV or XLSX file.
+    /// Parses the file immediately (returns 400 if malformed) then publishes one event per AppId for async processing.</summary>
     [HttpPost("bulk-import")]
     [Consumes("multipart/form-data")]
-    [ProducesResponseType(typeof(BulkImportResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(BulkImportResult), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IResult> BulkImportGames(IFormFile file, CancellationToken ct)
     {
@@ -107,7 +108,7 @@ public class GamesController : ControllerBase
         await using var stream = file.OpenReadStream();
         var result = await _mediator.Send(new BulkImportGamesCommand(file.FileName, stream), ct);
         return result.IsSuccess
-            ? Results.Ok(result.Data)
+            ? Results.Accepted(null, result.Data)
             : Results.BadRequest(result.ErrorMessage);
     }
 

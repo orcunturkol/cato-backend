@@ -1,6 +1,7 @@
 using Cato.API.DTOs;
 using Cato.API.Models.Games;
 using Cato.API.Services;
+using Cato.Infrastructure.Steam;
 using ClosedXML.Excel;
 using MediatR;
 
@@ -8,12 +9,12 @@ namespace Cato.API.Services.Handlers.Games;
 
 public class BulkImportGamesHandler : IRequestHandler<BulkImportGamesCommand, Result<BulkImportResult>>
 {
-    private readonly IGameService _gameService;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<BulkImportGamesHandler> _logger;
 
-    public BulkImportGamesHandler(IGameService gameService, ILogger<BulkImportGamesHandler> logger)
+    public BulkImportGamesHandler(IServiceScopeFactory scopeFactory, ILogger<BulkImportGamesHandler> logger)
     {
-        _gameService = gameService;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
@@ -35,51 +36,46 @@ public class BulkImportGamesHandler : IRequestHandler<BulkImportGamesCommand, Re
             return Result<BulkImportResult>.Failure(ex.Message);
         }
 
-        var created = 0;
-        var enriched = 0;
-        var skipped = 0;
-        var errors = new List<string>();
+        if (appIds.Count == 0)
+            return Result<BulkImportResult>.Success(new BulkImportResult(0));
 
-        foreach (var appId in appIds)
+        _logger.LogInformation("Bulk import: queuing {Count} games for background processing", appIds.Count);
+
+        _ = Task.Run(async () =>
         {
-            // Step 1: Create the game
-            var createResult = await _gameService.CreateGameAsync(
-                new CreateGameCommand(appId, null, "Sourcing", null, null), ct);
+            using var scope = _scopeFactory.CreateScope();
+            var gameService = scope.ServiceProvider.GetRequiredService<IGameService>();
+            var created = 0;
+            var enriched = 0;
+            var failed = 0;
 
-            if (!createResult.IsSuccess)
+            foreach (var appId in appIds)
             {
-                _logger.LogWarning("Skipped AppId {AppId}: {Error}", appId, createResult.ErrorMessage);
-                skipped++;
-                continue;
-            }
+                var createResult = await gameService.CreateGameAsync(
+                    new CreateGameCommand(appId, null, "Sourcing", null, null), CancellationToken.None);
 
-            created++;
-            var gameId = createResult.Data!.Id;
+                if (!createResult.IsSuccess)
+                {
+                    _logger.LogWarning("Bulk import: skipped AppId {AppId} — {Error}", appId, createResult.ErrorMessage);
+                    failed++;
+                    continue;
+                }
 
-            // Step 2: Enrich from Steam
-            try
-            {
-                var enrichResult = await _gameService.EnrichGameFromSteamAsync(gameId, ct);
+                created++;
+
+                var enrichResult = await gameService.EnrichGameFromSteamAsync(createResult.Data!.Id, CancellationToken.None);
                 if (enrichResult.IsSuccess)
-                {
                     enriched++;
-                    _logger.LogInformation("Enriched AppId {AppId} ({Name})", appId, enrichResult.Data!.Name);
-                }
                 else
-                {
-                    errors.Add($"AppId {appId}: enrich failed - {enrichResult.ErrorMessage}");
-                    _logger.LogWarning("Enrich failed for AppId {AppId}: {Error}", appId, enrichResult.ErrorMessage);
-                }
+                    _logger.LogWarning("Bulk import: enrich failed for AppId {AppId} — {Error}", appId, enrichResult.ErrorMessage);
             }
-            catch (Exception ex)
-            {
-                errors.Add($"AppId {appId}: enrich exception - {ex.Message}");
-                _logger.LogError(ex, "Enrich exception for AppId {AppId}", appId);
-            }
-        }
 
-        var result = new BulkImportResult(appIds.Count, created, enriched, skipped, errors);
-        return Result<BulkImportResult>.Success(result);
+            _logger.LogInformation(
+                "Bulk import: completed — {Created} created, {Enriched} enriched, {Failed} failed out of {Total}",
+                created, enriched, failed, appIds.Count);
+        });
+
+        return Result<BulkImportResult>.Success(new BulkImportResult(appIds.Count));
     }
 
     private static async Task<List<int>> ParseCsvAsync(Stream content, CancellationToken ct)

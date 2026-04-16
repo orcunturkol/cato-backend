@@ -73,9 +73,12 @@ public class CatoDbContext : DbContext
             entity.Property(e => e.SupportedLanguages).HasColumnType("text");
             entity.Property(e => e.SteamReviewScore).HasMaxLength(50);
             entity.Property(e => e.Platforms).HasColumnType("jsonb");
+            entity.Property(e => e.FilterReason).HasMaxLength(100);
+            entity.Property(e => e.ContentDescriptorIds).HasColumnType("jsonb");
 
             entity.HasIndex(e => e.GameType);
             entity.HasIndex(e => e.ReleaseDate);
+            entity.HasIndex(e => new { e.IsFiltered, e.FilterReason });
 
             entity.HasOne(e => e.Developer)
                 .WithMany(le => le.DeveloperGames)

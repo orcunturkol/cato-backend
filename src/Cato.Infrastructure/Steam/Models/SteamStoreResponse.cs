@@ -69,6 +69,18 @@ public class SteamAppData
 
     [JsonPropertyName("metacritic")]
     public SteamMetacritic? Metacritic { get; set; }
+
+    [JsonPropertyName("content_descriptors")]
+    public SteamContentDescriptors? ContentDescriptors { get; set; }
+}
+
+public class SteamContentDescriptors
+{
+    [JsonPropertyName("ids")]
+    public List<int>? Ids { get; set; }
+
+    [JsonPropertyName("notes")]
+    public string? Notes { get; set; }
 }
 
 public class SteamPriceOverview

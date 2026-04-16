@@ -1,5 +1,6 @@
 using Cato.Domain.Entities;
 using Cato.Infrastructure.Database;
+using Cato.Infrastructure.Steam.Filtering;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -18,6 +19,7 @@ public sealed class SteamPicsWatcherService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<SteamPicsWatcherService> _logger;
     private readonly SteamSettings _settings;
+    private readonly IGameQualityFilter _filter;
 
     // File to persist the last seen PICS change number across restarts
     private readonly string _changeNumberFile;
@@ -26,12 +28,14 @@ public sealed class SteamPicsWatcherService : BackgroundService
         ISteamKitService steamKit,
         IServiceScopeFactory scopeFactory,
         ILogger<SteamPicsWatcherService> logger,
-        IOptions<SteamSettings> settings)
+        IOptions<SteamSettings> settings,
+        IGameQualityFilter filter)
     {
         _steamKit = steamKit;
         _scopeFactory = scopeFactory;
         _logger = logger;
         _settings = settings.Value;
+        _filter = filter;
         _changeNumberFile = Path.Combine(AppContext.BaseDirectory, "pics_change_number.txt");
     }
 
@@ -121,6 +125,13 @@ public sealed class SteamPicsWatcherService : BackgroundService
                 if (info.IsFreeToPlay)
                     continue;
 
+                // Pre-enrichment quality filter: reject obviously non-Latin-script names before spending a Steam Store API call
+                if (_filter.ShouldRejectByName(info.Name))
+                {
+                    _logger.LogDebug("SteamPicsWatcher: Skipped AppId={AppId} Name='{Name}' — pre-enrichment filter (name:no-latin-letter)", appId, info.Name);
+                    continue;
+                }
+
                 _logger.LogInformation("SteamPicsWatcher: Discovered new game AppId={AppId} Name='{Name}'", appId, info.Name);
 
                 var gameId = Guid.NewGuid();
@@ -161,7 +172,11 @@ public sealed class SteamPicsWatcherService : BackgroundService
                 try
                 {
                     var success = await enrichment.EnrichGameAsync(gameId, ct);
-                    if (success) enriched++;
+                    if (success)
+                    {
+                        enriched++;
+                        await ApplyPostEnrichmentFilterAsync(db, gameId, ct);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -177,6 +192,29 @@ public sealed class SteamPicsWatcherService : BackgroundService
 
         _logger.LogInformation("SteamPicsWatcher: Poll complete — {Discovered} new games discovered (change #{ChangeNumber})",
             discovered, latestChangeNumber);
+    }
+
+    private async Task ApplyPostEnrichmentFilterAsync(CatoDbContext db, Guid gameId, CancellationToken ct)
+    {
+        var game = await db.Games
+            .Include(g => g.Tags)
+            .Include(g => g.Developer)
+            .Include(g => g.Publisher)
+            .FirstOrDefaultAsync(g => g.Id == gameId, ct);
+        if (game is null) return;
+
+        var decision = _filter.Evaluate(game, FilterStage.PostEnrichment);
+        if (!decision.Rejected) return;
+
+        var appId = game.AppId;
+        var name = game.Name;
+
+        db.Games.Remove(game);
+        await db.SaveChangesAsync(ct);
+
+        _logger.LogInformation(
+            "SteamPicsWatcher: Deleted AppId={AppId} Name='{Name}' — post-enrichment filter ({Reason})",
+            appId, name, decision.Reason);
     }
 
     private uint LoadLastChangeNumber()

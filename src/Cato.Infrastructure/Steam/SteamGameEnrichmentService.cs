@@ -96,6 +96,10 @@ public class SteamGameEnrichmentService : ISteamGameEnrichmentService
         if (steamData.Metacritic?.Score is not null)
             game.MetacriticScore = steamData.Metacritic.Score;
 
+        game.ContentDescriptorIds = steamData.ContentDescriptors?.Ids is { Count: > 0 } ids
+            ? JsonSerializer.SerializeToDocument(ids)
+            : null;
+
         // 4. Upsert Developer
         var devName = steamData.Developers?.FirstOrDefault();
         if (!string.IsNullOrWhiteSpace(devName))

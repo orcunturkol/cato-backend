@@ -26,6 +26,10 @@ public class Game
     public string? SteamReviewScore { get; set; }
     public int ReviewCount { get; set; }
     public int FollowersCount { get; set; }
+    public bool IsFiltered { get; set; }
+    public string? FilterReason { get; set; }
+    public DateTime? FilteredAt { get; set; }
+    public JsonDocument? ContentDescriptorIds { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 

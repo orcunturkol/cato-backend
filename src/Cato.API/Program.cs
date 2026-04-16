@@ -1,5 +1,6 @@
 using Cato.Infrastructure.Database;
 using Cato.Infrastructure.Steam;
+using Cato.Infrastructure.Steam.Filtering;
 using Cato.Infrastructure.Steam.SteamKit;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
@@ -47,6 +48,10 @@ builder.Services.Configure<Cato.Infrastructure.Messaging.RabbitMqSettings>(
     builder.Configuration.GetSection("RabbitMQ"));
 builder.Services.AddScoped<Cato.Infrastructure.Messaging.IIngestionDispatcher, Cato.API.Services.IngestionDispatcher>();
 builder.Services.AddHostedService<Cato.Infrastructure.Messaging.RabbitMqConsumerService>();
+
+// ── Game quality filter ──
+builder.Services.Configure<GameFilterOptions>(builder.Configuration.GetSection(GameFilterOptions.SectionName));
+builder.Services.AddSingleton<IGameQualityFilter, GameQualityFilterService>();
 
 // ── SteamKit2 ──
 builder.Services.Configure<SteamSettings>(builder.Configuration.GetSection("SteamKit"));
