@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -10,8 +9,12 @@ using RabbitMQ.Client.Events;
 namespace Cato.Infrastructure.Messaging;
 
 /// <summary>
-/// BackgroundService that listens to the RabbitMQ ingestion queue and dispatches
-/// messages to the appropriate ingestion handler based on the "source" field.
+/// BackgroundService that listens to both the legacy single-item queue and the
+/// v2 batch queue. Messages on <see cref="RabbitMqSettings.QueueName"/> (routing
+/// key <c>ingestion.{source}</c>) go to <see cref="IIngestionDispatcher"/>.
+/// Messages on <see cref="RabbitMqSettings.QueueNameV2"/> (routing key
+/// <c>ingestion.batch.{source}</c>) go to <see cref="IBatchIngestionDispatcher"/>.
+/// Nacks from either path are dead-lettered to the DLX.
 /// </summary>
 public class RabbitMqConsumerService : BackgroundService
 {
@@ -31,7 +34,6 @@ public class RabbitMqConsumerService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Retry connection until RabbitMQ is ready
         IConnection? connection = null;
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -60,13 +62,34 @@ public class RabbitMqConsumerService : BackgroundService
 
         var channel = await connection.CreateChannelAsync(cancellationToken: stoppingToken);
 
-        // Declare exchange and queue
+        // ── Primary exchange ───────────────────────────────────────────────
         await channel.ExchangeDeclareAsync(
             exchange: _settings.ExchangeName,
             type: ExchangeType.Topic,
             durable: true,
             cancellationToken: stoppingToken);
 
+        // ── Dead-letter exchange + queue ───────────────────────────────────
+        await channel.ExchangeDeclareAsync(
+            exchange: _settings.DeadLetterExchange,
+            type: ExchangeType.Topic,
+            durable: true,
+            cancellationToken: stoppingToken);
+
+        await channel.QueueDeclareAsync(
+            queue: _settings.DeadLetterQueue,
+            durable: true,
+            exclusive: false,
+            autoDelete: false,
+            cancellationToken: stoppingToken);
+
+        await channel.QueueBindAsync(
+            queue: _settings.DeadLetterQueue,
+            exchange: _settings.DeadLetterExchange,
+            routingKey: "#",
+            cancellationToken: stoppingToken);
+
+        // ── Legacy queue (single-item path, no DLX args — declared originally without) ──
         await channel.QueueDeclareAsync(
             queue: _settings.QueueName,
             durable: true,
@@ -74,48 +97,58 @@ public class RabbitMqConsumerService : BackgroundService
             autoDelete: false,
             cancellationToken: stoppingToken);
 
-        // Bind queue to all ingestion routing keys
         await channel.QueueBindAsync(
             queue: _settings.QueueName,
             exchange: _settings.ExchangeName,
-            routingKey: "ingestion.#",
+            routingKey: "ingestion.*",
             cancellationToken: stoppingToken);
 
-        // Process one message at a time
+        // ── V2 queue (batch path) with DLX args ────────────────────────────
+        await channel.QueueDeclareAsync(
+            queue: _settings.QueueNameV2,
+            durable: true,
+            exclusive: false,
+            autoDelete: false,
+            arguments: new Dictionary<string, object?>
+            {
+                ["x-dead-letter-exchange"]    = _settings.DeadLetterExchange,
+                ["x-dead-letter-routing-key"] = "ingestion.batch.dead"
+            },
+            cancellationToken: stoppingToken);
+
+        await channel.QueueBindAsync(
+            queue: _settings.QueueNameV2,
+            exchange: _settings.ExchangeName,
+            routingKey: "ingestion.batch.#",
+            cancellationToken: stoppingToken);
+
         await channel.BasicQosAsync(prefetchSize: 0, prefetchCount: 1, global: false, cancellationToken: stoppingToken);
 
-        var consumer = new AsyncEventingBasicConsumer(channel);
-        consumer.ReceivedAsync += async (_, ea) =>
-        {
-            var body = ea.Body.ToArray();
-            var messageJson = Encoding.UTF8.GetString(body);
-
-            _logger.LogInformation("Received message on {RoutingKey}: {Message}",
-                ea.RoutingKey, messageJson);
-
-            try
-            {
-                using var scope = _serviceProvider.CreateScope();
-                var dispatcher = scope.ServiceProvider.GetRequiredService<IIngestionDispatcher>();
-                await dispatcher.DispatchAsync(messageJson, stoppingToken);
-
-                await channel.BasicAckAsync(ea.DeliveryTag, multiple: false, cancellationToken: stoppingToken);
-                _logger.LogInformation("Message processed successfully");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to process message: {Message}", messageJson);
-                await channel.BasicNackAsync(ea.DeliveryTag, multiple: false, requeue: false, cancellationToken: stoppingToken);
-            }
-        };
+        // ── Legacy consumer ────────────────────────────────────────────────
+        var legacyConsumer = new AsyncEventingBasicConsumer(channel);
+        legacyConsumer.ReceivedAsync += (_, ea) =>
+            HandleAsync(channel, ea, dispatchBatch: false, stoppingToken);
 
         await channel.BasicConsumeAsync(
             queue: _settings.QueueName,
             autoAck: false,
-            consumer: consumer,
+            consumer: legacyConsumer,
             cancellationToken: stoppingToken);
 
-        _logger.LogInformation("Listening on queue '{Queue}' for ingestion messages...", _settings.QueueName);
+        // ── V2 (batch) consumer ────────────────────────────────────────────
+        var batchConsumer = new AsyncEventingBasicConsumer(channel);
+        batchConsumer.ReceivedAsync += (_, ea) =>
+            HandleAsync(channel, ea, dispatchBatch: true, stoppingToken);
+
+        await channel.BasicConsumeAsync(
+            queue: _settings.QueueNameV2,
+            autoAck: false,
+            consumer: batchConsumer,
+            cancellationToken: stoppingToken);
+
+        _logger.LogInformation(
+            "Listening on queues '{Legacy}' (single) and '{V2}' (batch); DLX='{DLX}'",
+            _settings.QueueName, _settings.QueueNameV2, _settings.DeadLetterExchange);
 
         try
         {
@@ -129,6 +162,44 @@ public class RabbitMqConsumerService : BackgroundService
         {
             await channel.CloseAsync(stoppingToken);
             await connection.CloseAsync(stoppingToken);
+        }
+    }
+
+    private async Task HandleAsync(
+        IChannel channel,
+        BasicDeliverEventArgs ea,
+        bool dispatchBatch,
+        CancellationToken stoppingToken)
+    {
+        var body = ea.Body.ToArray();
+        var messageJson = Encoding.UTF8.GetString(body);
+
+        _logger.LogInformation(
+            "Received message on routingKey={RoutingKey} (batch={Batch}) size={Size}",
+            ea.RoutingKey, dispatchBatch, body.Length);
+
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            if (dispatchBatch)
+            {
+                var dispatcher = scope.ServiceProvider.GetRequiredService<IBatchIngestionDispatcher>();
+                await dispatcher.DispatchAsync(messageJson, stoppingToken);
+            }
+            else
+            {
+                var dispatcher = scope.ServiceProvider.GetRequiredService<IIngestionDispatcher>();
+                await dispatcher.DispatchAsync(messageJson, stoppingToken);
+            }
+
+            await channel.BasicAckAsync(ea.DeliveryTag, multiple: false, cancellationToken: stoppingToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to process message on {RoutingKey}; nacking to DLX", ea.RoutingKey);
+            await channel.BasicNackAsync(
+                ea.DeliveryTag, multiple: false, requeue: false,
+                cancellationToken: stoppingToken);
         }
     }
 }

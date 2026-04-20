@@ -1,5 +1,6 @@
 using Cato.Domain.Entities;
 using Cato.Infrastructure.Database;
+using Cato.Infrastructure.Redis;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System.Globalization;
@@ -11,12 +12,18 @@ public class SteamGameEnrichmentService : ISteamGameEnrichmentService
 {
     private readonly CatoDbContext _db;
     private readonly ISteamApiService _steam;
+    private readonly IRedisAppIdSyncService _redisSync;
     private readonly ILogger<SteamGameEnrichmentService> _logger;
 
-    public SteamGameEnrichmentService(CatoDbContext db, ISteamApiService steam, ILogger<SteamGameEnrichmentService> logger)
+    public SteamGameEnrichmentService(
+        CatoDbContext db,
+        ISteamApiService steam,
+        IRedisAppIdSyncService redisSync,
+        ILogger<SteamGameEnrichmentService> logger)
     {
         _db = db;
         _steam = steam;
+        _redisSync = redisSync;
         _logger = logger;
     }
 
@@ -203,6 +210,9 @@ public class SteamGameEnrichmentService : ISteamGameEnrichmentService
 
         // 8. Final save
         await _db.SaveChangesAsync(ct);
+
+        // 9. Sync AppId + name to Redis so orchestrators can pick it up
+        await _redisSync.SyncAsync(game.AppId, game.GameType, game.Name, ct);
 
         _logger.LogInformation("Enriched game AppId={AppId} Name='{Name}'", game.AppId, game.Name);
         return true;

@@ -33,6 +33,8 @@ services:
       RabbitMQ__Port: "5672"
       RabbitMQ__UserName: cato_user
       RabbitMQ__Password: cato_dev_password
+      Redis__ConnectionString: "redis:6379"
+      Redis__InstanceName: "cato"
     volumes:
       - ${COLLECTOR_DATA_PATH:-/home/ofturkol/catoptric-data-collector/data}:/home/ofturkol/catoptric-data-collector/data:ro
     depends_on:
@@ -40,6 +42,24 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── Redis ──
+  redis:
+    image: redis:7-alpine
+    container_name: cato-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6379:6379"
+      - "${TAILSCALE_IP}:6379:6379"
+    volumes:
+      - cato_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   # ── RabbitMQ ──
   rabbitmq:
@@ -105,3 +125,4 @@ volumes:
   cato_pgdata:
   cato_pgadmin:
   cato_rabbitmq:
+  cato_redis:

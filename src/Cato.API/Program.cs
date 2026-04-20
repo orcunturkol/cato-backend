@@ -1,10 +1,12 @@
 using Cato.Infrastructure.Database;
+using Cato.Infrastructure.Redis;
 using Cato.Infrastructure.Steam;
 using Cato.Infrastructure.Steam.Filtering;
 using Cato.Infrastructure.Steam.SteamKit;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -43,10 +45,21 @@ builder.Services.AddHttpClient<ISteamApiService, SteamApiService>(client =>
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 
+// ── Redis ──
+builder.Services.Configure<RedisSettings>(builder.Configuration.GetSection("Redis"));
+builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+{
+    var cfg = builder.Configuration.GetSection("Redis").Get<RedisSettings>() ?? new RedisSettings();
+    return ConnectionMultiplexer.Connect(cfg.ConnectionString);
+});
+builder.Services.AddSingleton<IRedisAppIdSyncService, RedisAppIdSyncService>();
+builder.Services.AddHostedService<RedisBackfillHostedService>();
+
 // ── RabbitMQ ──
 builder.Services.Configure<Cato.Infrastructure.Messaging.RabbitMqSettings>(
     builder.Configuration.GetSection("RabbitMQ"));
 builder.Services.AddScoped<Cato.Infrastructure.Messaging.IIngestionDispatcher, Cato.API.Services.IngestionDispatcher>();
+builder.Services.AddScoped<Cato.Infrastructure.Messaging.IBatchIngestionDispatcher, Cato.API.Services.BatchIngestionDispatcher>();
 builder.Services.AddHostedService<Cato.Infrastructure.Messaging.RabbitMqConsumerService>();
 
 // ── Game quality filter ──

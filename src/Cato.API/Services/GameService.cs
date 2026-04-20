@@ -2,6 +2,7 @@ using Cato.API.DTOs;
 using Cato.API.Models.Games;
 using Cato.Domain.Entities;
 using Cato.Infrastructure.Database;
+using Cato.Infrastructure.Redis;
 using Cato.Infrastructure.Steam;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,12 +13,18 @@ public class GameService : IGameService
     private readonly CatoDbContext _db;
     private readonly ISteamApiService _steam;
     private readonly ISteamGameEnrichmentService _enrichment;
+    private readonly IRedisAppIdSyncService _redisSync;
 
-    public GameService(CatoDbContext db, ISteamApiService steam, ISteamGameEnrichmentService enrichment)
+    public GameService(
+        CatoDbContext db,
+        ISteamApiService steam,
+        ISteamGameEnrichmentService enrichment,
+        IRedisAppIdSyncService redisSync)
     {
         _db = db;
         _steam = steam;
         _enrichment = enrichment;
+        _redisSync = redisSync;
     }
 
     public async Task<Result<GameDto>> CreateGameAsync(CreateGameCommand request, CancellationToken ct = default)
@@ -65,6 +72,8 @@ public class GameService : IGameService
 
         _db.Games.Add(game);
         await _db.SaveChangesAsync(ct);
+
+        await _redisSync.SyncAsync(game.AppId, game.GameType, game.Name, ct);
 
         // Reload with navigation properties
         game = await _db.Games
@@ -143,6 +152,8 @@ public class GameService : IGameService
         if (game is null)
             return Result<GameDto>.Failure($"Game with Id {request.Id} not found.");
 
+        var oldType = game.GameType;
+
         // Partial update — only set fields that were provided
         if (request.Name is not null) game.Name = request.Name;
         if (request.GameType is not null) game.GameType = request.GameType;
@@ -157,6 +168,8 @@ public class GameService : IGameService
 
         await _db.SaveChangesAsync(ct);
 
+        await _redisSync.UpdateAsync(game.AppId, oldType, game.GameType, game.Name, ct);
+
         return Result<GameDto>.Success(game.ToDto());
     }
 
@@ -166,8 +179,11 @@ public class GameService : IGameService
         if (game is null)
             return Result<bool>.Failure($"Game with Id {id} not found.");
 
+        var removedAppId = game.AppId;
         _db.Games.Remove(game); // Cascade deletes genres & tags
         await _db.SaveChangesAsync(ct);
+
+        await _redisSync.RemoveAsync(removedAppId, ct);
 
         return Result<bool>.Success(true);
     }

@@ -1547,6 +1547,234 @@ public class IngestionService : IIngestionService
             .ToListAsync(ct);
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    //  Batch-item mode: consumed by BatchIngestionDispatcher.
+    //  Stages entities on the shared DbContext and returns counts.
+    //  The dispatcher owns the transaction and the single SaveChangesAsync
+    //  call at the end of the batch. Stub-game creation issues its own
+    //  SaveChangesAsync (inside the caller's transaction) so navigation
+    //  identity is available before enrichment.
+    // ─────────────────────────────────────────────────────────────────────
+
+    public async Task<ItemIngestResult> IngestCcuItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default)
+    {
+        var game = await FindOrStubGameAsync(appId, null, ct);
+
+        if (!data.TryGetProperty("response", out var responseEl))
+            return new ItemIngestResult(1, 0, 0, 1);
+
+        var playerCount = responseEl.TryGetProperty("player_count", out var pcEl) && pcEl.ValueKind == JsonValueKind.Number
+            ? pcEl.GetInt32() : 0;
+
+        var timestamp = responseEl.TryGetProperty("timestamp", out var tsEl) && tsEl.ValueKind == JsonValueKind.String
+            ? DateTime.Parse(tsEl.GetString()!, null, DateTimeStyles.AdjustToUniversal)
+            : scrapedAt.UtcDateTime;
+
+        var exists = await _db.CcuHistories.AnyAsync(
+            c => c.GameId == game.Id && c.Timestamp == timestamp && c.Source == "Steam API", ct);
+
+        if (exists) return new ItemIngestResult(1, 0, 0, 0);
+
+        _db.CcuHistories.Add(new CcuHistory
+        {
+            Id = Guid.NewGuid(),
+            GameId = game.Id,
+            Timestamp = timestamp,
+            CcuCount = playerCount,
+            Source = "Steam API"
+        });
+        return new ItemIngestResult(1, 1, 0, 0);
+    }
+
+    public async Task<ItemIngestResult> IngestGroupMemberCountItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default)
+    {
+        var game = await FindOrStubGameAsync(appId, null, ct);
+
+        var itemScrapedAt = data.TryGetProperty("scraped_at", out var scrapedAtEl) && scrapedAtEl.ValueKind == JsonValueKind.String
+            ? DateTime.SpecifyKind(scrapedAtEl.GetDateTime(), DateTimeKind.Utc)
+            : scrapedAt.UtcDateTime;
+        var snapshotDate = DateOnly.FromDateTime(itemScrapedAt);
+
+        int? memberCount = null;
+        if (data.TryGetProperty("group_member_count", out var mcEl) && mcEl.ValueKind == JsonValueKind.Number)
+            memberCount = mcEl.GetInt32();
+
+        string? error = data.TryGetProperty("error", out var errEl) && errEl.ValueKind == JsonValueKind.String
+            ? errEl.GetString() : null;
+
+        var existing = await _db.GroupMemberCountSnapshots
+            .FirstOrDefaultAsync(s => s.GameId == game.Id && s.SnapshotDate == snapshotDate, ct);
+
+        if (existing is not null)
+        {
+            if (memberCount.HasValue) existing.MemberCount = memberCount.Value;
+            existing.Error = error;
+            existing.ScrapedAt = itemScrapedAt;
+            return new ItemIngestResult(1, 0, 1, 0);
+        }
+
+        _db.GroupMemberCountSnapshots.Add(new GroupMemberCountSnapshot
+        {
+            Id = Guid.NewGuid(),
+            GameId = game.Id,
+            SnapshotDate = snapshotDate,
+            MemberCount = memberCount ?? 0,
+            Error = error,
+            ScrapedAt = itemScrapedAt
+        });
+        return new ItemIngestResult(1, 1, 0, 0);
+    }
+
+    public async Task<ItemIngestResult> IngestSteamDbSnapshotItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default)
+    {
+        string? stubName = data.TryGetProperty("name", out var nameEl) && nameEl.ValueKind == JsonValueKind.String
+            ? nameEl.GetString() : null;
+        var game = await FindOrStubGameAsync(appId, stubName, ct);
+
+        var itemScrapedAt = data.TryGetProperty("scraped_at", out var scrapedAtEl) && scrapedAtEl.ValueKind == JsonValueKind.String
+            ? DateTime.SpecifyKind(scrapedAtEl.GetDateTime(), DateTimeKind.Utc)
+            : scrapedAt.UtcDateTime;
+        var snapshotDate = DateOnly.FromDateTime(itemScrapedAt);
+        var source = data.GetProperty("source").GetString()!;
+        var rank = data.GetProperty("rank").GetInt32();
+
+        var follows = data.TryGetProperty("follows", out var followsEl) && followsEl.ValueKind == JsonValueKind.Number
+            ? followsEl.GetInt32() : 0;
+        var sevenDayGain = data.TryGetProperty("seven_day_gain", out var gainEl) && gainEl.ValueKind == JsonValueKind.Number
+            ? gainEl.GetInt32() : 0;
+
+        string? price = data.TryGetProperty("price", out var priceEl) && priceEl.ValueKind == JsonValueKind.String ? priceEl.GetString() : null;
+        string? rating = data.TryGetProperty("rating", out var ratingEl) && ratingEl.ValueKind == JsonValueKind.String ? ratingEl.GetString() : null;
+        string? release = data.TryGetProperty("release", out var releaseEl) && releaseEl.ValueKind == JsonValueKind.String ? releaseEl.GetString() : null;
+
+        var existing = await _db.SteamDbSnapshots
+            .FirstOrDefaultAsync(s => s.GameId == game.Id && s.SnapshotDate == snapshotDate && s.Source == source, ct);
+
+        if (existing is not null)
+        {
+            existing.Rank = rank;
+            existing.Follows = follows;
+            existing.SevenDayGain = sevenDayGain;
+            existing.Price = price;
+            existing.Rating = rating;
+            existing.Release = release;
+            existing.ScrapedAt = itemScrapedAt;
+            return new ItemIngestResult(1, 0, 1, 0);
+        }
+
+        _db.SteamDbSnapshots.Add(new SteamDbSnapshot
+        {
+            Id = Guid.NewGuid(),
+            GameId = game.Id,
+            SnapshotDate = snapshotDate,
+            Source = source,
+            Rank = rank,
+            Price = price,
+            Rating = rating,
+            Release = release,
+            Follows = follows,
+            SevenDayGain = sevenDayGain,
+            ScrapedAt = itemScrapedAt
+        });
+        return new ItemIngestResult(1, 1, 0, 0);
+    }
+
+    public async Task<ItemIngestResult> IngestFinancialDataItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default)
+    {
+        var game = await FindOrStubGameAsync(appId, null, ct);
+
+        int processed = 0, inserted = 0, failed = 0;
+
+        if (!data.TryGetProperty("transactions", out var transactions))
+            return new ItemIngestResult(0, 0, 0, 0);
+
+        foreach (var txn in transactions.EnumerateArray())
+        {
+            processed++;
+            try
+            {
+                var dateStr = txn.GetProperty("date").GetString() ?? string.Empty;
+                var saleDate = DateOnly.ParseExact(
+                    dateStr.Replace("/", "-"),
+                    ["yyyy-MM-dd", "yyyyMMdd"],
+                    CultureInfo.InvariantCulture);
+
+                var countryCode = txn.TryGetProperty("country_code", out var ccEl) ? ccEl.GetString() ?? "XX" : "XX";
+                var platform    = txn.TryGetProperty("platform",     out var plEl) && plEl.GetString() is { Length: > 0 } pl ? pl : "Steam";
+                var packageId   = txn.TryGetProperty("packageid",    out var pkEl) && pkEl.ValueKind != JsonValueKind.Null ? pkEl.GetInt32() : (int?)null;
+
+                var exists = await _db.SteamSaleFinancials.AnyAsync(
+                    s => s.GameId == game.Id
+                      && s.SaleDate == saleDate
+                      && s.CountryCode == countryCode
+                      && s.PackageId == packageId
+                      && s.Platform == platform, ct);
+
+                if (exists) continue;
+
+                static decimal ParseMoney(JsonElement el) =>
+                    el.ValueKind == JsonValueKind.Null ? 0m
+                    : el.ValueKind == JsonValueKind.String ? decimal.TryParse(el.GetString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : 0m
+                    : el.GetDecimal();
+
+                _db.SteamSaleFinancials.Add(new SteamSaleFinancial
+                {
+                    Id              = Guid.NewGuid(),
+                    GameId          = game.Id,
+                    SaleDate        = saleDate,
+                    CountryCode     = countryCode,
+                    Platform        = platform,
+                    PackageId       = packageId,
+                    SalesUnits      = txn.TryGetProperty("gross_units_sold",      out var guEl)  && guEl.ValueKind  != JsonValueKind.Null ? guEl.GetInt32()
+                                    : txn.TryGetProperty("gross_units_activated", out var gaEl) && gaEl.ValueKind != JsonValueKind.Null ? gaEl.GetInt32() : 0,
+                    ReturnsUnits    = txn.TryGetProperty("gross_units_returned",  out var grEl) && grEl.ValueKind != JsonValueKind.Null ? grEl.GetInt32() : 0,
+                    GrossRevenueUsd = txn.TryGetProperty("gross_sales_usd",       out var gsEl)   ? ParseMoney(gsEl)   : 0m,
+                    GrossReturnsUsd = txn.TryGetProperty("gross_returns_usd",     out var gRetEl) ? ParseMoney(gRetEl) : 0m,
+                    TaxUsd          = txn.TryGetProperty("net_tax_usd",           out var taxEl)  ? ParseMoney(taxEl)  : 0m,
+                    NetRevenueUsd   = txn.TryGetProperty("net_sales_usd",         out var nsEl)   ? ParseMoney(nsEl)   : 0m,
+                    Currency        = txn.TryGetProperty("currency",              out var curEl)  ? curEl.GetString()  : null,
+                    BasePrice       = txn.TryGetProperty("base_price",            out var bpEl)   ? bpEl.GetString()   : null,
+                    SalePrice       = txn.TryGetProperty("sale_price",            out var spEl)   ? spEl.GetString()   : null,
+                    SaleType        = txn.TryGetProperty("package_sale_type",     out var stEl)   ? stEl.GetString()   : null,
+                    CombinedDiscountId    = txn.TryGetProperty("combined_discount_id",         out var cdEl) && cdEl.ValueKind != JsonValueKind.Null ? cdEl.GetInt32() : (int?)null,
+                    RevenueShareTier      = txn.TryGetProperty("additional_revenue_share_tier", out var rsEl) && rsEl.ValueKind != JsonValueKind.Null ? rsEl.GetInt32() : (int?)null,
+                });
+                inserted++;
+            }
+            catch (Exception ex)
+            {
+                failed++;
+                _logger.LogWarning(ex, "Failed to process financial transaction (appId={AppId})", appId);
+            }
+        }
+
+        return new ItemIngestResult(processed, inserted, 0, failed);
+    }
+
+    private async Task<Game> FindOrStubGameAsync(int appId, string? stubName, CancellationToken ct)
+    {
+        var game = await _db.Games.FirstOrDefaultAsync(g => g.AppId == appId, ct);
+        if (game is not null) return game;
+
+        _logger.LogInformation("Game with AppId {AppId} not found. Creating stub and enriching from Steam.", appId);
+
+        game = new Game
+        {
+            Id = Guid.NewGuid(),
+            AppId = appId,
+            Name = !string.IsNullOrWhiteSpace(stubName) ? stubName : $"App {appId}",
+            GameType = "Other"
+        };
+        _db.Games.Add(game);
+        await _db.SaveChangesAsync(ct);
+
+        var enrichResult = await _gameService.EnrichGameFromSteamAsync(game.Id, ct);
+        if (!enrichResult.IsSuccess)
+            _logger.LogWarning("Steam enrich failed for AppId {AppId}: {Error}", appId, enrichResult.ErrorMessage);
+
+        return game;
+    }
+
     /// <summary>Parses numbers formatted with commas like "135,427" → 135427</summary>
     private static int ParseFormattedInt(string? value)
     {
