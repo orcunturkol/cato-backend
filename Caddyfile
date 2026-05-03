@@ -1,0 +1,25 @@
+{
+	email {$ACME_EMAIL}
+}
+
+catoptricgames.duckdns.org {
+	tls {
+		dns duckdns {$DUCKDNS_TOKEN}
+	}
+
+	handle_path /api/* {
+		reverse_proxy api:8080
+	}
+
+	handle {
+		reverse_proxy frontend:80
+	}
+}
+
+pgadmin.catoptricgames.duckdns.org {
+	tls {
+		dns duckdns {$DUCKDNS_TOKEN}
+	}
+
+	reverse_proxy pgadmin:80
+}

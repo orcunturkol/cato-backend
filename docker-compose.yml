@@ -1,8 +1,38 @@
 services:
+  # ── PostgreSQL self-signed cert init (one-shot) ──
+  postgres-cert-init:
+    image: alpine/openssl:latest
+    container_name: cato-postgres-cert-init
+    entrypoint:
+      - sh
+      - -c
+      - |
+        set -e
+        if [ ! -f /certs/server.key ]; then
+          openssl req -new -x509 -days 3650 -nodes \
+            -subj "/CN=postgres.catoptricgames.duckdns.org" \
+            -addext "subjectAltName=DNS:postgres.catoptricgames.duckdns.org" \
+            -out /certs/server.crt -keyout /certs/server.key
+        fi
+        chmod 600 /certs/server.key
+        chmod 644 /certs/server.crt
+        chown 999:999 /certs/server.key /certs/server.crt
+    volumes:
+      - cato_pg_ssl:/certs
+    restart: "no"
+
   # ── PostgreSQL ──
   postgres:
     image: postgres:16
     container_name: cato-postgres
+    command:
+      - postgres
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/etc/postgres-ssl/server.crt
+      - -c
+      - ssl_key_file=/etc/postgres-ssl/server.key
     environment:
       POSTGRES_DB: cato
       POSTGRES_USER: cato_user
@@ -12,6 +42,10 @@ services:
       - "${TAILSCALE_IP}:5434:5432"
     volumes:
       - cato_pgdata:/var/lib/postgresql/data
+      - cato_pg_ssl:/etc/postgres-ssl:ro
+    depends_on:
+      postgres-cert-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U cato_user -d cato"]
       interval: 5s
@@ -105,11 +139,33 @@ services:
       context: ../cato-frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:5039}
+        VITE_API_URL: ${VITE_API_URL:-https://catoptricgames.duckdns.org/api}
     container_name: cato-frontend
     ports:
       - "${TAILSCALE_IP}:5173:80"
     restart: unless-stopped
+
+  # ── Caddy reverse proxy (HTTPS for catoptricgames.duckdns.org via DuckDNS DNS-01) ──
+  caddy:
+    build:
+      context: .
+      dockerfile: Dockerfile.caddy
+    container_name: cato-caddy
+    restart: unless-stopped
+    ports:
+      - "${TAILSCALE_IP}:80:80"
+      - "${TAILSCALE_IP}:443:443"
+    environment:
+      DUCKDNS_TOKEN: ${DUCKDNS_TOKEN}
+      ACME_EMAIL: ${ACME_EMAIL:-ofturkol@proton.me}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - cato_caddy_data:/data
+      - cato_caddy_config:/config
+    depends_on:
+      - api
+      - frontend
+      - pgadmin
 
   # ── EF Migration Helper (run with: docker compose run --rm ef-migration) ──
   ef-migration:
@@ -126,3 +182,6 @@ volumes:
   cato_pgadmin:
   cato_rabbitmq:
   cato_redis:
+  cato_caddy_data:
+  cato_caddy_config:
+  cato_pg_ssl:
