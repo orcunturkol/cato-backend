@@ -153,7 +153,6 @@ services:
     container_name: cato-caddy
     restart: unless-stopped
     ports:
-      - "${TAILSCALE_IP}:80:80"
       - "${TAILSCALE_IP}:443:443"
     environment:
       DUCKDNS_TOKEN: ${DUCKDNS_TOKEN}

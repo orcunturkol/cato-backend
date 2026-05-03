@@ -1,5 +1,6 @@
 {
 	email {$ACME_EMAIL}
+	auto_https disable_redirects
 }
 
 catoptricgames.duckdns.org {
