@@ -20,7 +20,7 @@ public class SteamAppReviewsResponse
     /// When Steam returns "*" again (or the same cursor), there are no more pages.
     /// </summary>
     [JsonPropertyName("cursor")]
-    public string Cursor { get; set; } = "*";
+    public string? Cursor { get; set; }
 }
 
 public class SteamReviewQuerySummary
@@ -34,7 +34,7 @@ public class SteamReviewQuerySummary
 
     /// <summary>e.g. "Very Positive", "Mixed", "Overwhelmingly Positive".</summary>
     [JsonPropertyName("review_score_desc")]
-    public string ReviewScoreDesc { get; set; } = string.Empty;
+    public string? ReviewScoreDesc { get; set; }
 
     [JsonPropertyName("total_positive")]
     public int TotalPositive { get; set; }
@@ -49,16 +49,16 @@ public class SteamReviewQuerySummary
 public class SteamReviewItem
 {
     [JsonPropertyName("recommendationid")]
-    public string RecommendationId { get; set; } = string.Empty;
+    public string? RecommendationId { get; set; }
 
     [JsonPropertyName("author")]
     public SteamReviewAuthor Author { get; set; } = new();
 
     [JsonPropertyName("language")]
-    public string Language { get; set; } = string.Empty;
+    public string? Language { get; set; }
 
     [JsonPropertyName("review")]
-    public string ReviewText { get; set; } = string.Empty;
+    public string? ReviewText { get; set; }
 
     [JsonPropertyName("timestamp_created")]
     public long TimestampCreated { get; set; }
