@@ -157,4 +157,64 @@ public class SteamApiService : ISteamApiService
         _logger.LogWarning("Failed to fetch user tags for AppId {AppId}, returning empty list", appId);
         return [];
     }
+
+    public async Task<SteamAppReviewsResponse?> GetAppReviewsAsync(
+        int appId, string cursor = "*", CancellationToken ct = default)
+    {
+        // Steam cursors contain base64 characters including '+' and '/' — must be URL-encoded.
+        var encodedCursor = Uri.EscapeDataString(cursor);
+        var url = $"https://store.steampowered.com/appreviews/{appId}" +
+                  $"?json=1&filter=recent&language=all&num_per_page=100&cursor={encodedCursor}";
+
+        for (var attempt = 0; attempt <= MaxRetries; attempt++)
+        {
+            await RateLimiter.WaitAsync(ct);
+            try
+            {
+                var response = await _httpClient.GetAsync(url, ct);
+
+                if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                {
+                    if (attempt < MaxRetries)
+                    {
+                        var backoff = (attempt + 1) * 5000;
+                        await Task.Delay(backoff, ct);
+                        continue;
+                    }
+                    _logger.LogWarning("Steam appreviews rate-limited for AppId {AppId} after {Retries} retries", appId, MaxRetries);
+                    return null;
+                }
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("Steam appreviews returned {Status} for AppId {AppId}", response.StatusCode, appId);
+                    return null;
+                }
+
+                var content = await response.Content.ReadAsStringAsync(ct);
+                var result = JsonSerializer.Deserialize<SteamAppReviewsResponse>(content, JsonOptions);
+
+                if (result?.Success != 1)
+                    return null;
+
+                return result;
+            }
+            catch (HttpRequestException ex) when (attempt < MaxRetries)
+            {
+                _logger.LogWarning(ex, "HTTP error fetching reviews for AppId {AppId}, attempt {Attempt}", appId, attempt + 1);
+                continue;
+            }
+            finally
+            {
+                // Enforce minimum delay before the next request can proceed — mirrors existing pattern.
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(DelayBetweenRequestsMs, CancellationToken.None);
+                    RateLimiter.Release();
+                }, CancellationToken.None);
+            }
+        }
+
+        return null;
+    }
 }

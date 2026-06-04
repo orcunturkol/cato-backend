@@ -10,4 +10,10 @@ public class SteamSettings
 
     /// <summary>How often (in hours) the price watcher checks for price changes.</summary>
     public int PriceCheckIntervalHours { get; set; } = 24;
+
+    /// <summary>How often to poll Steam reviews for all tracked games (default 24 h).</summary>
+    public int ReviewCheckIntervalHours { get; set; } = 24;
+
+    /// <summary>Maximum individual reviews to backfill per game on first run (default 2000).</summary>
+    public int ReviewBackfillMaxPerGame { get; set; } = 2000;
 }
