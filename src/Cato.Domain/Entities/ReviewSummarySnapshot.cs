@@ -6,14 +6,7 @@ public class ReviewSummarySnapshot
     public Guid GameId { get; set; }
     public DateOnly SnapshotDate { get; set; }
 
-    /// <summary>
-    /// Steam numeric review score 0–9 (e.g. 8 = Very Positive)
-    /// </summary>
     public int ReviewScore { get; set; }
-
-    /// <summary>
-    /// Human-readable Steam score label, e.g. "Very Positive"
-    /// </summary>
     public string ReviewScoreDesc { get; set; } = string.Empty;
 
     public int TotalPositive { get; set; }
