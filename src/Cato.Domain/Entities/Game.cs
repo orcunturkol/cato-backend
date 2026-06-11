@@ -54,4 +54,6 @@ public class Game
     public ICollection<GameNews> News { get; set; } = [];
     public ICollection<ActiveUsersHistory> ActiveUsersHistories { get; set; } = [];
     public ICollection<DemoDownload> DemoDownloads { get; set; } = [];
+    public ICollection<ReviewSummarySnapshot> ReviewSummarySnapshots { get; set; } = [];
+    public ICollection<SteamReview> SteamReviews { get; set; } = [];
 }

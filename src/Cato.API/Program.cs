@@ -74,6 +74,7 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<SteamKitService>()
 builder.Services.AddHostedService<SteamPicsWatcherService>();
 builder.Services.AddHostedService<SteamPriceWatcherService>();
 builder.Services.AddHostedService<SteamPicsChangeHistoryService>();
+builder.Services.AddHostedService<SteamReviewWatcherService>();
 
 // ── Application Services ──
 builder.Services.AddScoped<ISteamGameEnrichmentService, SteamGameEnrichmentService>();

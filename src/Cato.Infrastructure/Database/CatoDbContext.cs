@@ -34,6 +34,8 @@ public class CatoDbContext : DbContext
     public DbSet<GameNews> GameNews => Set<GameNews>();
     public DbSet<ActiveUsersHistory> ActiveUsersHistories => Set<ActiveUsersHistory>();
     public DbSet<DemoDownload> DemoDownloads => Set<DemoDownload>();
+    public DbSet<ReviewSummarySnapshot> ReviewSummarySnapshots => Set<ReviewSummarySnapshot>();
+    public DbSet<SteamReview> SteamReviews => Set<SteamReview>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -629,6 +631,55 @@ public class CatoDbContext : DbContext
                 .HasForeignKey<ActionImpact>(e => e.ActionId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
+
+        // ── ReviewSummarySnapshot ──────────────────────────────────────
+        modelBuilder.Entity<ReviewSummarySnapshot>(entity =>
+        {
+            entity.ToTable("review_summary_snapshot");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.ReviewScoreDesc).HasMaxLength(50).IsRequired();
+
+            // Only one summary per game per day.
+            entity.HasIndex(e => new { e.GameId, e.SnapshotDate })
+                .IsUnique()
+                .HasDatabaseName("unique_review_summary_game_date");
+
+            entity.HasIndex(e => e.SnapshotDate)
+                .HasDatabaseName("idx_review_summary_snapshot_date");
+
+            entity.HasOne(e => e.Game)
+                .WithMany(g => g.ReviewSummarySnapshots)
+                .HasForeignKey(e => e.GameId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── SteamReview ────────────────────────────────────────────────
+        modelBuilder.Entity<SteamReview>(entity =>
+        {
+            entity.ToTable("steam_review");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.RecommendationId).HasMaxLength(30).IsRequired();
+            entity.Property(e => e.Language).HasMaxLength(30).IsRequired();
+            entity.Property(e => e.ReviewText).HasColumnType("text");
+
+            // Primary dedup key: Steam guarantees recommendationid is unique per review.
+            entity.HasIndex(e => new { e.GameId, e.RecommendationId })
+                .IsUnique()
+                .HasDatabaseName("unique_steam_review_game_rec");
+
+            entity.HasIndex(e => new { e.GameId, e.TimestampCreated })
+                .HasDatabaseName("idx_steam_review_game_created");
+
+            entity.HasIndex(e => e.Language)
+                .HasDatabaseName("idx_steam_review_language");
+
+            entity.HasOne(e => e.Game)
+                .WithMany(g => g.SteamReviews)
+                .HasForeignKey(e => e.GameId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
     }
 
     public override int SaveChanges()
@@ -879,6 +930,27 @@ public class CatoDbContext : DbContext
             {
                 entry.Entity.UpdatedAt = now;
             }
+        }
+
+        // ReviewSummarySnapshot — mutable (summary is refreshed on each watcher run for the same day)
+        foreach (var entry in ChangeTracker.Entries<ReviewSummarySnapshot>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        // SteamReview — write-once corpus record
+        foreach (var entry in ChangeTracker.Entries<SteamReview>())
+        {
+            if (entry.State == EntityState.Added)
+                entry.Entity.CreatedAt = now;
         }
     }
 }
