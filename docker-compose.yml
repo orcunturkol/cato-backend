@@ -69,6 +69,7 @@ services:
       RabbitMQ__Password: cato_dev_password
       Redis__ConnectionString: "redis:6379"
       Redis__InstanceName: "cato"
+      SteamWebApi__ApiKey: "${STEAM_WEB_API_KEY:-}"
     volumes:
       - ${COLLECTOR_DATA_PATH:-/home/ofturkol/catoptric-data-collector/data}:/home/ofturkol/catoptric-data-collector/data:ro
     depends_on:
@@ -152,6 +153,9 @@ services:
       dockerfile: Dockerfile.caddy
     container_name: cato-caddy
     restart: unless-stopped
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     ports:
       - "${TAILSCALE_IP}:443:443"
     environment:

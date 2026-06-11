@@ -32,6 +32,12 @@ public class RedisBackfillHostedService : IHostedService
 
     public async Task StartAsync(CancellationToken ct)
     {
+        await BackfillAppIdsAsync(ct);
+        await BackfillSteamIdRotationAsync(ct);
+    }
+
+    private async Task BackfillAppIdsAsync(CancellationToken ct)
+    {
         try
         {
             using var scope = _services.CreateScope();
@@ -70,6 +76,67 @@ public class RedisBackfillHostedService : IHostedService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "redis_backfill_failed; orchestrators may see empty sorted sets until next restart");
+        }
+    }
+
+    /// <summary>
+    /// Rebuilds the reviewer-steamid rotation set from Postgres: known review
+    /// authors (score 0) plus already-fetched profiles (score = LastFetchedAt,
+    /// preserving rotation order). Quarantined ids are excluded — ZADD NX alone
+    /// would resurrect them because quarantine removes them from the source set.
+    /// </summary>
+    private async Task BackfillSteamIdRotationAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var scope = _services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<CatoDbContext>();
+            var redisDb = _redis.GetDatabase();
+
+            var quarantined = (await redisDb.SortedSetRangeByRankAsync(
+                    RedisSteamIdRotationService.QuarantineKey, 0, -1))
+                .Select(v => (long)v)
+                .ToHashSet();
+
+            var profileScores = await db.SteamPlayerProfiles
+                .AsNoTracking()
+                .Select(p => new { p.SteamId64, p.LastFetchedAt })
+                .ToListAsync(ct);
+
+            var fetchedIds = profileScores.Select(p => p.SteamId64).ToHashSet();
+
+            var reviewerIds = await db.SteamReviews
+                .AsNoTracking()
+                .Where(r => r.AuthorSteamId != null)
+                .Select(r => r.AuthorSteamId!.Value)
+                .Distinct()
+                .ToListAsync(ct);
+
+            var entries = profileScores
+                .Where(p => !quarantined.Contains(p.SteamId64))
+                .Select(p => new SortedSetEntry(
+                    p.SteamId64, new DateTimeOffset(p.LastFetchedAt).ToUnixTimeSeconds()))
+                .Concat(reviewerIds
+                    .Where(id => !fetchedIds.Contains(id) && !quarantined.Contains(id))
+                    .Select(id => new SortedSetEntry(id, 0)))
+                .ToArray();
+
+            if (entries.Length == 0)
+            {
+                _logger.LogInformation("redis_steamid_backfill_skipped reason=\"no known reviewer steamids\"");
+                return;
+            }
+
+            await redisDb.SortedSetAddAsync(
+                RedisSteamIdRotationService.SourceKey, entries, When.NotExists);
+
+            _logger.LogInformation(
+                "redis_steamid_backfill_complete count={Count} quarantined={Quarantined}",
+                entries.Length, quarantined.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "redis_steamid_backfill_failed; profile watcher may see an empty rotation until next restart");
         }
     }
 

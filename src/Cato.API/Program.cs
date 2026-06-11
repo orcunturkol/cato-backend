@@ -53,6 +53,7 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
     return ConnectionMultiplexer.Connect(cfg.ConnectionString);
 });
 builder.Services.AddSingleton<IRedisAppIdSyncService, RedisAppIdSyncService>();
+builder.Services.AddSingleton<ISteamIdRotationService, RedisSteamIdRotationService>();
 builder.Services.AddHostedService<RedisBackfillHostedService>();
 
 // ── RabbitMQ ──
@@ -65,6 +66,11 @@ builder.Services.AddHostedService<Cato.Infrastructure.Messaging.RabbitMqConsumer
 // ── Game quality filter ──
 builder.Services.Configure<GameFilterOptions>(builder.Configuration.GetSection(GameFilterOptions.SectionName));
 builder.Services.AddSingleton<IGameQualityFilter, GameQualityFilterService>();
+
+// ── Steam Web API + player profile watcher ──
+builder.Services.Configure<SteamWebApiSettings>(builder.Configuration.GetSection(SteamWebApiSettings.SectionName));
+builder.Services.Configure<PlayerProfileSettings>(builder.Configuration.GetSection(PlayerProfileSettings.SectionName));
+builder.Services.AddHostedService<SteamPlayerProfileWatcherService>();
 
 // ── SteamKit2 ──
 builder.Services.Configure<SteamSettings>(builder.Configuration.GetSection("SteamKit"));

@@ -36,6 +36,7 @@ public class CatoDbContext : DbContext
     public DbSet<DemoDownload> DemoDownloads => Set<DemoDownload>();
     public DbSet<ReviewSummarySnapshot> ReviewSummarySnapshots => Set<ReviewSummarySnapshot>();
     public DbSet<SteamReview> SteamReviews => Set<SteamReview>();
+    public DbSet<SteamPlayerProfile> SteamPlayerProfiles => Set<SteamPlayerProfile>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -640,10 +641,8 @@ public class CatoDbContext : DbContext
 
             entity.Property(e => e.ReviewScoreDesc).HasMaxLength(50).IsRequired();
 
-            // Only one summary per game per day.
             entity.HasIndex(e => new { e.GameId, e.SnapshotDate })
-                .IsUnique()
-                .HasDatabaseName("unique_review_summary_game_date");
+                .HasDatabaseName("idx_review_summary_game_date");
 
             entity.HasIndex(e => e.SnapshotDate)
                 .HasDatabaseName("idx_review_summary_snapshot_date");
@@ -675,10 +674,40 @@ public class CatoDbContext : DbContext
             entity.HasIndex(e => e.Language)
                 .HasDatabaseName("idx_steam_review_language");
 
+            entity.HasIndex(e => e.AuthorSteamId)
+                .HasDatabaseName("idx_steam_review_author_steamid");
+
             entity.HasOne(e => e.Game)
                 .WithMany(g => g.SteamReviews)
                 .HasForeignKey(e => e.GameId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── SteamPlayerProfile ─────────────────────────────────────────
+        modelBuilder.Entity<SteamPlayerProfile>(entity =>
+        {
+            entity.ToTable("steam_player_profile");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.PersonaName).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.ProfileUrl).HasColumnType("text");
+            entity.Property(e => e.AvatarHash).HasMaxLength(64);
+            entity.Property(e => e.AvatarFullUrl).HasColumnType("text");
+            entity.Property(e => e.RealName).HasMaxLength(300);
+            entity.Property(e => e.PrimaryClanId).HasMaxLength(30);
+            entity.Property(e => e.LocCountryCode).HasMaxLength(8);
+            entity.Property(e => e.LocStateCode).HasMaxLength(8);
+
+            entity.HasIndex(e => e.SteamId64)
+                .IsUnique()
+                .HasDatabaseName("unique_steam_player_profile_steamid");
+
+            // Seam for the future achievements job: WHERE CommunityVisibilityState = 3
+            entity.HasIndex(e => e.CommunityVisibilityState)
+                .HasDatabaseName("idx_steam_player_profile_visibility");
+
+            entity.HasIndex(e => e.LastFetchedAt)
+                .HasDatabaseName("idx_steam_player_profile_last_fetched");
         });
     }
 
@@ -951,6 +980,20 @@ public class CatoDbContext : DbContext
         {
             if (entry.State == EntityState.Added)
                 entry.Entity.CreatedAt = now;
+        }
+
+        // SteamPlayerProfile — mutable (latest-only upsert)
+        foreach (var entry in ChangeTracker.Entries<SteamPlayerProfile>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
         }
     }
 }

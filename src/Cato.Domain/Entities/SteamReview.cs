@@ -11,6 +11,12 @@ public class SteamReview
     /// </summary>
     public string RecommendationId { get; set; } = string.Empty;
 
+    /// <summary>
+    /// SteamID64 of the review author. Nullable: rows ingested before this
+    /// column existed have no value (forward-only enrichment).
+    /// </summary>
+    public long? AuthorSteamId { get; set; }
+
     public bool VotedUp { get; set; }
     public string Language { get; set; } = string.Empty;
     public string ReviewText { get; set; } = string.Empty;
