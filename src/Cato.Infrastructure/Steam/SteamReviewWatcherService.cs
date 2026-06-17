@@ -1,5 +1,6 @@
 using Cato.Domain.Entities;
 using Cato.Infrastructure.Database;
+using Cato.Infrastructure.Redis;
 using Cato.Infrastructure.Steam.Models;
 using Cato.Infrastructure.Steam.SteamKit;
 using Microsoft.EntityFrameworkCore;
@@ -57,6 +58,7 @@ public class SteamReviewWatcherService : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CatoDbContext>();
         var steamApi = scope.ServiceProvider.GetRequiredService<ISteamApiService>();
+        var rotation = scope.ServiceProvider.GetRequiredService<ISteamIdRotationService>();
 
         var games = await db.Games
             .Where(g => g.GameType == "Sourcing" || g.GameType == "Owned")
@@ -72,7 +74,7 @@ public class SteamReviewWatcherService : BackgroundService
             if (ct.IsCancellationRequested) break;
             try
             {
-                await SyncGameReviewsAsync(db, steamApi, game.Id, game.AppId, game.Name, ct);
+                await SyncGameReviewsAsync(db, steamApi, rotation, game.Id, game.AppId, game.Name, ct);
             }
             catch (Exception ex)
             {
@@ -87,6 +89,7 @@ public class SteamReviewWatcherService : BackgroundService
     private async Task SyncGameReviewsAsync(
         CatoDbContext db,
         ISteamApiService steamApi,
+        ISteamIdRotationService rotation,
         Guid gameId, int appId, string gameName,
         CancellationToken ct)
     {
@@ -118,11 +121,12 @@ public class SteamReviewWatcherService : BackgroundService
             // Upsert today's summary snapshot from the first page's query_summary.
             if (isFirstPage)
             {
-                await UpsertSummarySnapshotAsync(db, gameId, response.QuerySummary, ct);
+                await InsertSummarySnapshotAsync(db, gameId, response.QuerySummary, ct);
                 isFirstPage = false;
             }
 
             var batch = new List<SteamReview>();
+            var pageSteamIds = new HashSet<long>();
             var hitWatermark = false;
 
             foreach (var item in response.Reviews)
@@ -142,11 +146,20 @@ public class SteamReviewWatcherService : BackgroundService
                     continue;
 
                 knownIds.Add(item.RecommendationId);
+
+                long? authorSteamId = null;
+                if (long.TryParse(item.Author?.SteamId, out var sid))
+                {
+                    authorSteamId = sid;
+                    pageSteamIds.Add(sid);
+                }
+
                 batch.Add(new SteamReview
                 {
                     Id = Guid.NewGuid(),
                     GameId = gameId,
                     RecommendationId = item.RecommendationId,
+                    AuthorSteamId = authorSteamId,
                     VotedUp = item.VotedUp,
                     Language = item.Language ?? string.Empty,
                     ReviewText = item.ReviewText ?? string.Empty,
@@ -167,6 +180,10 @@ public class SteamReviewWatcherService : BackgroundService
                 db.SteamReviews.AddRange(batch);
                 await db.SaveChangesAsync(ct);
                 totalInserted += batch.Count;
+
+                // Seed only after the reviews are persisted so the rotation
+                // never references an id we failed to store. Best-effort.
+                await rotation.SeedAsync(pageSteamIds, ct);
             }
 
             // Steam signals end-of-results by returning the same cursor or "*".
@@ -184,37 +201,22 @@ public class SteamReviewWatcherService : BackgroundService
             totalInserted, appId, gameName);
     }
 
-    private async Task UpsertSummarySnapshotAsync(
+    private async Task InsertSummarySnapshotAsync(
         CatoDbContext db, Guid gameId, SteamReviewQuerySummary? summary, CancellationToken ct)
     {
         if (summary is null) return;
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var existing = await db.ReviewSummarySnapshots
-            .FirstOrDefaultAsync(s => s.GameId == gameId && s.SnapshotDate == today, ct);
-
-        if (existing is null)
+        db.ReviewSummarySnapshots.Add(new ReviewSummarySnapshot
         {
-            db.ReviewSummarySnapshots.Add(new ReviewSummarySnapshot
-            {
-                Id = Guid.NewGuid(),
-                GameId = gameId,
-                SnapshotDate = today,
-                ReviewScore = summary.ReviewScore,
-                ReviewScoreDesc = summary.ReviewScoreDesc ?? string.Empty,
-                TotalPositive = summary.TotalPositive,
-                TotalNegative = summary.TotalNegative,
-                TotalReviews = summary.TotalReviews,
-            });
-        }
-        else
-        {
-            existing.ReviewScore = summary.ReviewScore;
-            existing.ReviewScoreDesc = summary.ReviewScoreDesc ?? string.Empty;
-            existing.TotalPositive = summary.TotalPositive;
-            existing.TotalNegative = summary.TotalNegative;
-            existing.TotalReviews = summary.TotalReviews;
-        }
+            Id = Guid.NewGuid(),
+            GameId = gameId,
+            SnapshotDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            ReviewScore = summary.ReviewScore,
+            ReviewScoreDesc = summary.ReviewScoreDesc ?? string.Empty,
+            TotalPositive = summary.TotalPositive,
+            TotalNegative = summary.TotalNegative,
+            TotalReviews = summary.TotalReviews,
+        });
 
         await db.SaveChangesAsync(ct);
     }
@@ -225,6 +227,7 @@ public class SteamReviewWatcherService : BackgroundService
         var latest = await db.ReviewSummarySnapshots
             .Where(s => s.GameId == gameId)
             .OrderByDescending(s => s.SnapshotDate)
+            .ThenByDescending(s => s.CreatedAt)
             .FirstOrDefaultAsync(ct);
 
         if (latest is null) return;

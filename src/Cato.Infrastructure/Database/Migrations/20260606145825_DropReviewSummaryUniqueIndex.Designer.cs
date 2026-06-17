@@ -4,6 +4,7 @@ using System.Text.Json;
 using Cato.Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Cato.Infrastructure.Database.Migrations
 {
     [DbContext(typeof(CatoDbContext))]
-    partial class CatoDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260606145825_DropReviewSummaryUniqueIndex")]
+    partial class DropReviewSummaryUniqueIndex
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1184,99 +1187,11 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.ToTable("steamdb_snapshot", (string)null);
                 });
 
-            modelBuilder.Entity("Cato.Domain.Entities.SteamPlayerProfile", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AvatarFullUrl")
-                        .HasColumnType("text");
-
-                    b.Property<string>("AvatarHash")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<int>("CommunityVisibilityState")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("LastFetchedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("LastLogoff")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int?>("LocCityId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("LocCountryCode")
-                        .HasMaxLength(8)
-                        .HasColumnType("character varying(8)");
-
-                    b.Property<string>("LocStateCode")
-                        .HasMaxLength(8)
-                        .HasColumnType("character varying(8)");
-
-                    b.Property<string>("PersonaName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<int?>("PersonaState")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("PersonaStateFlags")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("PrimaryClanId")
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.Property<int?>("ProfileState")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("ProfileUrl")
-                        .HasColumnType("text");
-
-                    b.Property<string>("RealName")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<long>("SteamId64")
-                        .HasColumnType("bigint");
-
-                    b.Property<DateTime?>("TimeCreated")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CommunityVisibilityState")
-                        .HasDatabaseName("idx_steam_player_profile_visibility");
-
-                    b.HasIndex("LastFetchedAt")
-                        .HasDatabaseName("idx_steam_player_profile_last_fetched");
-
-                    b.HasIndex("SteamId64")
-                        .IsUnique()
-                        .HasDatabaseName("unique_steam_player_profile_steamid");
-
-                    b.ToTable("steam_player_profile", (string)null);
-                });
-
             modelBuilder.Entity("Cato.Domain.Entities.SteamReview", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
-
-                    b.Property<long?>("AuthorSteamId")
-                        .HasColumnType("bigint");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -1329,9 +1244,6 @@ namespace Cato.Infrastructure.Database.Migrations
                         .HasColumnType("boolean");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("AuthorSteamId")
-                        .HasDatabaseName("idx_steam_review_author_steamid");
 
                     b.HasIndex("Language")
                         .HasDatabaseName("idx_steam_review_language");

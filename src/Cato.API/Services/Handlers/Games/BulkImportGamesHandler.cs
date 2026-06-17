@@ -18,8 +18,15 @@ public class BulkImportGamesHandler : IRequestHandler<BulkImportGamesCommand, Re
         _logger = logger;
     }
 
+    private static readonly string[] AllowedGameTypes = ["Owned", "Competitor", "Sourcing", "Other"];
+
     public async Task<Result<BulkImportResult>> Handle(BulkImportGamesCommand request, CancellationToken ct)
     {
+        var gameType = request.GameType ?? "Sourcing";
+        if (!AllowedGameTypes.Contains(gameType))
+            return Result<BulkImportResult>.Failure(
+                $"Invalid game type: {gameType}. Allowed values: {string.Join(", ", AllowedGameTypes)}");
+
         var ext = Path.GetExtension(request.FileName).ToLowerInvariant();
         List<int> appIds;
         try
@@ -46,24 +53,28 @@ public class BulkImportGamesHandler : IRequestHandler<BulkImportGamesCommand, Re
             using var scope = _scopeFactory.CreateScope();
             var gameService = scope.ServiceProvider.GetRequiredService<IGameService>();
             var created = 0;
+            var updated = 0;
             var enriched = 0;
             var failed = 0;
 
             foreach (var appId in appIds)
             {
-                var createResult = await gameService.CreateGameAsync(
-                    new CreateGameCommand(appId, null, "Sourcing", null, null), CancellationToken.None);
+                var upsertResult = await gameService.UpsertGameAsync(
+                    new CreateGameCommand(appId, null, gameType, null, null), CancellationToken.None);
 
-                if (!createResult.IsSuccess)
+                if (!upsertResult.IsSuccess)
                 {
-                    _logger.LogWarning("Bulk import: skipped AppId {AppId} — {Error}", appId, createResult.ErrorMessage);
+                    _logger.LogWarning("Bulk import: skipped AppId {AppId} — {Error}", appId, upsertResult.ErrorMessage);
                     failed++;
                     continue;
                 }
 
-                created++;
+                if (upsertResult.Data!.WasCreated)
+                    created++;
+                else
+                    updated++;
 
-                var enrichResult = await gameService.EnrichGameFromSteamAsync(createResult.Data!.Id, CancellationToken.None);
+                var enrichResult = await gameService.EnrichGameFromSteamAsync(upsertResult.Data.Game.Id, CancellationToken.None);
                 if (enrichResult.IsSuccess)
                     enriched++;
                 else
@@ -71,8 +82,8 @@ public class BulkImportGamesHandler : IRequestHandler<BulkImportGamesCommand, Re
             }
 
             _logger.LogInformation(
-                "Bulk import: completed — {Created} created, {Enriched} enriched, {Failed} failed out of {Total}",
-                created, enriched, failed, appIds.Count);
+                "Bulk import: completed — {Created} created, {Updated} updated, {Enriched} enriched, {Failed} failed out of {Total}",
+                created, updated, enriched, failed, appIds.Count);
         });
 
         return Result<BulkImportResult>.Success(new BulkImportResult(appIds.Count));

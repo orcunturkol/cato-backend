@@ -87,6 +87,10 @@ public class SteamReviewItem
 
 public class SteamReviewAuthor
 {
+    /// <summary>SteamID64 of the review author, serialized by Steam as a string.</summary>
+    [JsonPropertyName("steamid")]
+    public string? SteamId { get; set; }
+
     [JsonPropertyName("playtime_forever")]
     public int PlaytimeForever { get; set; }
 

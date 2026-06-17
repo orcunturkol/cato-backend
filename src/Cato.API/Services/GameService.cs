@@ -86,6 +86,36 @@ public class GameService : IGameService
         return Result<GameDto>.Success(game.ToDto());
     }
 
+    public async Task<Result<UpsertGameResult>> UpsertGameAsync(CreateGameCommand request, CancellationToken ct = default)
+    {
+        var game = await _db.Games
+            .Include(g => g.Developer)
+            .Include(g => g.Publisher)
+            .Include(g => g.Genres)
+            .Include(g => g.Tags)
+            .FirstOrDefaultAsync(g => g.AppId == request.AppId, ct);
+
+        // New appid — delegate to the create path.
+        if (game is null)
+        {
+            var createResult = await CreateGameAsync(request, ct);
+            return createResult.IsSuccess
+                ? Result<UpsertGameResult>.Success(new UpsertGameResult(createResult.Data!, WasCreated: true))
+                : Result<UpsertGameResult>.Failure(createResult.ErrorMessage!);
+        }
+
+        // Existing appid — update GameType only when it actually changes.
+        if (request.GameType is not null && request.GameType != game.GameType)
+        {
+            var oldType = game.GameType;
+            game.GameType = request.GameType;
+            await _db.SaveChangesAsync(ct);
+            await _redisSync.UpdateAsync(game.AppId, oldType, game.GameType, game.Name, ct);
+        }
+
+        return Result<UpsertGameResult>.Success(new UpsertGameResult(game.ToDto(), WasCreated: false));
+    }
+
     public async Task<PagedResult<GameDto>> ListGamesAsync(ListGamesQuery request, CancellationToken ct = default)
     {
         var query = _db.Games

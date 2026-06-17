@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Cato.Infrastructure.Steam.Models;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Cato.Infrastructure.Steam;
 
@@ -9,21 +10,32 @@ public class SteamApiService : ISteamApiService
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<SteamApiService> _logger;
+    private readonly SteamWebApiSettings _webApiSettings;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
     };
 
-    public SteamApiService(HttpClient httpClient, ILogger<SteamApiService> logger)
+    public SteamApiService(
+        HttpClient httpClient,
+        ILogger<SteamApiService> logger,
+        IOptions<SteamWebApiSettings> webApiSettings)
     {
         _httpClient = httpClient;
         _logger = logger;
+        _webApiSettings = webApiSettings.Value;
     }
 
     private static readonly SemaphoreSlim RateLimiter = new(1, 1);
     private const int DelayBetweenRequestsMs = 1500;
     private const int MaxRetries = 3;
+
+    // Keyed Web API (api.steampowered.com) is throttled independently from the
+    // store endpoints, so it gets its own limiter. ~1100ms ≈ 0.9 req/s, well
+    // inside the 100k calls/day key budget.
+    private static readonly SemaphoreSlim WebApiRateLimiter = new(1, 1);
+    private const int WebApiDelayBetweenRequestsMs = 1100;
 
     public async Task<SteamAppData?> GetAppDetailsAsync(int appId, CancellationToken ct = default)
     {
@@ -211,6 +223,70 @@ public class SteamApiService : ISteamApiService
                 {
                     await Task.Delay(DelayBetweenRequestsMs, CancellationToken.None);
                     RateLimiter.Release();
+                }, CancellationToken.None);
+            }
+        }
+
+        return null;
+    }
+
+    public async Task<SteamPlayerSummariesResponse?> GetPlayerSummariesAsync(
+        IReadOnlyList<long> steamIds, CancellationToken ct = default)
+    {
+        if (steamIds.Count == 0)
+            return new SteamPlayerSummariesResponse();
+        if (steamIds.Count > 100)
+            throw new ArgumentException("GetPlayerSummaries accepts at most 100 steamids per call; chunk before calling.", nameof(steamIds));
+
+        // The URL embeds the API key — never log it; log only counts and status codes.
+        var url = "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/" +
+                  $"?key={_webApiSettings.ApiKey}&steamids={string.Join(",", steamIds)}";
+
+        for (var attempt = 0; attempt <= MaxRetries; attempt++)
+        {
+            await WebApiRateLimiter.WaitAsync(ct);
+            try
+            {
+                var response = await _httpClient.GetAsync(url, ct);
+
+                if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                {
+                    if (attempt < MaxRetries)
+                    {
+                        var backoff = (attempt + 1) * 5000;
+                        await Task.Delay(backoff, ct);
+                        continue;
+                    }
+                    _logger.LogWarning("GetPlayerSummaries rate-limited for {Count} ids after {Retries} retries", steamIds.Count, MaxRetries);
+                    return null;
+                }
+
+                if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
+                {
+                    _logger.LogError("GetPlayerSummaries returned {Status} — invalid or missing Steam Web API key", response.StatusCode);
+                    return null;
+                }
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("GetPlayerSummaries returned {Status} for {Count} ids", response.StatusCode, steamIds.Count);
+                    return null;
+                }
+
+                var content = await response.Content.ReadAsStringAsync(ct);
+                return JsonSerializer.Deserialize<SteamPlayerSummariesResponse>(content, JsonOptions);
+            }
+            catch (HttpRequestException ex) when (attempt < MaxRetries)
+            {
+                _logger.LogWarning(ex, "HTTP error fetching player summaries for {Count} ids, attempt {Attempt}", steamIds.Count, attempt + 1);
+                continue;
+            }
+            finally
+            {
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(WebApiDelayBetweenRequestsMs, CancellationToken.None);
+                    WebApiRateLimiter.Release();
                 }, CancellationToken.None);
             }
         }
