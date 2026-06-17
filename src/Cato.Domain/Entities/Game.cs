@@ -56,4 +56,5 @@ public class Game
     public ICollection<DemoDownload> DemoDownloads { get; set; } = [];
     public ICollection<ReviewSummarySnapshot> ReviewSummarySnapshots { get; set; } = [];
     public ICollection<SteamReview> SteamReviews { get; set; } = [];
+    public ICollection<GameAchievementSchema> AchievementSchemas { get; set; } = [];
 }

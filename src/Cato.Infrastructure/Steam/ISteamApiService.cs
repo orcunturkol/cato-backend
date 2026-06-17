@@ -31,4 +31,25 @@ public interface ISteamApiService
     /// </summary>
     Task<SteamPlayerSummariesResponse?> GetPlayerSummariesAsync(
         IReadOnlyList<long> steamIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// Fetches the achievement schema (catalog) for a game
+    /// (ISteamUserStats/GetSchemaForGame/v2, requires a Web API key).
+    /// Returns null on transient/auth failure. A non-null response with an
+    /// empty achievements list means the game defines no achievements — a
+    /// valid result, not a failure.
+    /// </summary>
+    Task<SteamSchemaForGameResponse?> GetSchemaForGameAsync(int appId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Fetches one player's achievements for one game
+    /// (ISteamUserStats/GetPlayerAchievements/v1, requires a Web API key).
+    /// Returns null ONLY on transient/auth HTTP failure. On any 2xx the
+    /// deserialized response is returned — callers must inspect
+    /// PlayerStats.Success: false is a per-pair business outcome (private
+    /// profile, no stats, not owned) described by PlayerStats.Error, not a
+    /// transient failure.
+    /// </summary>
+    Task<SteamPlayerAchievementsResponse?> GetPlayerAchievementsAsync(
+        long steamId64, int appId, CancellationToken ct = default);
 }
