@@ -129,8 +129,9 @@ services:
     restart: unless-stopped
     environment:
       ACCEPT_EULA: "Y"
-      # Optional: set a hashed admin password (generate via `docker run --rm datalust/seq config hash`).
-      # SEQ_FIRSTRUN_ADMINPASSWORDHASH: "${SEQ_ADMIN_PASSWORD_HASH:-}"
+      # First-run admin password (required by Seq on initial store creation).
+      # Set SEQ_ADMIN_PASSWORD in .env. Username is "admin".
+      SEQ_FIRSTRUN_ADMINPASSWORD: "${SEQ_ADMIN_PASSWORD:?set SEQ_ADMIN_PASSWORD in .env}"
     ports:
       - "127.0.0.1:5341:80"
       - "${TAILSCALE_IP}:5341:80"
