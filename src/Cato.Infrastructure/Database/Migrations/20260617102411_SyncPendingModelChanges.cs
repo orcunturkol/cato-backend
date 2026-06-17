@@ -11,11 +11,10 @@ namespace Cato.Infrastructure.Database.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "user_profile");
-
-            migrationBuilder.DropTable(
-                name: "users");
+            // Use IF EXISTS so the migration is safe to apply even when the
+            // tables were already removed manually (Postgres 42P01 otherwise).
+            migrationBuilder.Sql("DROP TABLE IF EXISTS user_profile CASCADE;");
+            migrationBuilder.Sql("DROP TABLE IF EXISTS users CASCADE;");
         }
 
         /// <inheritdoc />
