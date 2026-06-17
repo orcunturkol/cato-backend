@@ -38,6 +38,7 @@ public class CatoDbContext : DbContext
     public DbSet<GameAchievementSchema> GameAchievementSchemas => Set<GameAchievementSchema>();
     public DbSet<SteamPlayerAchievement> SteamPlayerAchievements => Set<SteamPlayerAchievement>();
     public DbSet<SteamPlayerAchievementFetch> SteamPlayerAchievementFetches => Set<SteamPlayerAchievementFetch>();
+    public DbSet<JobRun> JobRuns => Set<JobRun>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -386,6 +387,26 @@ public class CatoDbContext : DbContext
             entity.HasIndex(e => e.Source).HasDatabaseName("idx_ingestion_log_source");
             entity.HasIndex(e => e.StartTime).HasDatabaseName("idx_ingestion_log_start_time");
             entity.HasIndex(e => e.Status).HasDatabaseName("idx_ingestion_log_status");
+        });
+
+        // ── JobRun ──
+        modelBuilder.Entity<JobRun>(entity =>
+        {
+            entity.ToTable("job_run");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.JobName).HasMaxLength(150).IsRequired();
+            entity.Property(e => e.Producer).HasMaxLength(50).IsRequired().HasDefaultValue(JobRunProducer.CatoBackend);
+            entity.Property(e => e.Status).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.MetricsJson).HasColumnType("jsonb");
+            entity.Property(e => e.ErrorMessage).HasColumnType("text");
+
+            entity.HasIndex(e => e.JobName).HasDatabaseName("idx_job_run_job_name");
+            entity.HasIndex(e => e.StartTime).HasDatabaseName("idx_job_run_start_time");
+            entity.HasIndex(e => e.Status).HasDatabaseName("idx_job_run_status");
+            entity.HasIndex(e => new { e.JobName, e.StartTime })
+                .IsDescending(false, true)
+                .HasDatabaseName("idx_job_run_job_started");
         });
 
         // ── MarketingTarget ──
@@ -924,6 +945,13 @@ public class CatoDbContext : DbContext
         }
 
         foreach (var entry in ChangeTracker.Entries<IngestionLog>())
+        {
+            if (entry.State == EntityState.Added)
+                entry.Entity.CreatedAt = now;
+        }
+
+        // JobRun — write-once-then-update run record (CreatedAt set on insert only)
+        foreach (var entry in ChangeTracker.Entries<JobRun>())
         {
             if (entry.State == EntityState.Added)
                 entry.Entity.CreatedAt = now;
