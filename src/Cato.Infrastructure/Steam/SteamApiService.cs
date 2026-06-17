@@ -263,7 +263,11 @@ public class SteamApiService : ISteamApiService
 
                 if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
                 {
-                    _logger.LogError("GetPlayerSummaries returned {Status} — invalid or missing Steam Web API key", response.StatusCode);
+                    var forbiddenBody = await response.Content.ReadAsStringAsync(ct);
+                    if (LooksLikeInvalidKey(forbiddenBody))
+                        _logger.LogError("GetPlayerSummaries returned {Status} — invalid or missing Steam Web API key", response.StatusCode);
+                    else
+                        _logger.LogWarning("GetPlayerSummaries returned {Status} for {Count} ids", response.StatusCode, steamIds.Count);
                     return null;
                 }
 
@@ -322,7 +326,11 @@ public class SteamApiService : ISteamApiService
 
                 if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
                 {
-                    _logger.LogError("GetSchemaForGame returned {Status} — invalid or missing Steam Web API key", response.StatusCode);
+                    var forbiddenBody = await response.Content.ReadAsStringAsync(ct);
+                    if (LooksLikeInvalidKey(forbiddenBody))
+                        _logger.LogError("GetSchemaForGame returned {Status} — invalid or missing Steam Web API key", response.StatusCode);
+                    else
+                        _logger.LogWarning("GetSchemaForGame returned {Status} for AppId {AppId} (app likely restricted / no public schema)", response.StatusCode, appId);
                     return null;
                 }
 
@@ -381,8 +389,22 @@ public class SteamApiService : ISteamApiService
 
                 if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
                 {
-                    _logger.LogError("GetPlayerAchievements returned {Status} — invalid or missing Steam Web API key", response.StatusCode);
-                    return null;
+                    var forbiddenBody = await response.Content.ReadAsStringAsync(ct);
+                    if (LooksLikeInvalidKey(forbiddenBody))
+                    {
+                        _logger.LogError("GetPlayerAchievements returned {Status} — invalid or missing Steam Web API key", response.StatusCode);
+                        return null;
+                    }
+
+                    // A 403 with a valid key means the reviewer's profile is
+                    // private/friends-only. Surface it as a per-pair business
+                    // outcome so the watcher classifies it Private and applies the
+                    // long back-off, instead of treating it as a transient miss and
+                    // retrying the same private profile every cycle.
+                    return new SteamPlayerAchievementsResponse
+                    {
+                        PlayerStats = new SteamPlayerStats { Success = false, Error = "Profile is not public" },
+                    };
                 }
 
                 // Private profiles surface as 400/500 with a body describing the
@@ -427,4 +449,15 @@ public class SteamApiService : ISteamApiService
 
         return null;
     }
+
+    /// <summary>
+    /// Distinguishes a genuine bad/missing key from an ordinary permission 403.
+    /// Steam answers an invalid/missing key with an HTML page ("Access is denied …
+    /// please verify your <c>key=</c> parameter"); a 401/403 lacking that signature
+    /// on a per-user endpoint means the data is private, not that the key is bad.
+    /// </summary>
+    private static bool LooksLikeInvalidKey(string? body) =>
+        !string.IsNullOrEmpty(body)
+        && (body.Contains("Access is denied", StringComparison.OrdinalIgnoreCase)
+            || body.Contains("verify your", StringComparison.OrdinalIgnoreCase));
 }
