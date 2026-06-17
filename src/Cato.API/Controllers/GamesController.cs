@@ -100,13 +100,13 @@ public class GamesController : ControllerBase
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(BulkImportResult), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IResult> BulkImportGames(IFormFile file, CancellationToken ct)
+    public async Task<IResult> BulkImportGames(IFormFile file, [FromForm] string? gameType, CancellationToken ct)
     {
         if (file is null || file.Length == 0)
             return Results.BadRequest("File is required.");
 
         await using var stream = file.OpenReadStream();
-        var result = await _mediator.Send(new BulkImportGamesCommand(file.FileName, stream), ct);
+        var result = await _mediator.Send(new BulkImportGamesCommand(file.FileName, stream, gameType), ct);
         return result.IsSuccess
             ? Results.Accepted(null, result.Data)
             : Results.BadRequest(result.ErrorMessage);

@@ -26,11 +26,6 @@ builder.Services.AddDbContext<CatoDbContext>(options =>
 // ── MediatR ──
 builder.Services.AddMediatR(cfg =>
     cfg.RegisterServicesFromAssembly(typeof(Program).Assembly));
-    
-// ── User Handlers ──
-builder.Services.AddScoped<Cato.API.Services.Handlers.Users.CreateUserCommandHandler>();
-builder.Services.AddScoped<Cato.API.Services.Handlers.Users.GetUserQueryHandler>();
-builder.Services.AddScoped<Cato.API.Services.Handlers.Users.ListUsersQueryHandler>();
 
 // ── FluentValidation ──
 builder.Services.AddValidatorsFromAssembly(typeof(Program).Assembly);

@@ -21,8 +21,6 @@ public class CatoDbContext : DbContext
     public DbSet<PriceSnapshot> PriceSnapshots => Set<PriceSnapshot>();
     public DbSet<AppKeyValueSnapshot> AppKeyValueSnapshots => Set<AppKeyValueSnapshot>();
     public DbSet<AppChangeRecord> AppChangeRecords => Set<AppChangeRecord>();
-    public DbSet<User> Users => Set<User>();
-    public DbSet<UserProfile> UserProfiles => Set<UserProfile>();
     public DbSet<MarketingTarget> MarketingTargets => Set<MarketingTarget>();
     public DbSet<MarketingAction> MarketingActions => Set<MarketingAction>();
     public DbSet<GameAction> GameActions => Set<GameAction>();
@@ -385,31 +383,6 @@ public class CatoDbContext : DbContext
             entity.HasIndex(e => e.Source).HasDatabaseName("idx_ingestion_log_source");
             entity.HasIndex(e => e.StartTime).HasDatabaseName("idx_ingestion_log_start_time");
             entity.HasIndex(e => e.Status).HasDatabaseName("idx_ingestion_log_status");
-        });
-
-        // ── User ──
-        modelBuilder.Entity<User>(entity =>
-        {
-            entity.ToTable("users");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Username).HasMaxLength(100).IsRequired();
-            entity.Property(e => e.Email).HasMaxLength(255).IsRequired();
-            entity.Property(e => e.FirstName).HasMaxLength(100).IsRequired();
-            entity.Property(e => e.LastName).HasMaxLength(100).IsRequired();
-            entity.HasIndex(e => e.Email).IsUnique();
-        });
-
-        // ── UserProfile ──
-        modelBuilder.Entity<UserProfile>(entity =>
-        {
-            entity.ToTable("user_profile");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Bio).HasColumnType("text");
-            entity.Property(e => e.AvatarUrl).HasColumnType("text");
-            entity.HasOne(e => e.User)
-                .WithMany(u => u.Profiles)
-                .HasForeignKey(e => e.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // ── MarketingTarget ──
@@ -888,32 +861,6 @@ public class CatoDbContext : DbContext
         {
             if (entry.State == EntityState.Added)
                 entry.Entity.CreatedAt = now;
-        }
-
-        foreach (var entry in ChangeTracker.Entries<User>())
-        {
-            if (entry.State == EntityState.Added)
-            {
-                entry.Entity.CreatedAt = now;
-                entry.Entity.UpdatedAt = now;
-            }
-            else if (entry.State == EntityState.Modified)
-            {
-                entry.Entity.UpdatedAt = now;
-            }
-        }
-
-        foreach (var entry in ChangeTracker.Entries<UserProfile>())
-        {
-            if (entry.State == EntityState.Added)
-            {
-                entry.Entity.CreatedAt = now;
-                entry.Entity.UpdatedAt = now;
-            }
-            else if (entry.State == EntityState.Modified)
-            {
-                entry.Entity.UpdatedAt = now;
-            }
         }
 
         foreach (var entry in ChangeTracker.Entries<MarketingTarget>())
