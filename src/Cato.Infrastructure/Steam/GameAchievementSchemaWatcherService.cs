@@ -1,5 +1,6 @@
 using Cato.Domain.Entities;
 using Cato.Infrastructure.Database;
+using Cato.Infrastructure.Jobs;
 using Cato.Infrastructure.Steam.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -78,7 +79,11 @@ public class GameAchievementSchemaWatcherService : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CatoDbContext>();
         var steamApi = scope.ServiceProvider.GetRequiredService<ISteamApiService>();
+        var tracker = scope.ServiceProvider.GetRequiredService<IJobRunTracker>();
 
+        await using var job = await tracker.StartAsync("GameAchievementSchemaWatcher", ct: ct);
+        try
+        {
         var games = await db.Games
             .Where(g => g.GameType == "Sourcing" || g.GameType == "Owned")
             .Select(g => new { g.Id, g.AppId })
@@ -115,9 +120,22 @@ public class GameAchievementSchemaWatcherService : BackgroundService
             updated += gameUpdated;
         }
 
+        job.Set("games", games.Count);
+        job.Set("withAchievements", withAchievements);
+        job.Set("zeroAchievement", zeroAchievement);
+        job.Set("added", added);
+        job.Set("updated", updated);
+        job.Set("skipped", skipped);
+
         _logger.LogInformation(
             "Achievement schema cycle complete: games={Games} withAchievements={WithAchievements} zeroAchievement={ZeroAchievement} added={Added} updated={Updated} skipped={Skipped}",
             games.Count, withAchievements, zeroAchievement, added, updated, skipped);
+        }
+        catch (Exception ex)
+        {
+            job.Fail(ex.Message);
+            throw;
+        }
     }
 
     private static async Task<(int Added, int Updated)> UpsertSchemaAsync(

@@ -1,5 +1,6 @@
 using Cato.Domain.Entities;
 using Cato.Infrastructure.Database;
+using Cato.Infrastructure.Jobs;
 using Cato.Infrastructure.Redis;
 using Cato.Infrastructure.Steam.Models;
 using Microsoft.EntityFrameworkCore;
@@ -81,10 +82,15 @@ public class SteamPlayerProfileWatcherService : BackgroundService
         var db = scope.ServiceProvider.GetRequiredService<CatoDbContext>();
         var steamApi = scope.ServiceProvider.GetRequiredService<ISteamApiService>();
         var rotation = scope.ServiceProvider.GetRequiredService<ISteamIdRotationService>();
+        var tracker = scope.ServiceProvider.GetRequiredService<IJobRunTracker>();
 
+        await using var job = await tracker.StartAsync("SteamPlayerProfileWatcher", ct: ct);
+        try
+        {
         var ids = await rotation.FetchBatchAsync(_settings.BatchSize, ct);
         if (ids.Count == 0)
         {
+            job.Set("requested", 0);
             _logger.LogInformation("Player profile cycle: rotation is empty, nothing to fetch");
             return;
         }
@@ -139,9 +145,24 @@ public class SteamPlayerProfileWatcherService : BackgroundService
             }
         }
 
+        job.Set("requested", ids.Count);
+        job.Set("fetched", fetched);
+        job.Set("added", added);
+        job.Set("updated", updated);
+        job.Set("failed", failed);
+        job.Set("quarantined", quarantined);
+        job.Set("skippedChunks", skippedChunks);
+        if (failed > 0 || skippedChunks > 0) job.MarkPartialSuccess();
+
         _logger.LogInformation(
             "Player profile cycle complete: requested={Requested} fetched={Fetched} added={Added} updated={Updated} failed={Failed} quarantined={Quarantined} skippedChunks={SkippedChunks}",
             ids.Count, fetched, added, updated, failed, quarantined, skippedChunks);
+        }
+        catch (Exception ex)
+        {
+            job.Fail(ex.Message);
+            throw;
+        }
     }
 
     private static async Task<(int Added, int Updated)> UpsertProfilesAsync(

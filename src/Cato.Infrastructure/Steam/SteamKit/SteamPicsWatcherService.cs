@@ -1,5 +1,6 @@
 using Cato.Domain.Entities;
 using Cato.Infrastructure.Database;
+using Cato.Infrastructure.Jobs;
 using Cato.Infrastructure.Steam.Filtering;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,6 +21,7 @@ public sealed class SteamPicsWatcherService : BackgroundService
     private readonly ILogger<SteamPicsWatcherService> _logger;
     private readonly SteamSettings _settings;
     private readonly IGameQualityFilter _filter;
+    private readonly IJobRunTracker _jobRunTracker;
 
     // File to persist the last seen PICS change number across restarts
     private readonly string _changeNumberFile;
@@ -29,13 +31,15 @@ public sealed class SteamPicsWatcherService : BackgroundService
         IServiceScopeFactory scopeFactory,
         ILogger<SteamPicsWatcherService> logger,
         IOptions<SteamSettings> settings,
-        IGameQualityFilter filter)
+        IGameQualityFilter filter,
+        IJobRunTracker jobRunTracker)
     {
         _steamKit = steamKit;
         _scopeFactory = scopeFactory;
         _logger = logger;
         _settings = settings.Value;
         _filter = filter;
+        _jobRunTracker = jobRunTracker;
         _changeNumberFile = Path.Combine(AppContext.BaseDirectory, "pics_change_number.txt");
     }
 
@@ -77,12 +81,17 @@ public sealed class SteamPicsWatcherService : BackgroundService
 
     private async Task PollForNewGamesAsync(CancellationToken ct)
     {
+        await using var job = await _jobRunTracker.StartAsync("SteamPicsWatcher", ct: ct);
+        try
+        {
         var lastChangeNumber = LoadLastChangeNumber();
 
         var (changedAppIds, latestChangeNumber) = await _steamKit.GetChangedAppIdsSinceAsync(lastChangeNumber, ct);
 
         if (changedAppIds.Count == 0)
         {
+            job.Set("changedAppIds", 0);
+            job.Set("discovered", 0);
             _logger.LogDebug("SteamPicsWatcher: No changes since change #{ChangeNumber}", lastChangeNumber);
             SaveLastChangeNumber(latestChangeNumber);
             return;
@@ -190,8 +199,17 @@ public sealed class SteamPicsWatcherService : BackgroundService
 
         SaveLastChangeNumber(latestChangeNumber);
 
+        job.Set("changedAppIds", changedAppIds.Count);
+        job.Set("discovered", discovered);
+
         _logger.LogInformation("SteamPicsWatcher: Poll complete — {Discovered} new games discovered (change #{ChangeNumber})",
             discovered, latestChangeNumber);
+        }
+        catch (Exception ex)
+        {
+            job.Fail(ex.Message);
+            throw;
+        }
     }
 
     private async Task ApplyPostEnrichmentFilterAsync(CatoDbContext db, Guid gameId, CancellationToken ct)

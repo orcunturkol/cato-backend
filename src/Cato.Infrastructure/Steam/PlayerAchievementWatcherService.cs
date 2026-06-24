@@ -1,5 +1,6 @@
 using Cato.Domain.Entities;
 using Cato.Infrastructure.Database;
+using Cato.Infrastructure.Jobs;
 using Cato.Infrastructure.Steam.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -84,13 +85,18 @@ public class PlayerAchievementWatcherService : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CatoDbContext>();
         var steamApi = scope.ServiceProvider.GetRequiredService<ISteamApiService>();
+        var tracker = scope.ServiceProvider.GetRequiredService<IJobRunTracker>();
 
+        await using var job = await tracker.StartAsync("PlayerAchievementWatcher", ct: ct);
+        try
+        {
         var now = DateTime.UtcNow;
         var refreshCutoff = now.AddDays(-_settings.RefreshAfterDays);
 
         var pairs = await DequeuePairsAsync(db, now, refreshCutoff, ct);
         if (pairs.Count == 0)
         {
+            job.Set("pairs", 0);
             _logger.LogInformation("Player achievement cycle: queue is empty, nothing to fetch");
             return;
         }
@@ -162,9 +168,25 @@ public class PlayerAchievementWatcherService : BackgroundService
             await db.SaveChangesAsync(ct);
         }
 
+        job.Set("pairs", pairs.Count);
+        job.Set("ok", ok);
+        job.Set("private", priv);
+        job.Set("noStats", noStats);
+        job.Set("notOwned", notOwned);
+        job.Set("error", error);
+        job.Set("skipped", skipped);
+        job.Set("reviewsUpdated", reviewsUpdated);
+        if (error > 0) job.MarkPartialSuccess();
+
         _logger.LogInformation(
             "Player achievement cycle complete: pairs={Pairs} ok={Ok} private={Private} noStats={NoStats} notOwned={NotOwned} error={Error} skipped={Skipped} reviewsUpdated={ReviewsUpdated}",
             pairs.Count, ok, priv, noStats, notOwned, error, skipped, reviewsUpdated);
+        }
+        catch (Exception ex)
+        {
+            job.Fail(ex.Message);
+            throw;
+        }
     }
 
     private async Task<List<PairKey>> DequeuePairsAsync(

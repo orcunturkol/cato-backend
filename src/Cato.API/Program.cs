@@ -11,10 +11,11 @@ using StackExchange.Redis;
 var builder = WebApplication.CreateBuilder(args);
 
 // ── Serilog ──
+// Sinks + minimum levels are configured entirely via the "Serilog" section in
+// appsettings.json (ReadFrom.Configuration), so log hygiene and the Seq sink can
+// be tuned without code changes. Enrichers/console are declared there too.
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
-    .Enrich.FromLogContext()
-    .WriteTo.Console()
     .CreateLogger();
 
 builder.Host.UseSerilog();
@@ -81,6 +82,9 @@ builder.Services.AddHostedService<SteamPicsWatcherService>();
 builder.Services.AddHostedService<SteamPriceWatcherService>();
 builder.Services.AddHostedService<SteamPicsChangeHistoryService>();
 builder.Services.AddHostedService<SteamReviewWatcherService>();
+
+// ── Job-run tracking ──
+builder.Services.AddSingleton<Cato.Infrastructure.Jobs.IJobRunTracker, Cato.Infrastructure.Jobs.JobRunTracker>();
 
 // ── Application Services ──
 builder.Services.AddScoped<ISteamGameEnrichmentService, SteamGameEnrichmentService>();

@@ -70,6 +70,8 @@ services:
       Redis__ConnectionString: "redis:6379"
       Redis__InstanceName: "cato"
       SteamWebApi__ApiKey: "${STEAM_WEB_API_KEY:-}"
+      # Ship structured logs to the Seq container (overrides appsettings serverUrl; index 1 = the Seq sink)
+      Serilog__WriteTo__1__Args__serverUrl: "http://seq:80"
     volumes:
       - ${COLLECTOR_DATA_PATH:-/home/ofturkol/catoptric-data-collector/data}:/home/ofturkol/catoptric-data-collector/data:ro
     depends_on:
@@ -79,6 +81,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      seq:
+        condition: service_started
 
   # ── Redis ──
   redis:
@@ -115,6 +119,24 @@ services:
       interval: 10s
       timeout: 10s
       retries: 5
+
+  # ── Seq (structured log search + alerting) ──
+  # UI + ingestion on the same listener (container port 80). Browse logs and
+  # configure failure alerts (Signals -> webhook) at http://<host>:5341.
+  seq:
+    image: datalust/seq:latest
+    container_name: cato-seq
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      # First-run admin password (required by Seq on initial store creation).
+      # Set SEQ_ADMIN_PASSWORD in .env. Username is "admin".
+      SEQ_FIRSTRUN_ADMINPASSWORD: "${SEQ_ADMIN_PASSWORD:?set SEQ_ADMIN_PASSWORD in .env}"
+    ports:
+      - "127.0.0.1:5341:80"
+      - "${TAILSCALE_IP}:5341:80"
+    volumes:
+      - cato_seq:/data
 
   # ── pgAdmin ──
   pgadmin:
@@ -188,3 +210,4 @@ volumes:
   cato_caddy_data:
   cato_caddy_config:
   cato_pg_ssl:
+  cato_seq:

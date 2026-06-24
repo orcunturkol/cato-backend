@@ -4,6 +4,7 @@ using System.Text.Json;
 using Cato.Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Cato.Infrastructure.Database.Migrations
 {
     [DbContext(typeof(CatoDbContext))]
-    partial class CatoDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260617181827_AddJobRun")]
+    partial class AddJobRun
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1300,11 +1303,16 @@ namespace Cato.Infrastructure.Database.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ApiName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<int>("AppId")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("GameAchievementSchemaId")
-                        .HasColumnType("uuid");
 
                     b.Property<long>("SteamId64")
                         .HasColumnType("bigint");
@@ -1320,12 +1328,12 @@ namespace Cato.Infrastructure.Database.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("GameAchievementSchemaId")
-                        .HasDatabaseName("idx_steam_player_achievement_schema");
+                    b.HasIndex("SteamId64", "AppId")
+                        .HasDatabaseName("idx_steam_player_achievement_steam_app");
 
-                    b.HasIndex("SteamId64", "GameAchievementSchemaId")
+                    b.HasIndex("SteamId64", "AppId", "ApiName")
                         .IsUnique()
-                        .HasDatabaseName("unique_steam_player_achievement_player_schema");
+                        .HasDatabaseName("unique_steam_player_achievement_triplet");
 
                     b.ToTable("steam_player_achievement", (string)null);
                 });
@@ -2089,17 +2097,6 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.Navigation("Game");
                 });
 
-            modelBuilder.Entity("Cato.Domain.Entities.SteamPlayerAchievement", b =>
-                {
-                    b.HasOne("Cato.Domain.Entities.GameAchievementSchema", "GameAchievementSchema")
-                        .WithMany("PlayerAchievements")
-                        .HasForeignKey("GameAchievementSchemaId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("GameAchievementSchema");
-                });
-
             modelBuilder.Entity("Cato.Domain.Entities.SteamReview", b =>
                 {
                     b.HasOne("Cato.Domain.Entities.Game", "Game")
@@ -2217,11 +2214,6 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.Navigation("TrafficRecords");
 
                     b.Navigation("WishlistInsights");
-                });
-
-            modelBuilder.Entity("Cato.Domain.Entities.GameAchievementSchema", b =>
-                {
-                    b.Navigation("PlayerAchievements");
                 });
 
             modelBuilder.Entity("Cato.Domain.Entities.LegalEntity", b =>

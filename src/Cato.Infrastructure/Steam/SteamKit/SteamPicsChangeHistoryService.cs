@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Cato.Domain.Entities;
 using Cato.Infrastructure.Database;
+using Cato.Infrastructure.Jobs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -20,6 +21,7 @@ public sealed class SteamPicsChangeHistoryService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<SteamPicsChangeHistoryService> _logger;
     private readonly SteamSettings _settings;
+    private readonly IJobRunTracker _jobRunTracker;
 
     private readonly string _changeNumberFile;
 
@@ -27,12 +29,14 @@ public sealed class SteamPicsChangeHistoryService : BackgroundService
         ISteamKitService steamKit,
         IServiceScopeFactory scopeFactory,
         ILogger<SteamPicsChangeHistoryService> logger,
-        IOptions<SteamSettings> settings)
+        IOptions<SteamSettings> settings,
+        IJobRunTracker jobRunTracker)
     {
         _steamKit = steamKit;
         _scopeFactory = scopeFactory;
         _logger = logger;
         _settings = settings.Value;
+        _jobRunTracker = jobRunTracker;
         _changeNumberFile = Path.Combine(AppContext.BaseDirectory, "pics_history_change_number.txt");
     }
 
@@ -136,11 +140,17 @@ public sealed class SteamPicsChangeHistoryService : BackgroundService
 
     private async Task PollForChangesAsync(CancellationToken ct)
     {
+        await using var job = await _jobRunTracker.StartAsync("SteamPicsChangeHistory", ct: ct);
+        try
+        {
         var lastChangeNumber = LoadLastChangeNumber();
         var (changedAppIds, latestChangeNumber) = await _steamKit.GetChangedAppIdsSinceAsync(lastChangeNumber, ct);
 
         if (changedAppIds.Count == 0)
         {
+            job.Set("changedAppIds", 0);
+            job.Set("relevantAppIds", 0);
+            job.Set("changeRecords", 0);
             _logger.LogDebug("PicsChangeHistory: No changes since change #{ChangeNumber}", lastChangeNumber);
             SaveLastChangeNumber(latestChangeNumber);
             return;
@@ -166,6 +176,9 @@ public sealed class SteamPicsChangeHistoryService : BackgroundService
 
         if (relevantAppIds.Count == 0)
         {
+            job.Set("changedAppIds", changedAppIds.Count);
+            job.Set("relevantAppIds", 0);
+            job.Set("changeRecords", 0);
             _logger.LogDebug("PicsChangeHistory: {Total} apps changed but none are tracked", changedAppIds.Count);
             SaveLastChangeNumber(latestChangeNumber);
             return;
@@ -277,9 +290,20 @@ public sealed class SteamPicsChangeHistoryService : BackgroundService
         await db.SaveChangesAsync(ct);
         SaveLastChangeNumber(latestChangeNumber);
 
+        job.Set("changedAppIds", changedAppIds.Count);
+        job.Set("relevantAppIds", relevantAppIds.Count);
+        job.Set("appsProcessed", rawInfos.Count);
+        job.Set("changeRecords", totalChanges);
+
         _logger.LogInformation(
             "PicsChangeHistory: Poll complete — {Changes} change records from {Apps} apps (change #{ChangeNumber})",
             totalChanges, rawInfos.Count, latestChangeNumber);
+        }
+        catch (Exception ex)
+        {
+            job.Fail(ex.Message);
+            throw;
+        }
     }
 
     /// <summary>
