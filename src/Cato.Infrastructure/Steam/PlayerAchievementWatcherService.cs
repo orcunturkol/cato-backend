@@ -248,19 +248,28 @@ public class PlayerAchievementWatcherService : BackgroundService
         DateTime now,
         CancellationToken ct)
     {
-        var existing = await db.SteamPlayerAchievements
-            .Where(a => a.SteamId64 == steamId && a.AppId == appId)
-            .ToDictionaryAsync(a => a.ApiName, ct);
+        // Map this game's catalog ApiName -> schema Id; a player unlock can only be
+        // stored once its catalog row exists. Unlocks with no catalog match are
+        // skipped (they link on a later cycle once the schema watcher populates them).
+        var schemaMap = await db.GameAchievementSchemas
+            .Where(s => s.AppId == appId)
+            .ToDictionaryAsync(s => s.ApiName, s => s.Id, ct);
 
-        var keep = new HashSet<string>();
+        var existing = await db.SteamPlayerAchievements
+            .Where(a => a.SteamId64 == steamId && a.GameAchievementSchema.AppId == appId)
+            .ToDictionaryAsync(a => a.GameAchievementSchemaId, ct);
+
+        var keep = new HashSet<Guid>();
 
         foreach (var item in achieved)
         {
-            var apiName = item.ApiName!;
-            keep.Add(apiName);
+            if (!schemaMap.TryGetValue(item.ApiName!, out var schemaId))
+                continue;
+
+            keep.Add(schemaId);
 
             SteamPlayerAchievement entity;
-            if (existing.TryGetValue(apiName, out var found))
+            if (existing.TryGetValue(schemaId, out var found))
             {
                 entity = found;
             }
@@ -270,8 +279,7 @@ public class PlayerAchievementWatcherService : BackgroundService
                 {
                     Id = Guid.NewGuid(),
                     SteamId64 = steamId,
-                    AppId = appId,
-                    ApiName = apiName,
+                    GameAchievementSchemaId = schemaId,
                 }).Entity;
             }
 
@@ -282,9 +290,9 @@ public class PlayerAchievementWatcherService : BackgroundService
         }
 
         // Remove rows that are no longer achieved (rare — achievements aren't usually revoked).
-        foreach (var (apiName, entity) in existing)
+        foreach (var (schemaId, entity) in existing)
         {
-            if (!keep.Contains(apiName))
+            if (!keep.Contains(schemaId))
                 db.SteamPlayerAchievements.Remove(entity);
         }
 

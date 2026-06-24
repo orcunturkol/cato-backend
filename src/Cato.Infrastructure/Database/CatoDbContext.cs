@@ -717,16 +717,19 @@ public class CatoDbContext : DbContext
             entity.ToTable("steam_player_achievement");
             entity.HasKey(e => e.Id);
 
-            entity.Property(e => e.ApiName).HasMaxLength(255).IsRequired();
+            // FK to the game's achievement catalog (carries AppId/ApiName).
+            entity.HasOne(e => e.GameAchievementSchema)
+                .WithMany(s => s.PlayerAchievements)
+                .HasForeignKey(e => e.GameAchievementSchemaId)
+                .OnDelete(DeleteBehavior.Cascade);
 
-            // Supports the metric's range-count: WHERE SteamId64, AppId, UnlockTime <= ts
-            entity.HasIndex(e => new { e.SteamId64, e.AppId })
-                .HasDatabaseName("idx_steam_player_achievement_steam_app");
+            entity.HasIndex(e => e.GameAchievementSchemaId)
+                .HasDatabaseName("idx_steam_player_achievement_schema");
 
             // Idempotent upsert key.
-            entity.HasIndex(e => new { e.SteamId64, e.AppId, e.ApiName })
+            entity.HasIndex(e => new { e.SteamId64, e.GameAchievementSchemaId })
                 .IsUnique()
-                .HasDatabaseName("unique_steam_player_achievement_triplet");
+                .HasDatabaseName("unique_steam_player_achievement_player_schema");
         });
 
         // ── SteamPlayerAchievementFetch ────────────────────────────────

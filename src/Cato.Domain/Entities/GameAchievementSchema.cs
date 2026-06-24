@@ -32,4 +32,7 @@ public class GameAchievementSchema
     public DateTime UpdatedAt { get; set; }
 
     public Game Game { get; set; } = null!;
+
+    /// <summary>Player unlocks that reference this catalog achievement.</summary>
+    public ICollection<SteamPlayerAchievement> PlayerAchievements { get; set; } = [];
 }

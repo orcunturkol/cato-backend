@@ -3,19 +3,19 @@ namespace Cato.Domain.Entities;
 /// <summary>
 /// A single achievement a reviewer has UNLOCKED (achieved == 1 only), sourced
 /// from ISteamUserStats/GetPlayerAchievements/v1. The numerator data for the
-/// "achievements at review time" metric. Value-joined (no FK): SteamId64 ↔
-/// steam_review.AuthorSteamId, AppId ↔ main_game.AppId. Keyed by
-/// (SteamId64, AppId, ApiName); latest-only upsert.
+/// "achievements at review time" metric. Linked to the game's achievement
+/// catalog via <see cref="GameAchievementSchemaId"/> (FK to
+/// <see cref="GameAchievementSchema"/>) rather than duplicating AppId/ApiName.
+/// Keyed by (SteamId64, GameAchievementSchemaId); latest-only upsert.
 /// </summary>
 public class SteamPlayerAchievement
 {
     public Guid Id { get; set; }
 
     public long SteamId64 { get; set; }
-    public int AppId { get; set; }
 
-    /// <summary>Steam internal achievement key; matches GameAchievementSchema.ApiName.</summary>
-    public string ApiName { get; set; } = string.Empty;
+    /// <summary>FK to GameAchievementSchema.Id — the catalog row this unlock refers to.</summary>
+    public Guid GameAchievementSchemaId { get; set; }
 
     /// <summary>
     /// Unix seconds when unlocked. Can be 0 for very old unlocks predating
@@ -29,4 +29,6 @@ public class SteamPlayerAchievement
 
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+
+    public GameAchievementSchema GameAchievementSchema { get; set; } = null!;
 }
