@@ -77,7 +77,8 @@ public class IngestionDispatcher : IIngestionDispatcher
                 break;
 
             case "steam_special_events":
-                await _mediator.Send(new IngestSpecialEventsCommand(message.FilePath), ct);
+                await _mediator.Send(new IngestSpecialEventsCommand(
+                    message.Data ?? throw new InvalidOperationException("steam_special_events requires inline 'data'")), ct);
                 break;
 
             default:
