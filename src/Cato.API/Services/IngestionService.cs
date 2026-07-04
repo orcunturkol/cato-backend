@@ -776,20 +776,16 @@ public class IngestionService : IIngestionService
             Id = Guid.NewGuid(),
             Source = "steam_special_events",
             StartTime = DateTime.UtcNow,
-            Status = "Running",
-            FilePath = request.FilePath
+            Status = "Running"
         };
         _db.IngestionLogs.Add(log);
         await _db.SaveChangesAsync(ct);
 
         try
         {
-            if (!File.Exists(request.FilePath))
-                throw new FileNotFoundException($"File not found: {request.FilePath}");
-
-            var json = await File.ReadAllTextAsync(request.FilePath, ct);
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
+            // Payload arrives inline in the message (a detached JsonElement clone,
+            // valid for the lifetime of the request); no file read needed.
+            var root = request.Data;
             var now = DateTime.UtcNow;
 
             // Payload fields are emitted with exclude_none, so every read is a TryGetProperty.

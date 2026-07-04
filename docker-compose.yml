@@ -76,7 +76,11 @@ services:
       # Ship structured logs to the Seq container (overrides appsettings serverUrl; index 1 = the Seq sink)
       Serilog__WriteTo__1__Args__serverUrl: "http://seq:80"
     volumes:
-      - ${COLLECTOR_DATA_PATH:-/home/ofturkol/catoptric-data-collector/data}:/home/ofturkol/catoptric-data-collector/data:ro
+      # Mount the collector's data dir at the SAME absolute path inside the
+      # container, so the absolute file paths the collector puts in ingestion
+      # messages resolve here. Set COLLECTOR_DATA_PATH in .env to the collector's
+      # data dir on this host (e.g. /home/ubuntu/catoptric-data-collector/data).
+      - ${COLLECTOR_DATA_PATH:-/home/ofturkol/catoptric-data-collector/data}:${COLLECTOR_DATA_PATH:-/home/ofturkol/catoptric-data-collector/data}:ro
     depends_on:
       postgres:
         condition: service_healthy
