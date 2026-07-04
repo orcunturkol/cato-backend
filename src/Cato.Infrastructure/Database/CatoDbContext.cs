@@ -39,6 +39,8 @@ public class CatoDbContext : DbContext
     public DbSet<SteamPlayerAchievement> SteamPlayerAchievements => Set<SteamPlayerAchievement>();
     public DbSet<SteamPlayerAchievementFetch> SteamPlayerAchievementFetches => Set<SteamPlayerAchievementFetch>();
     public DbSet<JobRun> JobRuns => Set<JobRun>();
+    public DbSet<SteamSpecialEvent> SteamSpecialEvents => Set<SteamSpecialEvent>();
+    public DbSet<SteamSpecialEventGame> SteamSpecialEventGames => Set<SteamSpecialEventGame>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -263,6 +265,54 @@ public class CatoDbContext : DbContext
 
             entity.HasOne(e => e.Game)
                 .WithMany(g => g.SteamDbSnapshots)
+                .HasForeignKey(e => e.GameId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── SteamSpecialEvent ──
+        modelBuilder.Entity<SteamSpecialEvent>(entity =>
+        {
+            entity.ToTable("steam_special_event");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.AnnouncementGid).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.SaleVanityId).HasMaxLength(200);
+            entity.Property(e => e.EventUrl).HasMaxLength(1000).IsRequired();
+            entity.Property(e => e.Title).HasMaxLength(500);
+            entity.Property(e => e.Subtitle).HasMaxLength(1000);
+            entity.Property(e => e.HeaderImageUrl).HasMaxLength(1000);
+            entity.Property(e => e.LogoImageUrl).HasMaxLength(1000);
+            entity.Property(e => e.CapsuleImageUrl).HasMaxLength(1000);
+            entity.Property(e => e.BackgroundColor).HasMaxLength(50);
+            entity.Property(e => e.TabNames).HasColumnType("jsonb");
+
+            entity.HasIndex(e => e.AnnouncementGid)
+                .IsUnique()
+                .HasDatabaseName("unique_steam_special_event_gid");
+            entity.HasIndex(e => e.LastSeenAt).HasDatabaseName("idx_steam_special_event_last_seen");
+            entity.HasIndex(e => e.StartDate).HasDatabaseName("idx_steam_special_event_start");
+        });
+
+        // ── SteamSpecialEventGame ──
+        modelBuilder.Entity<SteamSpecialEventGame>(entity =>
+        {
+            entity.ToTable("steam_special_event_game");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.ItemType).HasMaxLength(50).IsRequired();
+
+            entity.HasIndex(e => new { e.SteamSpecialEventId, e.GameId })
+                .IsUnique()
+                .HasDatabaseName("unique_steam_special_event_game");
+            entity.HasIndex(e => e.LastSeenAt).HasDatabaseName("idx_steam_special_event_game_last_seen");
+
+            entity.HasOne(e => e.SteamSpecialEvent)
+                .WithMany(ev => ev.Games)
+                .HasForeignKey(e => e.SteamSpecialEventId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Game)
+                .WithMany(g => g.SteamSpecialEventGames)
                 .HasForeignKey(e => e.GameId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
@@ -889,6 +939,32 @@ public class CatoDbContext : DbContext
         {
             if (entry.State == EntityState.Added)
                 entry.Entity.CreatedAt = now;
+        }
+
+        foreach (var entry in ChangeTracker.Entries<SteamSpecialEvent>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<SteamSpecialEventGame>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
         }
 
         foreach (var entry in ChangeTracker.Entries<WishlistInsight>())
