@@ -59,6 +59,9 @@ services:
       dockerfile: Dockerfile
     container_name: cato-api
     ports:
+      # Loopback binding so host-side collectors (job-run reporter) can reach the
+      # API at localhost:5039, matching how postgres/redis/rabbitmq are exposed.
+      - "127.0.0.1:5039:8080"
       - "${TAILSCALE_IP}:5039:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
