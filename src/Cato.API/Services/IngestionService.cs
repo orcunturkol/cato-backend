@@ -870,6 +870,7 @@ public class IngestionService : IIngestionService
                         ev.LogoImageUrl = Str(eventEl, "logo_image_url");
                         ev.CapsuleImageUrl = Str(eventEl, "capsule_image_url");
                         ev.BackgroundColor = Str(eventEl, "background_color");
+                        ev.CarouselPage = Int(eventEl, "carousel_page");
                         ev.StartDate = Date(eventEl, "start_date");
                         ev.EndDate = Date(eventEl, "end_date");
                         if (tabNames is not null)

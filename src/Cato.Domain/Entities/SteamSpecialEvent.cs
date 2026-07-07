@@ -25,6 +25,7 @@ public class SteamSpecialEvent
     public string? BackgroundColor { get; set; }
     public DateTime? StartDate { get; set; }
     public DateTime? EndDate { get; set; }
+    public int? CarouselPage { get; set; }                      // 1-based page in the Special Events carousel
     public JsonDocument? TabNames { get; set; }                 // JSONB: hub tab ids/labels the event appeared under
     public DateTime FirstSeenAt { get; set; }
     public DateTime LastSeenAt { get; set; }
