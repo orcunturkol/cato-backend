@@ -11,10 +11,11 @@ using StackExchange.Redis;
 var builder = WebApplication.CreateBuilder(args);
 
 // ── Serilog ──
+// Sinks + minimum levels are configured entirely via the "Serilog" section in
+// appsettings.json (ReadFrom.Configuration), so log hygiene and the Seq sink can
+// be tuned without code changes. Enrichers/console are declared there too.
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
-    .Enrich.FromLogContext()
-    .WriteTo.Console()
     .CreateLogger();
 
 builder.Host.UseSerilog();
@@ -67,6 +68,11 @@ builder.Services.Configure<SteamWebApiSettings>(builder.Configuration.GetSection
 builder.Services.Configure<PlayerProfileSettings>(builder.Configuration.GetSection(PlayerProfileSettings.SectionName));
 builder.Services.AddHostedService<SteamPlayerProfileWatcherService>();
 
+// ── Steam achievements (schema + per-reviewer player achievements) ──
+builder.Services.Configure<AchievementSettings>(builder.Configuration.GetSection(AchievementSettings.SectionName));
+builder.Services.AddHostedService<GameAchievementSchemaWatcherService>();
+builder.Services.AddHostedService<PlayerAchievementWatcherService>();
+
 // ── SteamKit2 ──
 builder.Services.Configure<SteamSettings>(builder.Configuration.GetSection("SteamKit"));
 builder.Services.AddSingleton<SteamKitService>();
@@ -76,6 +82,9 @@ builder.Services.AddHostedService<SteamPicsWatcherService>();
 builder.Services.AddHostedService<SteamPriceWatcherService>();
 builder.Services.AddHostedService<SteamPicsChangeHistoryService>();
 builder.Services.AddHostedService<SteamReviewWatcherService>();
+
+// ── Job-run tracking ──
+builder.Services.AddSingleton<Cato.Infrastructure.Jobs.IJobRunTracker, Cato.Infrastructure.Jobs.JobRunTracker>();
 
 // ── Application Services ──
 builder.Services.AddScoped<ISteamGameEnrichmentService, SteamGameEnrichmentService>();

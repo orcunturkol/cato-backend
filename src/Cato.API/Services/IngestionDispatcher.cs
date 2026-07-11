@@ -33,28 +33,32 @@ public class IngestionDispatcher : IIngestionDispatcher
         _logger.LogInformation("Dispatching ingestion for source={Source}, appId={AppId}, file={FilePath}",
             message.Source, message.AppId, message.FilePath);
 
+        // All per-app sources require appId; steam_special_events sends null.
+        int RequireAppId() => message.AppId
+            ?? throw new InvalidOperationException($"Source '{message.Source}' requires an appId but none was provided");
+
         switch (message.Source.ToLowerInvariant())
         {
             case "steam_financial":
             {
                 await using var fs = File.OpenRead(message.FilePath);
-                await _mediator.Send(new IngestFinancialDataCommand(message.AppId, Path.GetFileName(message.FilePath), fs), ct);
+                await _mediator.Send(new IngestFinancialDataCommand(RequireAppId(), Path.GetFileName(message.FilePath), fs), ct);
                 break;
             }
             case "steamworks_wishlist":
             {
                 await using var fs = File.OpenRead(message.FilePath);
-                await _mediator.Send(new IngestWishlistDataCommand(message.AppId, Path.GetFileName(message.FilePath), fs), ct);
+                await _mediator.Send(new IngestWishlistDataCommand(RequireAppId(), Path.GetFileName(message.FilePath), fs), ct);
                 break;
             }
             case "gamalytic_peak_ccu":
             {
                 await using var fs = File.OpenRead(message.FilePath);
-                await _mediator.Send(new IngestPeakCcuCommand(message.AppId, Path.GetFileName(message.FilePath), fs), ct);
+                await _mediator.Send(new IngestPeakCcuCommand(RequireAppId(), Path.GetFileName(message.FilePath), fs), ct);
                 break;
             }
             case "steam_current_players":
-                await _mediator.Send(new IngestCcuCommand(message.AppId, message.FilePath), ct);
+                await _mediator.Send(new IngestCcuCommand(RequireAppId(), message.FilePath), ct);
                 break;
 
             case "steamworks_owned_game":
@@ -64,12 +68,17 @@ public class IngestionDispatcher : IIngestionDispatcher
                 break;
             }
             case "group_member_count":
-                await _mediator.Send(new IngestGroupMemberCountCommand(message.AppId, message.FilePath), ct);
+                await _mediator.Send(new IngestGroupMemberCountCommand(RequireAppId(), message.FilePath), ct);
                 break;
 
             case "steamdb_most_wished":
             case "steamdb_wishlist_activity":
-                await _mediator.Send(new IngestSteamDbSnapshotCommand(message.AppId, message.FilePath), ct);
+                await _mediator.Send(new IngestSteamDbSnapshotCommand(RequireAppId(), message.FilePath), ct);
+                break;
+
+            case "steam_special_events":
+                await _mediator.Send(new IngestSpecialEventsCommand(
+                    message.Data ?? throw new InvalidOperationException("steam_special_events requires inline 'data'")), ct);
                 break;
 
             default:

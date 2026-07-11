@@ -35,6 +35,12 @@ public class CatoDbContext : DbContext
     public DbSet<ReviewSummarySnapshot> ReviewSummarySnapshots => Set<ReviewSummarySnapshot>();
     public DbSet<SteamReview> SteamReviews => Set<SteamReview>();
     public DbSet<SteamPlayerProfile> SteamPlayerProfiles => Set<SteamPlayerProfile>();
+    public DbSet<GameAchievementSchema> GameAchievementSchemas => Set<GameAchievementSchema>();
+    public DbSet<SteamPlayerAchievement> SteamPlayerAchievements => Set<SteamPlayerAchievement>();
+    public DbSet<SteamPlayerAchievementFetch> SteamPlayerAchievementFetches => Set<SteamPlayerAchievementFetch>();
+    public DbSet<JobRun> JobRuns => Set<JobRun>();
+    public DbSet<SteamSpecialEvent> SteamSpecialEvents => Set<SteamSpecialEvent>();
+    public DbSet<SteamSpecialEventGame> SteamSpecialEventGames => Set<SteamSpecialEventGame>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -263,6 +269,54 @@ public class CatoDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        // ── SteamSpecialEvent ──
+        modelBuilder.Entity<SteamSpecialEvent>(entity =>
+        {
+            entity.ToTable("steam_special_event");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.AnnouncementGid).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.SaleVanityId).HasMaxLength(200);
+            entity.Property(e => e.EventUrl).HasMaxLength(1000).IsRequired();
+            entity.Property(e => e.Title).HasMaxLength(500);
+            entity.Property(e => e.Subtitle).HasMaxLength(1000);
+            entity.Property(e => e.HeaderImageUrl).HasMaxLength(1000);
+            entity.Property(e => e.LogoImageUrl).HasMaxLength(1000);
+            entity.Property(e => e.CapsuleImageUrl).HasMaxLength(1000);
+            entity.Property(e => e.BackgroundColor).HasMaxLength(50);
+            entity.Property(e => e.TabNames).HasColumnType("jsonb");
+
+            entity.HasIndex(e => e.AnnouncementGid)
+                .IsUnique()
+                .HasDatabaseName("unique_steam_special_event_gid");
+            entity.HasIndex(e => e.LastSeenAt).HasDatabaseName("idx_steam_special_event_last_seen");
+            entity.HasIndex(e => e.StartDate).HasDatabaseName("idx_steam_special_event_start");
+        });
+
+        // ── SteamSpecialEventGame ──
+        modelBuilder.Entity<SteamSpecialEventGame>(entity =>
+        {
+            entity.ToTable("steam_special_event_game");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.ItemType).HasMaxLength(50).IsRequired();
+
+            entity.HasIndex(e => new { e.SteamSpecialEventId, e.GameId })
+                .IsUnique()
+                .HasDatabaseName("unique_steam_special_event_game");
+            entity.HasIndex(e => e.LastSeenAt).HasDatabaseName("idx_steam_special_event_game_last_seen");
+
+            entity.HasOne(e => e.SteamSpecialEvent)
+                .WithMany(ev => ev.Games)
+                .HasForeignKey(e => e.SteamSpecialEventId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Game)
+                .WithMany(g => g.SteamSpecialEventGames)
+                .HasForeignKey(e => e.GameId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         // ── PriceSnapshot ──
         modelBuilder.Entity<PriceSnapshot>(entity =>
         {
@@ -383,6 +437,26 @@ public class CatoDbContext : DbContext
             entity.HasIndex(e => e.Source).HasDatabaseName("idx_ingestion_log_source");
             entity.HasIndex(e => e.StartTime).HasDatabaseName("idx_ingestion_log_start_time");
             entity.HasIndex(e => e.Status).HasDatabaseName("idx_ingestion_log_status");
+        });
+
+        // ── JobRun ──
+        modelBuilder.Entity<JobRun>(entity =>
+        {
+            entity.ToTable("job_run");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.JobName).HasMaxLength(150).IsRequired();
+            entity.Property(e => e.Producer).HasMaxLength(50).IsRequired().HasDefaultValue(JobRunProducer.CatoBackend);
+            entity.Property(e => e.Status).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.MetricsJson).HasColumnType("jsonb");
+            entity.Property(e => e.ErrorMessage).HasColumnType("text");
+
+            entity.HasIndex(e => e.JobName).HasDatabaseName("idx_job_run_job_name");
+            entity.HasIndex(e => e.StartTime).HasDatabaseName("idx_job_run_start_time");
+            entity.HasIndex(e => e.Status).HasDatabaseName("idx_job_run_status");
+            entity.HasIndex(e => new { e.JobName, e.StartTime })
+                .IsDescending(false, true)
+                .HasDatabaseName("idx_job_run_job_started");
         });
 
         // ── MarketingTarget ──
@@ -682,6 +756,72 @@ public class CatoDbContext : DbContext
             entity.HasIndex(e => e.LastFetchedAt)
                 .HasDatabaseName("idx_steam_player_profile_last_fetched");
         });
+
+        // ── GameAchievementSchema ──────────────────────────────────────
+        modelBuilder.Entity<GameAchievementSchema>(entity =>
+        {
+            entity.ToTable("game_achievement_schema");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.ApiName).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.DisplayName).HasMaxLength(500);
+            entity.Property(e => e.Description).HasColumnType("text");
+            entity.Property(e => e.IconUrl).HasColumnType("text");
+            entity.Property(e => e.IconGrayUrl).HasColumnType("text");
+
+            entity.HasIndex(e => new { e.GameId, e.ApiName })
+                .IsUnique()
+                .HasDatabaseName("unique_game_achievement_schema_game_api");
+
+            entity.HasIndex(e => e.AppId)
+                .HasDatabaseName("idx_game_achievement_schema_appid");
+
+            entity.HasOne(e => e.Game)
+                .WithMany(g => g.AchievementSchemas)
+                .HasForeignKey(e => e.GameId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── SteamPlayerAchievement ─────────────────────────────────────
+        modelBuilder.Entity<SteamPlayerAchievement>(entity =>
+        {
+            entity.ToTable("steam_player_achievement");
+            entity.HasKey(e => e.Id);
+
+            // FK to the game's achievement catalog (carries AppId/ApiName).
+            entity.HasOne(e => e.GameAchievementSchema)
+                .WithMany(s => s.PlayerAchievements)
+                .HasForeignKey(e => e.GameAchievementSchemaId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.GameAchievementSchemaId)
+                .HasDatabaseName("idx_steam_player_achievement_schema");
+
+            // Idempotent upsert key.
+            entity.HasIndex(e => new { e.SteamId64, e.GameAchievementSchemaId })
+                .IsUnique()
+                .HasDatabaseName("unique_steam_player_achievement_player_schema");
+        });
+
+        // ── SteamPlayerAchievementFetch ────────────────────────────────
+        modelBuilder.Entity<SteamPlayerAchievementFetch>(entity =>
+        {
+            entity.ToTable("steam_player_achievement_fetch");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.Status).HasMaxLength(20).IsRequired();
+
+            entity.HasIndex(e => new { e.SteamId64, e.AppId })
+                .IsUnique()
+                .HasDatabaseName("unique_steam_player_achievement_fetch_pair");
+
+            // Queue ordering: least-recently-fetched first.
+            entity.HasIndex(e => e.LastFetchedAt)
+                .HasDatabaseName("idx_steam_player_achievement_fetch_last");
+
+            entity.HasIndex(e => e.QuarantinedUntil)
+                .HasDatabaseName("idx_steam_player_achievement_fetch_quarantine");
+        });
     }
 
     public override int SaveChanges()
@@ -801,6 +941,32 @@ public class CatoDbContext : DbContext
                 entry.Entity.CreatedAt = now;
         }
 
+        foreach (var entry in ChangeTracker.Entries<SteamSpecialEvent>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<SteamSpecialEventGame>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
         foreach (var entry in ChangeTracker.Entries<WishlistInsight>())
         {
             if (entry.State == EntityState.Added)
@@ -858,6 +1024,13 @@ public class CatoDbContext : DbContext
         }
 
         foreach (var entry in ChangeTracker.Entries<IngestionLog>())
+        {
+            if (entry.State == EntityState.Added)
+                entry.Entity.CreatedAt = now;
+        }
+
+        // JobRun — write-once-then-update run record (CreatedAt set on insert only)
+        foreach (var entry in ChangeTracker.Entries<JobRun>())
         {
             if (entry.State == EntityState.Added)
                 entry.Entity.CreatedAt = now;
@@ -931,6 +1104,48 @@ public class CatoDbContext : DbContext
 
         // SteamPlayerProfile — mutable (latest-only upsert)
         foreach (var entry in ChangeTracker.Entries<SteamPlayerProfile>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        // GameAchievementSchema — mutable (latest-only upsert per (GameId, ApiName))
+        foreach (var entry in ChangeTracker.Entries<GameAchievementSchema>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        // SteamPlayerAchievement — mutable (latest-only upsert per (SteamId64, AppId, ApiName))
+        foreach (var entry in ChangeTracker.Entries<SteamPlayerAchievement>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        // SteamPlayerAchievementFetch — mutable (status row, refreshed each fetch)
+        foreach (var entry in ChangeTracker.Entries<SteamPlayerAchievementFetch>())
         {
             if (entry.State == EntityState.Added)
             {

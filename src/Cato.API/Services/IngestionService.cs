@@ -769,6 +769,210 @@ public class IngestionService : IIngestionService
         }
     }
 
+    public async Task<IngestionResult> IngestSpecialEventsAsync(IngestSpecialEventsCommand request, CancellationToken ct = default)
+    {
+        var log = new IngestionLog
+        {
+            Id = Guid.NewGuid(),
+            Source = "steam_special_events",
+            StartTime = DateTime.UtcNow,
+            Status = "Running"
+        };
+        _db.IngestionLogs.Add(log);
+        await _db.SaveChangesAsync(ct);
+
+        try
+        {
+            // Payload arrives inline in the message (a detached JsonElement clone,
+            // valid for the lifetime of the request); no file read needed.
+            var root = request.Data;
+            var now = DateTime.UtcNow;
+
+            // Payload fields are emitted with exclude_none, so every read is a TryGetProperty.
+            static string? Str(JsonElement el, string name) =>
+                el.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+            static DateTime? Date(JsonElement el, string name) =>
+                el.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String
+                    ? DateTime.SpecifyKind(v.GetDateTime().ToUniversalTime(), DateTimeKind.Utc)
+                    : null;
+            static int? Int(JsonElement el, string name) =>
+                el.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : null;
+
+            // Hub tab labels, joined to each event's hub_placements for the TabNames jsonb.
+            var hubTabLabels = new Dictionary<int, string?>();
+            if (root.TryGetProperty("hub_tabs", out var hubTabsEl) && hubTabsEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var tab in hubTabsEl.EnumerateArray())
+                {
+                    var id = Int(tab, "unique_id");
+                    if (id.HasValue)
+                        hubTabLabels[id.Value] = Str(tab, "label");
+                }
+            }
+
+            int processed = 0, inserted = 0, updated = 0, failed = 0;
+
+            if (root.TryGetProperty("events", out var eventsEl) && eventsEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var eventEl in eventsEl.EnumerateArray())
+                {
+                    var gid = Str(eventEl, "announcement_gid");
+                    try
+                    {
+                        if (string.IsNullOrEmpty(gid))
+                        {
+                            failed++;
+                            _logger.LogWarning("Special event without announcement_gid skipped (url={Url}, error={Error})",
+                                Str(eventEl, "event_url"), Str(eventEl, "scrape_error"));
+                            continue;
+                        }
+
+                        processed++;
+
+                        JsonDocument? tabNames = null;
+                        if (eventEl.TryGetProperty("hub_placements", out var placementsEl) &&
+                            placementsEl.ValueKind == JsonValueKind.Array && placementsEl.GetArrayLength() > 0)
+                        {
+                            var tabs = placementsEl.EnumerateArray()
+                                .Where(p => p.ValueKind == JsonValueKind.Number)
+                                .Select(p => p.GetInt32())
+                                .Select(id => new { unique_id = id, label = hubTabLabels.GetValueOrDefault(id) })
+                                .ToList();
+                            tabNames = JsonDocument.Parse(JsonSerializer.Serialize(tabs));
+                        }
+
+                        var ev = await _db.SteamSpecialEvents.FirstOrDefaultAsync(e => e.AnnouncementGid == gid, ct);
+                        if (ev is null)
+                        {
+                            ev = new SteamSpecialEvent
+                            {
+                                Id = Guid.NewGuid(),
+                                AnnouncementGid = gid,
+                                FirstSeenAt = now
+                            };
+                            _db.SteamSpecialEvents.Add(ev);
+                            inserted++;
+                        }
+                        else
+                        {
+                            updated++;
+                        }
+
+                        // Steam edits copy/dates after publishing, so mutable fields always refresh.
+                        ev.SaleVanityId = Str(eventEl, "sale_vanity_id");
+                        ev.EventUrl = Str(eventEl, "event_url") ?? ev.EventUrl;
+                        ev.ClanAccountId = Int(eventEl, "clan_accountid") ?? ev.ClanAccountId;
+                        ev.EventType = Int(eventEl, "event_type") ?? ev.EventType;
+                        ev.Title = Str(eventEl, "title");
+                        ev.Subtitle = Str(eventEl, "subtitle");
+                        ev.Description = Str(eventEl, "description");
+                        ev.HeaderImageUrl = Str(eventEl, "header_image_url");
+                        ev.LogoImageUrl = Str(eventEl, "logo_image_url");
+                        ev.CapsuleImageUrl = Str(eventEl, "capsule_image_url");
+                        ev.BackgroundColor = Str(eventEl, "background_color");
+                        ev.StartDate = Date(eventEl, "start_date");
+                        ev.EndDate = Date(eventEl, "end_date");
+                        if (tabNames is not null)
+                            ev.TabNames = tabNames;
+                        ev.LastSeenAt = now;
+
+                        await _db.SaveChangesAsync(ct);
+
+                        if (eventEl.TryGetProperty("games", out var gamesEl) && gamesEl.ValueKind == JsonValueKind.Array)
+                        {
+                            var seenAppIds = new HashSet<int>();
+                            foreach (var gameEl in gamesEl.EnumerateArray())
+                            {
+                                var appId = Int(gameEl, "app_id");
+                                var itemType = Str(gameEl, "item_type") ?? "game";
+                                // Only apps can become Game rows; bundles/packages stay in the raw file.
+                                if (!appId.HasValue || itemType is not ("game" or "demo") || !seenAppIds.Add(appId.Value))
+                                    continue;
+
+                                var game = await _db.Games.FirstOrDefaultAsync(g => g.AppId == appId.Value, ct);
+                                if (game is null)
+                                {
+                                    _logger.LogInformation("Game with AppId {AppId} not found. Creating stub and enriching from Steam.", appId.Value);
+                                    game = new Game
+                                    {
+                                        Id = Guid.NewGuid(),
+                                        AppId = appId.Value,
+                                        Name = Str(gameEl, "name") ?? $"App {appId.Value}",
+                                        GameType = "Other"
+                                    };
+                                    _db.Games.Add(game);
+                                    await _db.SaveChangesAsync(ct);
+
+                                    var enrichResult = await _gameService.EnrichGameFromSteamAsync(game.Id, ct);
+                                    if (!enrichResult.IsSuccess)
+                                        _logger.LogWarning("Steam enrich failed for AppId {AppId}: {Error}", appId.Value, enrichResult.ErrorMessage);
+                                }
+
+                                var link = await _db.SteamSpecialEventGames
+                                    .FirstOrDefaultAsync(l => l.SteamSpecialEventId == ev.Id && l.GameId == game.Id, ct);
+                                if (link is null)
+                                {
+                                    link = new SteamSpecialEventGame
+                                    {
+                                        Id = Guid.NewGuid(),
+                                        SteamSpecialEventId = ev.Id,
+                                        GameId = game.Id,
+                                        FirstSeenAt = now
+                                    };
+                                    _db.SteamSpecialEventGames.Add(link);
+                                    inserted++;
+                                }
+                                else
+                                {
+                                    updated++;
+                                }
+
+                                link.ItemType = itemType;
+                                link.LastSeenAt = now;
+                                // Only overwrite when this scrape actually supplied values.
+                                link.SteamDisplayedStart = Date(gameEl, "steam_displayed_start") ?? link.SteamDisplayedStart;
+                                link.SteamDisplayedEnd = Date(gameEl, "steam_displayed_end") ?? link.SteamDisplayedEnd;
+                                link.DiscountPercent = Int(gameEl, "discount_percent") ?? link.DiscountPercent;
+                            }
+                        }
+
+                        await _db.SaveChangesAsync(ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        failed++;
+                        _logger.LogWarning(ex, "Failed to ingest special event {Gid}", gid ?? "<no gid>");
+                        // Drop any half-staged entities so the next event starts clean,
+                        // then re-attach the log row we still need to finalize.
+                        _db.ChangeTracker.Clear();
+                        _db.IngestionLogs.Attach(log);
+                    }
+                }
+            }
+
+            log.EndTime = DateTime.UtcNow;
+            log.Status = "Completed";
+            log.RecordsProcessed = processed;
+            log.RecordsInserted = inserted;
+            log.RecordsUpdated = updated;
+            log.RecordsFailed = failed;
+            await _db.SaveChangesAsync(ct);
+
+            _logger.LogInformation("Special events ingestion complete: events={Events}, inserted={Inserted}, updated={Updated}, failed={Failed}",
+                processed, inserted, updated, failed);
+
+            return new IngestionResult(processed, inserted, updated, failed, log.Id);
+        }
+        catch (Exception ex)
+        {
+            log.EndTime = DateTime.UtcNow;
+            log.Status = "Failed";
+            log.ErrorMessage = ex.Message;
+            await _db.SaveChangesAsync(ct);
+            throw;
+        }
+    }
+
     public async Task<IngestionResult> IngestRegionalPricesAsync(IngestRegionalPricesCommand request, CancellationToken ct = default)
     {
         var log = new IngestionLog

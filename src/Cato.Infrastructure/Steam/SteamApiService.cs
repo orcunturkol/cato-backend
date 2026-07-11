@@ -263,7 +263,11 @@ public class SteamApiService : ISteamApiService
 
                 if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
                 {
-                    _logger.LogError("GetPlayerSummaries returned {Status} — invalid or missing Steam Web API key", response.StatusCode);
+                    var forbiddenBody = await response.Content.ReadAsStringAsync(ct);
+                    if (LooksLikeInvalidKey(forbiddenBody))
+                        _logger.LogError("GetPlayerSummaries returned {Status} — invalid or missing Steam Web API key", response.StatusCode);
+                    else
+                        _logger.LogWarning("GetPlayerSummaries returned {Status} for {Count} ids", response.StatusCode, steamIds.Count);
                     return null;
                 }
 
@@ -293,4 +297,167 @@ public class SteamApiService : ISteamApiService
 
         return null;
     }
+
+    public async Task<SteamSchemaForGameResponse?> GetSchemaForGameAsync(
+        int appId, CancellationToken ct = default)
+    {
+        // The URL embeds the API key — never log it; log only appid and status codes.
+        var url = "https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/" +
+                  $"?key={_webApiSettings.ApiKey}&appid={appId}&l=english";
+
+        for (var attempt = 0; attempt <= MaxRetries; attempt++)
+        {
+            await WebApiRateLimiter.WaitAsync(ct);
+            try
+            {
+                var response = await _httpClient.GetAsync(url, ct);
+
+                if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                {
+                    if (attempt < MaxRetries)
+                    {
+                        var backoff = (attempt + 1) * 5000;
+                        await Task.Delay(backoff, ct);
+                        continue;
+                    }
+                    _logger.LogWarning("GetSchemaForGame rate-limited for AppId {AppId} after {Retries} retries", appId, MaxRetries);
+                    return null;
+                }
+
+                if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
+                {
+                    var forbiddenBody = await response.Content.ReadAsStringAsync(ct);
+                    if (LooksLikeInvalidKey(forbiddenBody))
+                        _logger.LogError("GetSchemaForGame returned {Status} — invalid or missing Steam Web API key", response.StatusCode);
+                    else
+                        _logger.LogWarning("GetSchemaForGame returned {Status} for AppId {AppId} (app likely restricted / no public schema)", response.StatusCode, appId);
+                    return null;
+                }
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("GetSchemaForGame returned {Status} for AppId {AppId}", response.StatusCode, appId);
+                    return null;
+                }
+
+                var content = await response.Content.ReadAsStringAsync(ct);
+                return JsonSerializer.Deserialize<SteamSchemaForGameResponse>(content, JsonOptions);
+            }
+            catch (HttpRequestException ex) when (attempt < MaxRetries)
+            {
+                _logger.LogWarning(ex, "HTTP error fetching schema for AppId {AppId}, attempt {Attempt}", appId, attempt + 1);
+                continue;
+            }
+            finally
+            {
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(WebApiDelayBetweenRequestsMs, CancellationToken.None);
+                    WebApiRateLimiter.Release();
+                }, CancellationToken.None);
+            }
+        }
+
+        return null;
+    }
+
+    public async Task<SteamPlayerAchievementsResponse?> GetPlayerAchievementsAsync(
+        long steamId64, int appId, CancellationToken ct = default)
+    {
+        // The URL embeds the API key — never log it; log only ids and status codes.
+        var url = "https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v1/" +
+                  $"?key={_webApiSettings.ApiKey}&steamid={steamId64}&appid={appId}&l=english";
+
+        for (var attempt = 0; attempt <= MaxRetries; attempt++)
+        {
+            await WebApiRateLimiter.WaitAsync(ct);
+            try
+            {
+                var response = await _httpClient.GetAsync(url, ct);
+
+                if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                {
+                    if (attempt < MaxRetries)
+                    {
+                        var backoff = (attempt + 1) * 5000;
+                        await Task.Delay(backoff, ct);
+                        continue;
+                    }
+                    _logger.LogWarning("GetPlayerAchievements rate-limited for AppId {AppId} after {Retries} retries", appId, MaxRetries);
+                    return null;
+                }
+
+                if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
+                {
+                    var forbiddenBody = await response.Content.ReadAsStringAsync(ct);
+                    if (LooksLikeInvalidKey(forbiddenBody))
+                    {
+                        _logger.LogError("GetPlayerAchievements returned {Status} — invalid or missing Steam Web API key", response.StatusCode);
+                        return null;
+                    }
+
+                    // A 403 with a valid key means the reviewer's profile is
+                    // private/friends-only. Surface it as a per-pair business
+                    // outcome so the watcher classifies it Private and applies the
+                    // long back-off, instead of treating it as a transient miss and
+                    // retrying the same private profile every cycle.
+                    return new SteamPlayerAchievementsResponse
+                    {
+                        PlayerStats = new SteamPlayerStats { Success = false, Error = "Profile is not public" },
+                    };
+                }
+
+                // Private profiles surface as 400/500 with a body describing the
+                // reason; a 2xx with success=false carries it in the JSON. Either
+                // way we want to read the body when present, so only treat a
+                // hard non-success WITHOUT a body as a transient miss.
+                var content = await response.Content.ReadAsStringAsync(ct);
+
+                if (!response.IsSuccessStatusCode && string.IsNullOrWhiteSpace(content))
+                {
+                    _logger.LogWarning("GetPlayerAchievements returned {Status} for AppId {AppId}", response.StatusCode, appId);
+                    return null;
+                }
+
+                try
+                {
+                    return JsonSerializer.Deserialize<SteamPlayerAchievementsResponse>(content, JsonOptions);
+                }
+                catch (JsonException)
+                {
+                    // Non-JSON error body on a non-2xx — treat as a per-pair failure
+                    // (Success stays false) rather than a transient null.
+                    if (!response.IsSuccessStatusCode)
+                        return new SteamPlayerAchievementsResponse();
+                    throw;
+                }
+            }
+            catch (HttpRequestException ex) when (attempt < MaxRetries)
+            {
+                _logger.LogWarning(ex, "HTTP error fetching achievements for AppId {AppId}, attempt {Attempt}", appId, attempt + 1);
+                continue;
+            }
+            finally
+            {
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(WebApiDelayBetweenRequestsMs, CancellationToken.None);
+                    WebApiRateLimiter.Release();
+                }, CancellationToken.None);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Distinguishes a genuine bad/missing key from an ordinary permission 403.
+    /// Steam answers an invalid/missing key with an HTML page ("Access is denied …
+    /// please verify your <c>key=</c> parameter"); a 401/403 lacking that signature
+    /// on a per-user endpoint means the data is private, not that the key is bad.
+    /// </summary>
+    private static bool LooksLikeInvalidKey(string? body) =>
+        !string.IsNullOrEmpty(body)
+        && (body.Contains("Access is denied", StringComparison.OrdinalIgnoreCase)
+            || body.Contains("verify your", StringComparison.OrdinalIgnoreCase));
 }

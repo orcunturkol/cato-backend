@@ -1,5 +1,6 @@
 using Cato.Domain.Entities;
 using Cato.Infrastructure.Database;
+using Cato.Infrastructure.Jobs;
 using Cato.Infrastructure.Steam.SteamKit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -61,7 +62,11 @@ public sealed class SteamPriceWatcherService : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CatoDbContext>();
         var steam = scope.ServiceProvider.GetRequiredService<ISteamApiService>();
+        var tracker = scope.ServiceProvider.GetRequiredService<IJobRunTracker>();
 
+        await using var job = await tracker.StartAsync("SteamPriceWatcher", ct: ct);
+        try
+        {
         var games = await db.Games
             .Where(g => g.IsReleased)
             .Where(g => g.ReleaseDate != null && g.ReleaseDate >= new DateOnly(2023, 1, 1))
@@ -74,6 +79,7 @@ public sealed class SteamPriceWatcherService : BackgroundService
         var now = DateTime.UtcNow;
         int updated = 0;
         int skipped = 0;
+        int failed = 0;
 
         foreach (var game in games)
         {
@@ -126,6 +132,7 @@ public sealed class SteamPriceWatcherService : BackgroundService
             }
             catch (Exception ex)
             {
+                failed++;
                 _logger.LogWarning(ex, "SteamPriceWatcher: Failed to check price for AppId {AppId}", game.AppId);
             }
         }
@@ -133,8 +140,20 @@ public sealed class SteamPriceWatcherService : BackgroundService
         if (updated > 0 || games.Count > 0)
             await db.SaveChangesAsync(ct);
 
+        job.Set("games", games.Count);
+        job.Set("updated", updated);
+        job.Set("skipped", skipped);
+        job.Set("failed", failed);
+        if (failed > 0) job.MarkPartialSuccess();
+
         _logger.LogInformation(
             "SteamPriceWatcher: Price check complete — {Updated} snapshots created, {Skipped} skipped (no price data)",
             updated, skipped);
+        }
+        catch (Exception ex)
+        {
+            job.Fail(ex.Message);
+            throw;
+        }
     }
 }

@@ -1,5 +1,6 @@
 using Cato.Domain.Entities;
 using Cato.Infrastructure.Database;
+using Cato.Infrastructure.Jobs;
 using Cato.Infrastructure.Redis;
 using Cato.Infrastructure.Steam.Models;
 using Cato.Infrastructure.Steam.SteamKit;
@@ -59,7 +60,11 @@ public class SteamReviewWatcherService : BackgroundService
         var db = scope.ServiceProvider.GetRequiredService<CatoDbContext>();
         var steamApi = scope.ServiceProvider.GetRequiredService<ISteamApiService>();
         var rotation = scope.ServiceProvider.GetRequiredService<ISteamIdRotationService>();
+        var tracker = scope.ServiceProvider.GetRequiredService<IJobRunTracker>();
 
+        await using var job = await tracker.StartAsync("SteamReviewWatcher", ct: ct);
+        try
+        {
         var games = await db.Games
             .Where(g => g.GameType == "Sourcing" || g.GameType == "Owned")
             .AsNoTracking()
@@ -69,24 +74,39 @@ public class SteamReviewWatcherService : BackgroundService
         _logger.LogInformation(
             "Steam review sync starting — {Count} Sourcing/Owned games", games.Count);
 
+        var reviewsInserted = 0;
+        var gamesFailed = 0;
+
         foreach (var game in games)
         {
             if (ct.IsCancellationRequested) break;
             try
             {
-                await SyncGameReviewsAsync(db, steamApi, rotation, game.Id, game.AppId, game.Name, ct);
+                reviewsInserted += await SyncGameReviewsAsync(db, steamApi, rotation, game.Id, game.AppId, game.Name, ct);
             }
             catch (Exception ex)
             {
+                gamesFailed++;
                 _logger.LogWarning(ex,
                     "Failed to sync reviews for AppId {AppId} ({Name})", game.AppId, game.Name);
             }
         }
 
+        job.Set("games", games.Count);
+        job.Set("reviewsInserted", reviewsInserted);
+        job.Set("gamesFailed", gamesFailed);
+        if (gamesFailed > 0) job.MarkPartialSuccess();
+
         _logger.LogInformation("Steam review sync cycle complete");
+        }
+        catch (Exception ex)
+        {
+            job.Fail(ex.Message);
+            throw;
+        }
     }
 
-    private async Task SyncGameReviewsAsync(
+    private async Task<int> SyncGameReviewsAsync(
         CatoDbContext db,
         ISteamApiService steamApi,
         ISteamIdRotationService rotation,
@@ -199,6 +219,8 @@ public class SteamReviewWatcherService : BackgroundService
         _logger.LogInformation(
             "Synced {Total} new reviews for AppId {AppId} ({Name})",
             totalInserted, appId, gameName);
+
+        return totalInserted;
     }
 
     private async Task InsertSummarySnapshotAsync(

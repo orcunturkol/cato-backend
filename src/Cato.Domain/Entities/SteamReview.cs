@@ -38,6 +38,21 @@ public class SteamReview
 
     public DateTime CreatedAt { get; set; }
 
+    // ── Achievement enrichment (denormalized; recomputed by PlayerAchievementWatcherService) ──
+
+    /// <summary>
+    /// How many of the game's achievements the author had unlocked at/before
+    /// TimestampCreated (only unlocks with a known unlock time are counted).
+    /// Null until the author's achievements for this game have been fetched.
+    /// </summary>
+    public int? AuthorAchievementsAtReview { get; set; }
+
+    /// <summary>The game's total achievement count at compute time (the "Y" in "X of Y").</summary>
+    public int? GameAchievementCountAtFetch { get; set; }
+
+    /// <summary>When the achievement metric above was last computed for this review.</summary>
+    public DateTime? AchievementsComputedAt { get; set; }
+
     // write-once; Steam-side edits are tracked via TimestampUpdated
     public Game Game { get; set; } = null!;
 }

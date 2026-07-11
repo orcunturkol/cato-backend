@@ -110,6 +110,7 @@ public class GamesController : ControllerBase
         return result.IsSuccess
             ? Results.Accepted(null, result.Data)
             : Results.BadRequest(result.ErrorMessage);
+
     }
 
     /// <summary>Re-enrich all games where enrichment was not successful (HeaderImageUrl is null).

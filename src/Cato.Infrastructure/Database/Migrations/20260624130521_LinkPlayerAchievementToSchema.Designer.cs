@@ -4,6 +4,7 @@ using System.Text.Json;
 using Cato.Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Cato.Infrastructure.Database.Migrations
 {
     [DbContext(typeof(CatoDbContext))]
-    partial class CatoDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260624130521_LinkPlayerAchievementToSchema")]
+    partial class LinkPlayerAchievementToSchema
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -850,65 +853,6 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.ToTable("ingestion_log", (string)null);
                 });
 
-            modelBuilder.Entity("Cato.Domain.Entities.JobRun", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<long?>("DurationMs")
-                        .HasColumnType("bigint");
-
-                    b.Property<DateTime?>("EndTime")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("ErrorMessage")
-                        .HasColumnType("text");
-
-                    b.Property<string>("JobName")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
-                    b.Property<string>("MetricsJson")
-                        .HasColumnType("jsonb");
-
-                    b.Property<string>("Producer")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasDefaultValue("cato-backend");
-
-                    b.Property<DateTime>("StartTime")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("JobName")
-                        .HasDatabaseName("idx_job_run_job_name");
-
-                    b.HasIndex("StartTime")
-                        .HasDatabaseName("idx_job_run_start_time");
-
-                    b.HasIndex("Status")
-                        .HasDatabaseName("idx_job_run_status");
-
-                    b.HasIndex("JobName", "StartTime")
-                        .IsDescending(false, true)
-                        .HasDatabaseName("idx_job_run_job_started");
-
-                    b.ToTable("job_run", (string)null);
-                });
-
             modelBuilder.Entity("Cato.Domain.Entities.LegalEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1656,147 +1600,6 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.ToTable("steam_sale_financial", (string)null);
                 });
 
-            modelBuilder.Entity("Cato.Domain.Entities.SteamSpecialEvent", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AnnouncementGid")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("BackgroundColor")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("CapsuleImageUrl")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<long>("ClanAccountId")
-                        .HasColumnType("bigint");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("EndDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("EventType")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("EventUrl")
-                        .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<DateTime>("FirstSeenAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("HeaderImageUrl")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<DateTime>("LastSeenAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("LogoImageUrl")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<string>("SaleVanityId")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateTime?>("StartDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Subtitle")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<JsonDocument>("TabNames")
-                        .HasColumnType("jsonb");
-
-                    b.Property<string>("Title")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AnnouncementGid")
-                        .IsUnique()
-                        .HasDatabaseName("unique_steam_special_event_gid");
-
-                    b.HasIndex("LastSeenAt")
-                        .HasDatabaseName("idx_steam_special_event_last_seen");
-
-                    b.HasIndex("StartDate")
-                        .HasDatabaseName("idx_steam_special_event_start");
-
-                    b.ToTable("steam_special_event", (string)null);
-                });
-
-            modelBuilder.Entity("Cato.Domain.Entities.SteamSpecialEventGame", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int?>("DiscountPercent")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("FirstSeenAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("GameId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ItemType")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<DateTime>("LastSeenAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("SteamDisplayedEnd")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("SteamDisplayedStart")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("SteamSpecialEventId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("GameId");
-
-                    b.HasIndex("LastSeenAt")
-                        .HasDatabaseName("idx_steam_special_event_game_last_seen");
-
-                    b.HasIndex("SteamSpecialEventId", "GameId")
-                        .IsUnique()
-                        .HasDatabaseName("unique_steam_special_event_game");
-
-                    b.ToTable("steam_special_event_game", (string)null);
-                });
-
             modelBuilder.Entity("Cato.Domain.Entities.SteamTraffic", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2263,25 +2066,6 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.Navigation("Game");
                 });
 
-            modelBuilder.Entity("Cato.Domain.Entities.SteamSpecialEventGame", b =>
-                {
-                    b.HasOne("Cato.Domain.Entities.Game", "Game")
-                        .WithMany("SteamSpecialEventGames")
-                        .HasForeignKey("GameId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Cato.Domain.Entities.SteamSpecialEvent", "SteamSpecialEvent")
-                        .WithMany("Games")
-                        .HasForeignKey("SteamSpecialEventId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Game");
-
-                    b.Navigation("SteamSpecialEvent");
-                });
-
             modelBuilder.Entity("Cato.Domain.Entities.SteamTraffic", b =>
                 {
                     b.HasOne("Cato.Domain.Entities.Game", "Game")
@@ -2368,8 +2152,6 @@ namespace Cato.Infrastructure.Database.Migrations
 
                     b.Navigation("SteamReviews");
 
-                    b.Navigation("SteamSpecialEventGames");
-
                     b.Navigation("Tags");
 
                     b.Navigation("TargetMatches");
@@ -2407,11 +2189,6 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.Navigation("ActionTargets");
 
                     b.Navigation("TargetMatches");
-                });
-
-            modelBuilder.Entity("Cato.Domain.Entities.SteamSpecialEvent", b =>
-                {
-                    b.Navigation("Games");
                 });
 #pragma warning restore 612, 618
         }

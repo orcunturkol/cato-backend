@@ -13,6 +13,7 @@ public interface IIngestionService
     Task<IngestionResult> IngestOwnedGameDataAsync(IngestOwnedGameDataCommand command, CancellationToken ct = default);
     Task<IngestionResult> IngestGroupMemberCountAsync(IngestGroupMemberCountCommand command, CancellationToken ct = default);
     Task<IngestionResult> IngestSteamDbSnapshotAsync(IngestSteamDbSnapshotCommand command, CancellationToken ct = default);
+    Task<IngestionResult> IngestSpecialEventsAsync(IngestSpecialEventsCommand command, CancellationToken ct = default);
     Task<IngestionResult> IngestRegionalPricesAsync(IngestRegionalPricesCommand command, CancellationToken ct = default);
     Task<IngestionResult> IngestWishlistInsightsAsync(IngestWishlistInsightsCommand command, CancellationToken ct = default);
     Task<IngestionResult> IngestStoreTrafficAsync(IngestStoreTrafficCommand command, CancellationToken ct = default);
