@@ -1,7 +1,9 @@
+using System.Text.Json;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SteamKit2;
+using SteamKit2.Authentication;
 
 namespace Cato.Infrastructure.Steam.SteamKit;
 
@@ -13,6 +15,7 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
 {
     private readonly SteamSettings _settings;
     private readonly ILogger<SteamKitService> _logger;
+    private readonly string _authStateFile = Path.Combine(AppContext.BaseDirectory, "steam_auth_state.json");
 
     private SteamClient _steamClient = null!;
     private CallbackManager _callbackManager = null!;
@@ -25,6 +28,8 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
 
     private bool _isRunning;
     private bool _isLoggedOn;
+    private bool _usedStoredRefreshToken;
+    private int _consecutiveFailures;
 
     // Completion sources for async bridging
     private TaskCompletionSource<bool>? _loginTcs;
@@ -107,13 +112,60 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
 
     private void OnConnected(SteamClient.ConnectedCallback cb)
     {
-        _logger.LogInformation("SteamKit2: Connected. Logging in as '{Username}'...", _settings.Username);
+        _logger.LogInformation("SteamKit2: Connected. Authenticating as '{Username}'...", _settings.Username);
+        _ = LogOnAsync();
+    }
 
-        _steamUser.LogOn(new SteamUser.LogOnDetails
+    // Uses SteamKit2's credential/token auth session (SteamKit2.Authentication) rather than
+    // the legacy plain username+password LogOn, which Steam's CM servers now reject/throttle
+    // (surfaces as alternating TryAnotherCM/InvalidPassword regardless of correct credentials).
+    private async Task LogOnAsync()
+    {
+        try
         {
-            Username = _settings.Username,
-            Password = _settings.Password
-        });
+            var stored = LoadStoredAuth();
+            string accountName;
+            string logOnToken;
+
+            if (stored is not null && string.Equals(stored.AccountName, _settings.Username, StringComparison.OrdinalIgnoreCase))
+            {
+                _usedStoredRefreshToken = true;
+                accountName = stored.AccountName;
+                logOnToken = stored.RefreshToken;
+            }
+            else
+            {
+                _usedStoredRefreshToken = false;
+
+                var authSession = await _steamClient.Authentication.BeginAuthSessionViaCredentialsAsync(new AuthSessionDetails
+                {
+                    Username = _settings.Username,
+                    Password = _settings.Password,
+                    IsPersistentSession = true,
+                    GuardData = stored?.GuardData,
+                    Authenticator = new HeadlessSteamAuthenticator(_logger),
+                });
+
+                var pollResponse = await authSession.PollingWaitForResultAsync();
+
+                accountName = pollResponse.AccountName;
+                logOnToken = pollResponse.RefreshToken;
+                SaveStoredAuth(new StoredSteamAuth(accountName, pollResponse.RefreshToken, pollResponse.NewGuardData));
+            }
+
+            _steamUser.LogOn(new SteamUser.LogOnDetails
+            {
+                Username = accountName,
+                AccessToken = logOnToken,
+                ShouldRememberPassword = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "SteamKit2: Authentication failed.");
+            _consecutiveFailures++;
+            _steamClient.Disconnect();
+        }
     }
 
     private void OnDisconnected(SteamClient.DisconnectedCallback cb)
@@ -121,8 +173,9 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
         _isLoggedOn = false;
         if (!_isRunning) return;
 
-        _logger.LogWarning("SteamKit2: Disconnected. Reconnecting in 10 seconds...");
-        Task.Delay(TimeSpan.FromSeconds(10), _cts.Token)
+        var delay = TimeSpan.FromSeconds(Math.Min(10 * Math.Pow(2, _consecutiveFailures), 300));
+        _logger.LogWarning("SteamKit2: Disconnected. Reconnecting in {Delay}...", delay);
+        Task.Delay(delay, _cts.Token)
             .ContinueWith(_ => _steamClient.Connect(), TaskContinuationOptions.NotOnCanceled);
     }
 
@@ -131,11 +184,20 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
         if (cb.Result != EResult.OK)
         {
             _logger.LogError("SteamKit2: Login failed: {Result}", cb.Result);
+            _consecutiveFailures++;
+
+            if (_usedStoredRefreshToken)
+            {
+                _logger.LogWarning("SteamKit2: Stored refresh token was rejected; will re-authenticate with credentials on next attempt.");
+                ClearStoredAuth();
+            }
+
             _loginTcs?.TrySetException(new InvalidOperationException($"Steam login failed: {cb.Result}"));
             return;
         }
 
         _isLoggedOn = true;
+        _consecutiveFailures = 0;
         _logger.LogInformation("SteamKit2: Logged in successfully as '{Username}'", _settings.Username);
         _loginTcs?.TrySetResult(true);
     }
@@ -145,6 +207,48 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
         _isLoggedOn = false;
         _logger.LogWarning("SteamKit2: Logged off: {Result}", cb.Result);
     }
+
+    // ── Persisted auth state ──────────────────────────────────────────────────
+
+    private StoredSteamAuth? LoadStoredAuth()
+    {
+        try
+        {
+            if (!File.Exists(_authStateFile)) return null;
+            return JsonSerializer.Deserialize<StoredSteamAuth>(File.ReadAllText(_authStateFile));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "SteamKit2: Failed to read stored auth state, falling back to full credential login.");
+            return null;
+        }
+    }
+
+    private void SaveStoredAuth(StoredSteamAuth auth)
+    {
+        try
+        {
+            File.WriteAllText(_authStateFile, JsonSerializer.Serialize(auth));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "SteamKit2: Failed to persist auth state.");
+        }
+    }
+
+    private void ClearStoredAuth()
+    {
+        try
+        {
+            if (File.Exists(_authStateFile)) File.Delete(_authStateFile);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "SteamKit2: Failed to clear stored auth state.");
+        }
+    }
+
+    private sealed record StoredSteamAuth(string AccountName, string RefreshToken, string? GuardData);
 
     // ── ISteamKitService ──────────────────────────────────────────────────────
 
