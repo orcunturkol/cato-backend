@@ -276,6 +276,7 @@ public class CatoDbContext : DbContext
             entity.HasKey(e => e.Id);
 
             entity.Property(e => e.AnnouncementGid).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.Source).HasMaxLength(50).IsRequired().HasDefaultValue("steam_special_events");
             entity.Property(e => e.SaleVanityId).HasMaxLength(200);
             entity.Property(e => e.EventUrl).HasMaxLength(1000).IsRequired();
             entity.Property(e => e.Title).HasMaxLength(500);
@@ -291,6 +292,7 @@ public class CatoDbContext : DbContext
                 .HasDatabaseName("unique_steam_special_event_gid");
             entity.HasIndex(e => e.LastSeenAt).HasDatabaseName("idx_steam_special_event_last_seen");
             entity.HasIndex(e => e.StartDate).HasDatabaseName("idx_steam_special_event_start");
+            entity.HasIndex(e => e.Source).HasDatabaseName("idx_steam_special_event_source");
         });
 
         // ── SteamSpecialEventGame ──

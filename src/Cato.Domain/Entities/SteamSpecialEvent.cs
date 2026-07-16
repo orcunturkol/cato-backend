@@ -12,6 +12,7 @@ public class SteamSpecialEvent
 {
     public Guid Id { get; set; }
     public string AnnouncementGid { get; set; } = string.Empty; // Steam's event id; natural key
+    public string Source { get; set; } = string.Empty;          // "steam_special_events" | "steam_sale_collection" -- last job to see this row
     public string? SaleVanityId { get; set; }                   // e.g. "OPENGAMEFEST2026"
     public string EventUrl { get; set; } = string.Empty;
     public long ClanAccountId { get; set; }

@@ -4,4 +4,4 @@ using MediatR;
 
 namespace Cato.API.Models.Ingestion;
 
-public record IngestSpecialEventsCommand(JsonElement Data) : IRequest<IngestionResult>;
+public record IngestSpecialEventsCommand(JsonElement Data, string Source) : IRequest<IngestionResult>;

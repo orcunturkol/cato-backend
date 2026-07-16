@@ -774,7 +774,7 @@ public class IngestionService : IIngestionService
         var log = new IngestionLog
         {
             Id = Guid.NewGuid(),
-            Source = "steam_special_events",
+            Source = request.Source,
             StartTime = DateTime.UtcNow,
             Status = "Running"
         };
@@ -859,6 +859,9 @@ public class IngestionService : IIngestionService
                         }
 
                         // Steam edits copy/dates after publishing, so mutable fields always refresh.
+                        // Source reflects whichever job most recently saw this event -- same
+                        // refresh-on-every-sighting semantics as LastSeenAt, not a first-seen tag.
+                        ev.Source = request.Source;
                         ev.SaleVanityId = Str(eventEl, "sale_vanity_id");
                         ev.EventUrl = Str(eventEl, "event_url") ?? ev.EventUrl;
                         ev.ClanAccountId = Int(eventEl, "clan_accountid") ?? ev.ClanAccountId;
