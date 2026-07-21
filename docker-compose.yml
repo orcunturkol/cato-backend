@@ -25,6 +25,7 @@ services:
   postgres:
     image: postgres:16
     container_name: cato-postgres
+    restart: unless-stopped
     command:
       - postgres
       - -c
@@ -58,6 +59,13 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: cato-api
+    restart: unless-stopped
+    # Cap the API so a memory leak kills this container (which auto-restarts)
+    # instead of the whole host. Inside a limited container the .NET GC defaults
+    # its heap hard limit to 75% of the cgroup limit and throws OOM in-process.
+    # memswap_limit == mem_limit forbids the container from touching host swap.
+    mem_limit: 4g
+    memswap_limit: 4g
     ports:
       # Loopback binding so host-side collectors (job-run reporter) can reach the
       # API at localhost:5039, matching how postgres/redis/rabbitmq are exposed.
@@ -95,6 +103,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: cato-redis
+    restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     ports:
       - "127.0.0.1:6379:6379"
@@ -111,6 +120,7 @@ services:
   rabbitmq:
     image: rabbitmq:3-management
     container_name: cato-rabbitmq
+    restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: cato_user
       RABBITMQ_DEFAULT_PASS: cato_dev_password
@@ -149,6 +159,7 @@ services:
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: cato-pgadmin
+    restart: unless-stopped
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@cato.dev
       PGADMIN_DEFAULT_PASSWORD: admin

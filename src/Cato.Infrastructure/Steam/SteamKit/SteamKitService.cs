@@ -29,7 +29,7 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
     private bool _isRunning;
     private bool _isLoggedOn;
     private bool _usedStoredRefreshToken;
-    private int _consecutiveFailures;
+    private readonly SteamReconnectPolicy _reconnectPolicy = new();
 
     // Completion sources for async bridging
     private TaskCompletionSource<bool>? _loginTcs;
@@ -163,7 +163,6 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
         catch (Exception ex)
         {
             _logger.LogError(ex, "SteamKit2: Authentication failed.");
-            _consecutiveFailures++;
             _steamClient.Disconnect();
         }
     }
@@ -173,10 +172,35 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
         _isLoggedOn = false;
         if (!_isRunning) return;
 
-        var delay = TimeSpan.FromSeconds(Math.Min(10 * Math.Pow(2, _consecutiveFailures), 300));
+        // SteamKit2 raises DisconnectedCallback for every failed/aborted attempt,
+        // so scheduling here unguarded multiplies reconnect loops over time.
+        if (!_reconnectPolicy.TryBeginReconnect(out var delay))
+        {
+            _logger.LogDebug("SteamKit2: Reconnect already pending; ignoring extra disconnect event.");
+            return;
+        }
+
         _logger.LogWarning("SteamKit2: Disconnected. Reconnecting in {Delay}...", delay);
-        Task.Delay(delay, _cts.Token)
-            .ContinueWith(_ => _steamClient.Connect(), TaskContinuationOptions.NotOnCanceled);
+        _ = ReconnectAfterAsync(delay);
+    }
+
+    private async Task ReconnectAfterAsync(TimeSpan delay)
+    {
+        try
+        {
+            await Task.Delay(delay, _cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        finally
+        {
+            _reconnectPolicy.CompleteReconnect();
+        }
+
+        if (_isRunning)
+            _steamClient.Connect();
     }
 
     private void OnLoggedOn(SteamUser.LoggedOnCallback cb)
@@ -184,7 +208,6 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
         if (cb.Result != EResult.OK)
         {
             _logger.LogError("SteamKit2: Login failed: {Result}", cb.Result);
-            _consecutiveFailures++;
 
             if (_usedStoredRefreshToken)
             {
@@ -197,7 +220,6 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
         }
 
         _isLoggedOn = true;
-        _consecutiveFailures = 0;
         _logger.LogInformation("SteamKit2: Logged in successfully as '{Username}'", _settings.Username);
         _loginTcs?.TrySetResult(true);
     }
@@ -205,6 +227,9 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
     private void OnLoggedOff(SteamUser.LoggedOffCallback cb)
     {
         _isLoggedOn = false;
+        // Session conflicts / rate limits mean eager retries only perpetuate the
+        // kicking; the policy turns them into a cooldown on the next reconnect.
+        _reconnectPolicy.NoteLogOff(cb.Result);
         _logger.LogWarning("SteamKit2: Logged off: {Result}", cb.Result);
     }
 
