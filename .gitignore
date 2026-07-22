@@ -35,3 +35,6 @@ cato_pgadmin/
 appsettings.*.json
 !appsettings.json
 !appsettings.Development.json
+
+# superpowers scratch state (subagent-driven-development progress ledger, etc.)
+.superpowers/
