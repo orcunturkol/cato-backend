@@ -12,8 +12,8 @@ CATO is a Steam game analytics backend that ingests and serves financial, traffi
 # Build
 dotnet build
 
-# Run the API (requires PostgreSQL + RabbitMQ from docker-compose)
-docker compose up -d postgres rabbitmq
+# Run the API (requires RabbitMQ from docker-compose; Postgres is AWS RDS — see infra/rds/)
+docker compose up -d rabbitmq
 dotnet run --project src/Cato.API
 
 # EF Core migrations (run from repo root)
@@ -41,7 +41,7 @@ Some older services (`GameService`, `GameDataService`, `IngestionService`, `Stea
 
 ### Key Infrastructure
 
-- **Database**: PostgreSQL via EF Core (Npgsql). Connection on port **5434** (mapped from container 5432). All entity table mappings and indexes are configured via Fluent API in `CatoDbContext.OnModelCreating`. Timestamps (CreatedAt/UpdatedAt) are set automatically in `SaveChanges`/`SaveChangesAsync`.
+- **Database**: PostgreSQL via EF Core (Npgsql), hosted on AWS RDS. Terraform for the RDS instance lives in `infra/rds/`; see `infra/rds/CUTOVER_RUNBOOK.md` for provisioning, data migration, rollback, and cleanup procedures. The connection string (`ConnectionStrings__DefaultConnection` in docker-compose) is sourced from `RDS_HOST`/`RDS_DB_PASSWORD` in `.env` on the deployed host. All entity table mappings and indexes are configured via Fluent API in `CatoDbContext.OnModelCreating`. Timestamps (CreatedAt/UpdatedAt) are set automatically in `SaveChanges`/`SaveChangesAsync`.
 - **Messaging**: RabbitMQ with `IngestionDispatcher` (producer) and `RabbitMqConsumerService` (hosted service consumer). Queue: `cato-ingestion`, Exchange: `cato-data`.
 - **Steam Integration**: `SteamApiService` (HTTP client for Steam Web API) and `SteamKitService` (SteamKit2 for PICS change monitoring via `SteamPicsWatcherService` background service).
   - **SteamKit Game Discovery**: `SteamPicsWatcherService` polls Steam's PICS change feed via `PICSGetChangesSince`, which returns all AppIDs with any metadata change since the last known change number (persisted in `pics_change_number.txt`). For each changed AppID, it calls `PICSGetProductInfo` and reads the `common` KeyValue section. It filters by `common["type"] == "game"` (excludes DLCs, tools, demos) and `common["releasestate"] == "released"` (excludes unreleased). Also extracts `common["name"]` and `common["steam_release_date"]` (unix timestamp). Matching games are saved with `GameType = "Sourcing"`.

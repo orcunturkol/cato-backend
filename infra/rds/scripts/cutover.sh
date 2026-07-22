@@ -27,8 +27,11 @@ echo "==> Stopping the api container so no new writes land during the copy"
 docker compose stop api
 
 echo "==> Dumping ${DB_NAME} from the local postgres container to ${DUMP_FILE}"
+# Dump to stdout and redirect on the HOST side — `-f` would write inside the
+# cato-postgres container's own filesystem, not this host, leaving the restore
+# step below unable to find a real file at ${DUMP_FILE}.
 docker exec cato-postgres pg_dump -U "${DB_USER}" -d "${DB_NAME}" \
-  --format=custom --no-owner --no-privileges -f "${DUMP_FILE}"
+  --format=custom --no-owner --no-privileges > "${DUMP_FILE}"
 
 echo "==> Row counts in the SOURCE (local) database"
 docker exec -i cato-postgres psql -U "${DB_USER}" -d "${DB_NAME}" \
