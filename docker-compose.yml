@@ -1,58 +1,4 @@
 services:
-  # ── PostgreSQL self-signed cert init (one-shot) ──
-  postgres-cert-init:
-    image: alpine/openssl:latest
-    container_name: cato-postgres-cert-init
-    entrypoint:
-      - sh
-      - -c
-      - |
-        set -e
-        if [ ! -f /certs/server.key ]; then
-          openssl req -new -x509 -days 3650 -nodes \
-            -subj "/CN=postgres.catoptricgames.duckdns.org" \
-            -addext "subjectAltName=DNS:postgres.catoptricgames.duckdns.org" \
-            -out /certs/server.crt -keyout /certs/server.key
-        fi
-        chmod 600 /certs/server.key
-        chmod 644 /certs/server.crt
-        chown 999:999 /certs/server.key /certs/server.crt
-    volumes:
-      - cato_pg_ssl:/certs
-    restart: "no"
-
-  # ── PostgreSQL ──
-  postgres:
-    image: postgres:16
-    container_name: cato-postgres
-    restart: unless-stopped
-    command:
-      - postgres
-      - -c
-      - ssl=on
-      - -c
-      - ssl_cert_file=/etc/postgres-ssl/server.crt
-      - -c
-      - ssl_key_file=/etc/postgres-ssl/server.key
-    environment:
-      POSTGRES_DB: cato
-      POSTGRES_USER: cato_user
-      POSTGRES_PASSWORD: cato_dev_password
-    ports:
-      - "127.0.0.1:5434:5432"
-      - "${TAILSCALE_IP}:5434:5432"
-    volumes:
-      - cato_pgdata:/var/lib/postgresql/data
-      - cato_pg_ssl:/etc/postgres-ssl:ro
-    depends_on:
-      postgres-cert-init:
-        condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cato_user -d cato"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   # ── CATO API ──
   api:
     build:
@@ -90,8 +36,6 @@ services:
       # data dir on this host (e.g. /home/ubuntu/catoptric-data-collector/data).
       - ${COLLECTOR_DATA_PATH:-/home/ofturkol/catoptric-data-collector/data}:${COLLECTOR_DATA_PATH:-/home/ofturkol/catoptric-data-collector/data}:ro
     depends_on:
-      postgres:
-        condition: service_healthy
       rabbitmq:
         condition: service_healthy
       redis:
@@ -170,9 +114,6 @@ services:
     volumes:
       - cato_pgadmin:/var/lib/pgadmin
       - ./pgadmin-servers.json:/pgadmin4/servers.json:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
 
   # ── Frontend ──
   frontend:
@@ -221,11 +162,9 @@ services:
       - tools
 
 volumes:
-  cato_pgdata:
   cato_pgadmin:
   cato_rabbitmq:
   cato_redis:
   cato_caddy_data:
   cato_caddy_config:
-  cato_pg_ssl:
   cato_seq:
