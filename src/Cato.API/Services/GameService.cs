@@ -155,6 +155,44 @@ public class GameService : IGameService
         };
     }
 
+    public async Task<PagedResult<GameDto>> CatalogGamesAsync(CatalogGamesQuery request, CancellationToken ct = default)
+    {
+        var query = _db.Games
+            .AsNoTracking()
+            .Include(g => g.Developer)
+            .Include(g => g.Publisher)
+            .Include(g => g.Genres)
+            .Include(g => g.Tags)
+            .AsQueryable();
+
+        if (request.CreatedAfter is { } after)
+        {
+            var utc = after.Kind == DateTimeKind.Utc ? after : after.ToUniversalTime();
+            query = query.Where(g => g.CreatedAt >= utc);
+        }
+
+        if (request.AppIds is { Count: > 0 })
+            query = query.Where(g => request.AppIds.Contains(g.AppId));
+
+        var totalCount = await query.CountAsync(ct);
+        var page = Math.Max(1, request.Page);
+        var pageSize = Math.Clamp(request.PageSize, 1, 100);
+
+        var items = await query
+            .OrderByDescending(g => g.CreatedAt).ThenBy(g => g.Name)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        return new PagedResult<GameDto>
+        {
+            Items = items.Select(g => g.ToDto()).ToList(),
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize
+        };
+    }
+
     public async Task<Result<GameDto>> GetGameDetailsAsync(Guid id, CancellationToken ct = default)
     {
         var game = await _db.Games

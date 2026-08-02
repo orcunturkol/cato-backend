@@ -3,6 +3,7 @@ using Cato.API.Models.Games;
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.OutputCaching;
 
 namespace Cato.API.Controllers;
 
@@ -46,6 +47,33 @@ public class GamesController : ControllerBase
         [FromQuery] int? pageSize)
     {
         var result = await _mediator.Send(new ListGamesQuery(gameType, search, page ?? 1, pageSize ?? 20));
+        return Results.Ok(result);
+    }
+
+    /// <summary>Catalog feed for sibling services: filter by creation date and/or AppIds. Output-cached.</summary>
+    [HttpGet("catalog")]
+    [OutputCache(PolicyName = "GamesCatalog")]
+    [ProducesResponseType(typeof(PagedResult<GameDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> CatalogGames(
+        [FromQuery] DateTime? createdAfter,
+        [FromQuery] string? appIds,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize)
+    {
+        List<int>? ids = null;
+        if (!string.IsNullOrWhiteSpace(appIds))
+        {
+            ids = [];
+            foreach (var part in appIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (!int.TryParse(part, out var id))
+                    return Results.BadRequest(new { error = $"appIds contains a non-integer value: '{part}'." });
+                ids.Add(id);
+            }
+        }
+
+        var result = await _mediator.Send(new CatalogGamesQuery(createdAfter, ids, page ?? 1, pageSize ?? 100));
         return Results.Ok(result);
     }
 

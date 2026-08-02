@@ -109,6 +109,14 @@ builder.Services.AddCors(options =>
     });
 });
 
+// ── Output cache (catalog feed for sibling services) ──
+builder.Services.AddOutputCache(options =>
+{
+    options.AddPolicy("GamesCatalog", policy => policy
+        .Expire(TimeSpan.FromSeconds(builder.Configuration.GetValue("Catalog:CacheSeconds", 60)))
+        .SetVaryByQuery("*"));
+});
+
 // ── Swagger / OpenAPI ──
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -140,6 +148,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseSerilogRequestLogging();
 app.UseCors("AllowFrontend");
+app.UseOutputCache();
 app.MapControllers();
 
 app.Run();
