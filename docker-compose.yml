@@ -127,6 +127,70 @@ services:
       - "${TAILSCALE_IP}:5173:80"
     restart: unless-stopped
 
+  # ── OGT PostgreSQL ──
+  ogt-postgres:
+    image: postgres:17
+    container_name: ogt-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ogt
+      POSTGRES_USER: ogt
+      POSTGRES_PASSWORD: ${OGT_DB_PASSWORD:-ogt_dev_password}
+    ports:
+      - "127.0.0.1:5435:5432"
+    volumes:
+      - ogt_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ogt -d ogt"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── OGT API (game voting; talks to the CATO API over HTTP, never its db) ──
+  ogt-api:
+    build:
+      context: ../ogt-backend
+      dockerfile: Dockerfile
+    container_name: ogt-api
+    restart: unless-stopped
+    mem_limit: 1g
+    memswap_limit: 1g
+    ports:
+      - "127.0.0.1:5139:8080"
+      - "${TAILSCALE_IP}:5139:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      # Defaults to the bundled ogt-postgres container; set OGT_DB_HOST (etc.)
+      # in .env to move the ogt database to the shared RDS server instead.
+      ConnectionStrings__DefaultConnection: "Host=${OGT_DB_HOST:-ogt-postgres};Port=${OGT_DB_PORT:-5432};Database=${OGT_DB_NAME:-ogt};Username=${OGT_DB_USER:-ogt};Password=${OGT_DB_PASSWORD:-ogt_dev_password}"
+      Cato__BaseUrl: "http://api:8080"
+      # Shared secret required to register an OGT account. Set OGT_INVITE_CODE in .env.
+      Auth__InviteCode: "${OGT_INVITE_CODE:?set OGT_INVITE_CODE in .env}"
+      Serilog__WriteTo__1__Args__serverUrl: "http://seq:80"
+    volumes:
+      # Persist ASP.NET data-protection keys so auth cookies survive restarts.
+      - ogt_dpkeys:/root/.aspnet/DataProtection-Keys
+    depends_on:
+      ogt-postgres:
+        condition: service_healthy
+      api:
+        condition: service_started
+      seq:
+        condition: service_started
+
+  # ── OGT Frontend ──
+  ogt-frontend:
+    build:
+      context: ../ogt-frontend
+      dockerfile: Dockerfile
+      # Empty VITE_API_URL = same-origin relative /api calls, routed by Caddy.
+      args:
+        VITE_API_URL: ${OGT_VITE_API_URL:-}
+    container_name: ogt-frontend
+    restart: unless-stopped
+    ports:
+      - "${TAILSCALE_IP}:5174:80"
+
   # ── Caddy reverse proxy (HTTPS for catoptricgames.duckdns.org via DuckDNS DNS-01) ──
   caddy:
     build:
@@ -150,6 +214,8 @@ services:
       - api
       - frontend
       - pgadmin
+      - ogt-api
+      - ogt-frontend
 
   # ── EF Migration Helper (run with: docker compose run --rm ef-migration) ──
   ef-migration:
@@ -162,6 +228,8 @@ services:
       - tools
 
 volumes:
+  ogt_pgdata:
+  ogt_dpkeys:
   cato_pgadmin:
   cato_rabbitmq:
   cato_redis:

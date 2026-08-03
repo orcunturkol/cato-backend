@@ -17,6 +17,21 @@ catoptricgames.duckdns.org {
 	}
 }
 
+ogt.catoptricgames.duckdns.org {
+	tls {
+		dns duckdns {$DUCKDNS_TOKEN}
+	}
+
+	# OGT API routes already carry the /api prefix, so no handle_path strip here.
+	handle /api/* {
+		reverse_proxy ogt-api:8080
+	}
+
+	handle {
+		reverse_proxy ogt-frontend:80
+	}
+}
+
 pgadmin.catoptricgames.duckdns.org {
 	tls {
 		dns duckdns {$DUCKDNS_TOKEN}
