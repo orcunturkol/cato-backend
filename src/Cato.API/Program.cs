@@ -122,7 +122,8 @@ builder.Services.AddOutputCache(options =>
 {
     options.AddPolicy("GamesCatalog", policy => policy
         .Expire(TimeSpan.FromSeconds(builder.Configuration.GetValue("Catalog:CacheSeconds", 60)))
-        .SetVaryByQuery("*"));
+        .SetVaryByQuery("*")
+        .Tag("games-catalog")); // evicted after enrichment so media shows immediately
 });
 
 // ── Swagger / OpenAPI ──

@@ -64,6 +64,9 @@ public class GamesController : ControllerBase
         [FromQuery] DateOnly? releasedAfter,
         [FromQuery] DateOnly? releasedBefore,
         [FromQuery] bool? hasTrailer,
+        [FromQuery] string? gameType,
+        [FromQuery] string? sortBy,
+        [FromQuery] string? sortDir,
         [FromQuery] int? page,
         [FromQuery] int? pageSize)
     {
@@ -82,8 +85,24 @@ public class GamesController : ControllerBase
         var result = await _mediator.Send(new CatalogGamesQuery(
             createdAfter, ids, search, developer, publisher,
             releasedAfter, releasedBefore, hasTrailer,
+            gameType, sortBy, sortDir,
             page ?? 1, pageSize ?? 100));
         return Results.Ok(result);
+    }
+
+    /// <summary>Enrich a game from Steam by its AppId (for sibling services keyed on AppId).</summary>
+    [HttpPost("by-appid/{appId:int}/enrich")]
+    [ProducesResponseType(typeof(GameDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IResult> EnrichGameByAppId(int appId)
+    {
+        var result = await _mediator.Send(new EnrichGameByAppIdCommand(appId));
+        if (result.IsSuccess)
+            return Results.Ok(result.Data);
+        return result.ErrorMessage!.Contains("not found")
+            ? Results.NotFound(new { error = result.ErrorMessage })
+            : Results.BadRequest(new { error = result.ErrorMessage });
     }
 
     /// <summary>Get details for a specific game by Id.</summary>

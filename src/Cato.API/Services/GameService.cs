@@ -203,12 +203,35 @@ public class GameService : IGameService
         if (request.HasTrailer is { } hasTrailer)
             query = query.Where(g => (g.TrailerUrl != null) == hasTrailer);
 
+        if (!string.IsNullOrWhiteSpace(request.GameType))
+            query = query.Where(g => g.GameType == request.GameType);
+
         var totalCount = await query.CountAsync(ct);
         var page = Math.Max(1, request.Page);
         var pageSize = Math.Clamp(request.PageSize, 1, 100);
 
-        var items = await query
-            .OrderByDescending(g => g.CreatedAt).ThenBy(g => g.Name)
+        var desc = string.Equals(request.SortDir, "desc", StringComparison.OrdinalIgnoreCase);
+        var ordered = (request.SortBy?.ToLowerInvariant()) switch
+        {
+            "name" => desc ? query.OrderByDescending(g => g.Name) : query.OrderBy(g => g.Name),
+            "developer" => desc
+                ? query.OrderByDescending(g => g.Developer!.Name)
+                : query.OrderBy(g => g.Developer!.Name),
+            "opened" => desc ? query.OrderByDescending(g => g.CreatedAt) : query.OrderBy(g => g.CreatedAt),
+            "followers" => desc
+                ? query.OrderByDescending(g => g.FollowersCount)
+                : query.OrderBy(g => g.FollowersCount),
+            "tags" => desc
+                ? query.OrderByDescending(g => g.Tags.OrderByDescending(t => t.Weight).Select(t => t.TagName).FirstOrDefault())
+                : query.OrderBy(g => g.Tags.OrderByDescending(t => t.Weight).Select(t => t.TagName).FirstOrDefault()),
+            "trailer" => desc
+                ? query.OrderByDescending(g => g.TrailerUrl != null)
+                : query.OrderBy(g => g.TrailerUrl != null),
+            _ => query.OrderByDescending(g => g.CreatedAt),
+        };
+
+        var items = await ordered
+            .ThenBy(g => g.Name).ThenBy(g => g.AppId)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(ct);
