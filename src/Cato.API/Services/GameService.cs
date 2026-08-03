@@ -180,6 +180,29 @@ public class GameService : IGameService
             // lookups stay unfiltered so already-voted games never vanish.
             query = query.Where(g => !g.IsFiltered);
 
+        if (!string.IsNullOrWhiteSpace(request.Search))
+            query = query.Where(g =>
+                EF.Functions.ILike(g.Name, $"%{request.Search}%") ||
+                (g.Developer != null && EF.Functions.ILike(g.Developer.Name, $"%{request.Search}%")) ||
+                (g.Publisher != null && EF.Functions.ILike(g.Publisher.Name, $"%{request.Search}%")) ||
+                g.Tags.Any(t => EF.Functions.ILike(t.TagName, $"%{request.Search}%")));
+
+        if (!string.IsNullOrWhiteSpace(request.Developer))
+            query = query.Where(g => g.Developer != null && EF.Functions.ILike(g.Developer.Name, $"%{request.Developer}%"));
+
+        if (!string.IsNullOrWhiteSpace(request.Publisher))
+            query = query.Where(g => g.Publisher != null && EF.Functions.ILike(g.Publisher.Name, $"%{request.Publisher}%"));
+
+        // Unknown release dates fail date filters — same semantics as the UI.
+        if (request.ReleasedAfter is { } releasedAfter)
+            query = query.Where(g => g.ReleaseDate != null && g.ReleaseDate >= releasedAfter);
+
+        if (request.ReleasedBefore is { } releasedBefore)
+            query = query.Where(g => g.ReleaseDate != null && g.ReleaseDate <= releasedBefore);
+
+        if (request.HasTrailer is { } hasTrailer)
+            query = query.Where(g => (g.TrailerUrl != null) == hasTrailer);
+
         var totalCount = await query.CountAsync(ct);
         var page = Math.Max(1, request.Page);
         var pageSize = Math.Clamp(request.PageSize, 1, 100);

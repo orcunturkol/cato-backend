@@ -58,6 +58,12 @@ public class GamesController : ControllerBase
     public async Task<IResult> CatalogGames(
         [FromQuery] DateTime? createdAfter,
         [FromQuery] string? appIds,
+        [FromQuery] string? search,
+        [FromQuery] string? developer,
+        [FromQuery] string? publisher,
+        [FromQuery] DateOnly? releasedAfter,
+        [FromQuery] DateOnly? releasedBefore,
+        [FromQuery] bool? hasTrailer,
         [FromQuery] int? page,
         [FromQuery] int? pageSize)
     {
@@ -73,7 +79,10 @@ public class GamesController : ControllerBase
             }
         }
 
-        var result = await _mediator.Send(new CatalogGamesQuery(createdAfter, ids, page ?? 1, pageSize ?? 100));
+        var result = await _mediator.Send(new CatalogGamesQuery(
+            createdAfter, ids, search, developer, publisher,
+            releasedAfter, releasedBefore, hasTrailer,
+            page ?? 1, pageSize ?? 100));
         return Results.Ok(result);
     }
 

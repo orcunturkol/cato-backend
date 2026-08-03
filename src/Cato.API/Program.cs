@@ -110,6 +110,14 @@ builder.Services.AddCors(options =>
 });
 
 // ── Output cache (catalog feed for sibling services) ──
+// Backed by the existing Redis so cached catalog responses are shared across
+// instances, survive restarts, and repeated hits never touch Postgres.
+builder.Services.AddStackExchangeRedisOutputCache(options =>
+{
+    var redis = builder.Configuration.GetSection("Redis").Get<RedisSettings>() ?? new RedisSettings();
+    options.Configuration = redis.ConnectionString;
+    options.InstanceName = $"{redis.InstanceName}-outputcache:";
+});
 builder.Services.AddOutputCache(options =>
 {
     options.AddPolicy("GamesCatalog", policy => policy
