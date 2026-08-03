@@ -103,6 +103,11 @@ public class SteamMovie
     [JsonPropertyName("mp4")]
     public SteamMovieFormats? Mp4 { get; set; }
 
+    // Newer store responses drop progressive mp4/webm in favour of adaptive
+    // streams; hls_h264 is the one browsers can play (via hls.js).
+    [JsonPropertyName("hls_h264")]
+    public string? HlsH264 { get; set; }
+
     [JsonPropertyName("highlight")]
     public bool? Highlight { get; set; }
 }

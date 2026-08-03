@@ -67,7 +67,8 @@ public class SteamGameEnrichmentService : ISteamGameEnrichmentService
 
         var trailer = steamData.Movies?.FirstOrDefault(m => m.Highlight == true)
             ?? steamData.Movies?.FirstOrDefault();
-        game.TrailerUrl = trailer?.Mp4?.Max ?? trailer?.Mp4?.Sd ?? trailer?.Webm?.Max ?? trailer?.Webm?.Sd;
+        game.TrailerUrl = trailer?.Mp4?.Max ?? trailer?.Mp4?.Sd ?? trailer?.Webm?.Max
+            ?? trailer?.Webm?.Sd ?? trailer?.HlsH264;
         game.TrailerThumbnailUrl = trailer?.Thumbnail;
         game.Website = steamData.Website;
         game.SupportedLanguages = steamData.SupportedLanguages;
