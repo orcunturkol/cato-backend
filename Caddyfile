@@ -31,11 +31,3 @@ ogt.catoptricgames.duckdns.org {
 		reverse_proxy ogt-frontend:80
 	}
 }
-
-pgadmin.catoptricgames.duckdns.org {
-	tls {
-		dns duckdns {$DUCKDNS_TOKEN}
-	}
-
-	reverse_proxy pgadmin:80
-}

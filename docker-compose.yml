@@ -99,22 +99,6 @@ services:
     volumes:
       - cato_seq:/data
 
-  # ── pgAdmin ──
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: cato-pgadmin
-    restart: unless-stopped
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@cato.dev
-      PGADMIN_DEFAULT_PASSWORD: admin
-      PGADMIN_CONFIG_SERVER_MODE: "False"
-      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
-    ports:
-      - "${TAILSCALE_IP}:5051:80"
-    volumes:
-      - cato_pgadmin:/var/lib/pgadmin
-      - ./pgadmin-servers.json:/pgadmin4/servers.json:ro
-
   # ── Frontend ──
   frontend:
     build:
@@ -193,7 +177,6 @@ services:
     depends_on:
       - api
       - frontend
-      - pgadmin
       - ogt-api
       - ogt-frontend
 
@@ -209,7 +192,6 @@ services:
 
 volumes:
   ogt_dpkeys:
-  cato_pgadmin:
   cato_rabbitmq:
   cato_redis:
   cato_caddy_data:
