@@ -173,6 +173,11 @@ public class GameService : IGameService
 
         if (request.AppIds is { Count: > 0 })
             query = query.Where(g => request.AppIds.Contains(g.AppId));
+        else
+            // Window browsing feeds OGT's "new pages" list — hide games the
+            // filter pipeline rejected (MMO/Hentai/F2P …). Explicit appId
+            // lookups stay unfiltered so already-voted games never vanish.
+            query = query.Where(g => !g.IsFiltered);
 
         var totalCount = await query.CountAsync(ct);
         var page = Math.Max(1, request.Page);
