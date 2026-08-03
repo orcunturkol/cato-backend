@@ -217,6 +217,9 @@ public class GameService : IGameService
             "developer" => desc
                 ? query.OrderByDescending(g => g.Developer!.Name)
                 : query.OrderBy(g => g.Developer!.Name),
+            "publisher" => desc
+                ? query.OrderByDescending(g => g.Publisher!.Name)
+                : query.OrderBy(g => g.Publisher!.Name),
             "opened" => desc ? query.OrderByDescending(g => g.CreatedAt) : query.OrderBy(g => g.CreatedAt),
             "followers" => desc
                 ? query.OrderByDescending(g => g.FollowersCount)
