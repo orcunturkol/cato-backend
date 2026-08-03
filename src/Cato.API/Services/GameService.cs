@@ -159,6 +159,7 @@ public class GameService : IGameService
     {
         var query = _db.Games
             .AsNoTracking()
+            .AsSplitQuery() // one joined query explodes to games×genres×tags rows
             .Include(g => g.Developer)
             .Include(g => g.Publisher)
             .Include(g => g.Genres)
