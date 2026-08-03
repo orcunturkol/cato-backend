@@ -17,6 +17,9 @@ public class Game
     public bool IsReleased { get; set; }
     public string? HeaderImageUrl { get; set; }
     public string? CapsuleImageUrl { get; set; }
+    public List<string> ScreenshotUrls { get; set; } = [];
+    public string? TrailerUrl { get; set; }
+    public string? TrailerThumbnailUrl { get; set; }
     public string? ShortDescription { get; set; }
     public string? DetailedDescription { get; set; }
     public string? Website { get; set; }

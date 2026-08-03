@@ -60,6 +60,15 @@ public class SteamGameEnrichmentService : ISteamGameEnrichmentService
         game.DetailedDescription = steamData.DetailedDescription;
         game.HeaderImageUrl = steamData.HeaderImage;
         game.CapsuleImageUrl = steamData.CapsuleImage;
+        game.ScreenshotUrls = steamData.Screenshots?
+            .Select(s => s.PathFull)
+            .OfType<string>()
+            .ToList() ?? [];
+
+        var trailer = steamData.Movies?.FirstOrDefault(m => m.Highlight == true)
+            ?? steamData.Movies?.FirstOrDefault();
+        game.TrailerUrl = trailer?.Mp4?.Max ?? trailer?.Mp4?.Sd ?? trailer?.Webm?.Max ?? trailer?.Webm?.Sd;
+        game.TrailerThumbnailUrl = trailer?.Thumbnail;
         game.Website = steamData.Website;
         game.SupportedLanguages = steamData.SupportedLanguages;
 

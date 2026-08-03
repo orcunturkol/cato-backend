@@ -74,6 +74,9 @@ public class CatoDbContext : DbContext
             entity.Property(e => e.PriceUsd).HasColumnType("decimal(10,2)");
             entity.Property(e => e.HeaderImageUrl).HasColumnType("text");
             entity.Property(e => e.CapsuleImageUrl).HasColumnType("text");
+            entity.Property(e => e.ScreenshotUrls).HasColumnType("text[]");
+            entity.Property(e => e.TrailerUrl).HasColumnType("text");
+            entity.Property(e => e.TrailerThumbnailUrl).HasColumnType("text");
             entity.Property(e => e.ShortDescription).HasColumnType("text");
             entity.Property(e => e.DetailedDescription).HasColumnType("text");
             entity.Property(e => e.Website).HasColumnType("text");

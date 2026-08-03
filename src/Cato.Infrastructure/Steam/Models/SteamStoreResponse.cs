@@ -72,6 +72,48 @@ public class SteamAppData
 
     [JsonPropertyName("content_descriptors")]
     public SteamContentDescriptors? ContentDescriptors { get; set; }
+
+    [JsonPropertyName("screenshots")]
+    public List<SteamScreenshot>? Screenshots { get; set; }
+
+    [JsonPropertyName("movies")]
+    public List<SteamMovie>? Movies { get; set; }
+}
+
+public class SteamScreenshot
+{
+    [JsonPropertyName("path_thumbnail")]
+    public string? PathThumbnail { get; set; }
+
+    [JsonPropertyName("path_full")]
+    public string? PathFull { get; set; }
+}
+
+public class SteamMovie
+{
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+
+    [JsonPropertyName("thumbnail")]
+    public string? Thumbnail { get; set; }
+
+    [JsonPropertyName("webm")]
+    public SteamMovieFormats? Webm { get; set; }
+
+    [JsonPropertyName("mp4")]
+    public SteamMovieFormats? Mp4 { get; set; }
+
+    [JsonPropertyName("highlight")]
+    public bool? Highlight { get; set; }
+}
+
+public class SteamMovieFormats
+{
+    [JsonPropertyName("480")]
+    public string? Sd { get; set; }
+
+    [JsonPropertyName("max")]
+    public string? Max { get; set; }
 }
 
 public class SteamContentDescriptors
