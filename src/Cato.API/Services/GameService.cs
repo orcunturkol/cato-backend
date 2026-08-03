@@ -214,19 +214,24 @@ public class GameService : IGameService
         var ordered = (request.SortBy?.ToLowerInvariant()) switch
         {
             "name" => desc ? query.OrderByDescending(g => g.Name) : query.OrderBy(g => g.Name),
+            // Entity sorts lead with a has-value flag so games without a
+            // developer/publisher/tag land at the END in both directions
+            // (postgres alone would put NULLS FIRST on every desc sort).
             "developer" => desc
-                ? query.OrderByDescending(g => g.Developer!.Name)
-                : query.OrderBy(g => g.Developer!.Name),
+                ? query.OrderBy(g => g.Developer!.Name == null).ThenByDescending(g => g.Developer!.Name)
+                : query.OrderBy(g => g.Developer!.Name == null).ThenBy(g => g.Developer!.Name),
             "publisher" => desc
-                ? query.OrderByDescending(g => g.Publisher!.Name)
-                : query.OrderBy(g => g.Publisher!.Name),
+                ? query.OrderBy(g => g.Publisher!.Name == null).ThenByDescending(g => g.Publisher!.Name)
+                : query.OrderBy(g => g.Publisher!.Name == null).ThenBy(g => g.Publisher!.Name),
             "opened" => desc ? query.OrderByDescending(g => g.CreatedAt) : query.OrderBy(g => g.CreatedAt),
             "followers" => desc
                 ? query.OrderByDescending(g => g.FollowersCount)
                 : query.OrderBy(g => g.FollowersCount),
             "tags" => desc
-                ? query.OrderByDescending(g => g.Tags.OrderByDescending(t => t.Weight).Select(t => t.TagName).FirstOrDefault())
-                : query.OrderBy(g => g.Tags.OrderByDescending(t => t.Weight).Select(t => t.TagName).FirstOrDefault()),
+                ? query.OrderBy(g => !g.Tags.Any())
+                    .ThenByDescending(g => g.Tags.OrderByDescending(t => t.Weight).Select(t => t.TagName).FirstOrDefault())
+                : query.OrderBy(g => !g.Tags.Any())
+                    .ThenBy(g => g.Tags.OrderByDescending(t => t.Weight).Select(t => t.TagName).FirstOrDefault()),
             "trailer" => desc
                 ? query.OrderByDescending(g => g.TrailerUrl != null)
                 : query.OrderBy(g => g.TrailerUrl != null),
