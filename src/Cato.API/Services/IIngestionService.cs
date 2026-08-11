@@ -30,6 +30,7 @@ public interface IIngestionService
     Task<ItemIngestResult> IngestCcuItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default);
     Task<ItemIngestResult> IngestGroupMemberCountItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default);
     Task<ItemIngestResult> IngestSteamDbSnapshotItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default);
+    Task<ItemIngestResult> IngestFollowerHistoryItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default);
     Task<ItemIngestResult> IngestFinancialDataItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default);
 }
 

@@ -237,11 +237,16 @@ public class CatoDbContext : DbContext
             entity.HasKey(e => e.Id);
 
             entity.Property(e => e.Error).HasColumnType("text");
+            entity.Property(e => e.Source).HasMaxLength(50).IsRequired()
+                .HasDefaultValue(GroupMemberCountSnapshot.SteamCommunitySource);
 
-            entity.HasIndex(e => new { e.GameId, e.SnapshotDate })
+            // Source is part of the key: the SteamDB follower backfill writes the
+            // same (game, date) pairs the daily scrape does, and both must survive.
+            entity.HasIndex(e => new { e.GameId, e.SnapshotDate, e.Source })
                 .IsUnique()
                 .HasDatabaseName("unique_group_member_count_snapshot");
             entity.HasIndex(e => e.SnapshotDate).HasDatabaseName("idx_group_member_count_date");
+            entity.HasIndex(e => e.Source).HasDatabaseName("idx_group_member_count_source");
 
             entity.HasOne(e => e.Game)
                 .WithMany(g => g.GroupMemberCountSnapshots)
