@@ -67,8 +67,20 @@ This document maps each data source from the Excel spreadsheet to the database t
 
 | Data Source | Method | Endpoint/Source URL | Status |
 |---|---|---|---|
-| **Steam Group Member Count** | Scrape | `steamcommunity.com/search/groups/?text={name}` | Done - background scraping + `POST /api/ingestion/group-members` |
+| **Steam Group Member Count** | Scrape | `steamcommunity.com/games/{app_id}/memberslistxml/?xml=1` | Done - `run_daily_db` orchestrator + `POST /api/ingestion/group-members`. Stored with `source = 'steam_community_group'` |
+| **SteamDB Follower History** | Scrape | `steamdb.info/api/GetGraphFollowersLoggedIn/?appid={app_id}` | Done - `run_steamdb_followers` orchestrator, batch source `steamdb_follower_history`. Historical backfill of the *same* metric, stored in the same table with `source = 'steamdb_follower_history'` |
 | Sample file: `Data Pulled/group_member_count.json` | | | |
+
+> The member-count endpoint above was previously the fuzzy group search
+> `steamcommunity.com/search/groups/?text={name}`. That matched by name and could
+> land on the wrong group — which is why the sample file shows 100,081 for app
+> 2429270 where the current app-keyed endpoint returns ~6,500. The scraper now
+> keys on app_id (`group_member_count_scraper.py`), so new rows are accurate;
+> rows collected under the old method may not be.
+>
+> Both sources measure followers of the game's community hub. They are kept as
+> separate rows rather than merged because the SteamDB graph reaches years
+> further back, and the unique index is `(GameId, SnapshotDate, Source)`.
 
 ### STEAMDB SNAPSHOT Table
 

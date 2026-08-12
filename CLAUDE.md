@@ -23,7 +23,16 @@ dotnet ef database update --project src/Cato.Infrastructure --startup-project sr
 
 The database auto-migrates on startup (`Program.cs` calls `db.Database.Migrate()`).
 
-No test projects exist yet.
+```bash
+dotnet test                                          # all test projects
+dotnet test tests/Cato.API.Tests                     # ingestion handlers
+```
+
+Test projects: `tests/Cato.Infrastructure.Tests` (SteamKit reconnect policy) and
+`tests/Cato.API.Tests` (ingestion handlers, on SQLite in-memory so unique indexes
+are genuinely enforced). Running them needs the **ASP.NET Core shared runtime**
+(`aspnet-runtime-10.0`), not just `dotnet-runtime` — `Cato.API.Tests` references
+the Web-SDK API project, so the test host fails to launch without it.
 
 ## Architecture
 
@@ -42,7 +51,12 @@ Some older services (`GameService`, `GameDataService`, `IngestionService`, `Stea
 ### Key Infrastructure
 
 - **Database**: PostgreSQL via EF Core (Npgsql), hosted on AWS RDS. Terraform for the RDS instance lives in `infra/rds/`; see `infra/rds/CUTOVER_RUNBOOK.md` for provisioning, data migration, rollback, and cleanup procedures. The connection string (`ConnectionStrings__DefaultConnection` in docker-compose) is sourced from `RDS_HOST`/`RDS_DB_PASSWORD` in `.env` on the deployed host. All entity table mappings and indexes are configured via Fluent API in `CatoDbContext.OnModelCreating`. Timestamps (CreatedAt/UpdatedAt) are set automatically in `SaveChanges`/`SaveChangesAsync`.
-- **Messaging**: RabbitMQ with `IngestionDispatcher` (producer) and `RabbitMqConsumerService` (hosted service consumer). Queue: `cato-ingestion`, Exchange: `cato-data`.
+- **Messaging**: RabbitMQ with `IngestionDispatcher` (producer) and `RabbitMqConsumerService` (hosted service consumer). Exchange: `cato-data` (topic). Three queues:
+  - `cato-ingestion` — legacy single-item path, routing key `ingestion.*` → `IIngestionDispatcher`
+  - `cato-ingestion-v2` — batch path, routing key `ingestion.batch.#` → `IBatchIngestionDispatcher`. New collector sources need only a case in its `source` switch; the binding is a wildcard.
+  - `cato-game-analyzed` — routing key `game.analyzed.#` → `IGameAnalyzedDispatcher`. Published by the **reddit_metrics** pipeline when Gemini extracts metrics for a game. Stubs the game if unknown, then moves its app ID to the front of the follower-history queue.
+
+  **Redis writes belong after `SaveChangesAsync`, never inside a transaction** (`GameService.cs`, `SteamGameEnrichmentService.cs`). This is why `game.analyzed` has its own queue rather than riding the batch path — `BatchIngestionDispatcher` runs every item handler inside one transaction, and a Redis write there would not roll back with it.
 - **Steam Integration**: `SteamApiService` (HTTP client for Steam Web API) and `SteamKitService` (SteamKit2 for PICS change monitoring via `SteamPicsWatcherService` background service).
   - **SteamKit Game Discovery**: `SteamPicsWatcherService` polls Steam's PICS change feed via `PICSGetChangesSince`, which returns all AppIDs with any metadata change since the last known change number (persisted in `pics_change_number.txt`). For each changed AppID, it calls `PICSGetProductInfo` and reads the `common` KeyValue section. It filters by `common["type"] == "game"` (excludes DLCs, tools, demos) and `common["releasestate"] == "released"` (excludes unreleased). Also extracts `common["name"]` and `common["steam_release_date"]` (unix timestamp). Matching games are saved with `GameType = "Sourcing"`.
 - **Logging**: Serilog with console sink.
@@ -51,6 +65,9 @@ Some older services (`GameService`, `GameDataService`, `IngestionService`, `Stea
 ### Database Entities
 
 Core entity is `Game` (table: `main_game`, keyed by `AppId`). Related time-series/snapshot entities: `SteamSaleFinancial`, `SteamTraffic`, `CcuHistory`, `OwnedGameData`, `GroupMemberCountSnapshot`, `SteamDbSnapshot`, `IngestionLog`. Games have `GameGenre` and `GenreTag` collections. `LegalEntity` represents developers/publishers.
+
+`GroupMemberCountSnapshot` holds **two series in one table**, discriminated by `Source` and keyed `(GameId, SnapshotDate, Source)`:
+`steam_community_group` (the live daily scrape) and `steamdb_follower_history` (the SteamDB backfill of the same metric, reaching years further back). Any query or upsert against this table must filter on `Source`, or the daily scrape will silently overwrite backfilled history.
 
 ## Configuration
 

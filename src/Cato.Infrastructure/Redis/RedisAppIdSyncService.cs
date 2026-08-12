@@ -6,6 +6,7 @@ namespace Cato.Infrastructure.Redis;
 public class RedisAppIdSyncService : IRedisAppIdSyncService
 {
     public const string NameHashKey = "steam:appid:names";
+    public const string FollowerHistoryKey = "steam:appids:steamdb_follower_history";
 
     public static readonly string[] TrackedSortedSets =
     {
@@ -13,6 +14,7 @@ public class RedisAppIdSyncService : IRedisAppIdSyncService
         "steam:appids:group_member_count",
         "steam:appids:steamdb_most_wished",
         "steam:appids:steamdb_wishlist_activity",
+        FollowerHistoryKey,
     };
 
     private readonly IConnectionMultiplexer _redis;
@@ -82,6 +84,47 @@ public class RedisAppIdSyncService : IRedisAppIdSyncService
         {
             _logger.LogWarning(ex, "redis_remove_failed appId={AppId}", appId);
         }
+    }
+
+    /// <remarks>
+    /// Unlike every other method here, this one lets exceptions escape. The others
+    /// are best-effort adjuncts to work that already succeeded, but this write is
+    /// the entire point of the message that triggered it: a reddit-analysed game is
+    /// stubbed as GameType "Other", which <see cref="ShouldTrack"/> excludes, so it
+    /// is in no tracked set and this negative-score entry is the only thing that
+    /// will ever queue it. Swallowing a failure here would mean the game silently
+    /// never gets its follower history. Letting it throw dead-letters the message
+    /// so it can be replayed.
+    /// </remarks>
+    public async Task PrioritizeFollowerHistoryAsync(int appId, DateTimeOffset analyzedAt, CancellationToken ct)
+    {
+        var db = _redis.GetDatabase();
+
+        // Never resurrect an appid the orchestrator's failure threshold booted.
+        if (await db.SortedSetScoreAsync($"{FollowerHistoryKey}:quarantine", appId) is not null)
+        {
+            _logger.LogInformation("follower_priority_skipped_quarantined appId={AppId}", appId);
+            return;
+        }
+
+        // Score semantics: negative = prioritised, 0 = seeded but never fetched,
+        // positive = last successful fetch. Only the first two may be lowered —
+        // a game already backfilled must not be dragged back to the front.
+        // (ZADD LT is not a substitute: -epoch is less than any positive score,
+        // so LT would happily demote an already-fetched game.)
+        var current = await db.SortedSetScoreAsync(FollowerHistoryKey, appId);
+        if (current is > 0)
+        {
+            _logger.LogDebug(
+                "follower_priority_skipped_already_fetched appId={AppId} score={Score}",
+                appId, current);
+            return;
+        }
+
+        // Negated so a more recent analysis sorts first within the band.
+        await db.SortedSetAddAsync(FollowerHistoryKey, appId, -analyzedAt.ToUnixTimeSeconds());
+
+        _logger.LogInformation("follower_priority_set appId={AppId}", appId);
     }
 
     /// <summary>

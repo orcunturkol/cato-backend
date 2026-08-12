@@ -600,9 +600,15 @@ public class IngestionService : IIngestionService
                     _logger.LogWarning("Steam enrich failed for AppId {AppId}: {Error}", request.AppId, enrichResult.ErrorMessage);
             }
 
-            // Upsert by (GameId, SnapshotDate)
+            // Upsert by (GameId, SnapshotDate, Source). Source must be part of the
+            // match: the SteamDB follower backfill writes the same (game, date)
+            // pairs, and matching one of its rows would overwrite real history.
+            const string source = Cato.Domain.Entities.GroupMemberCountSnapshot.SteamCommunitySource;
+
             var existing = await _db.GroupMemberCountSnapshots
-                .FirstOrDefaultAsync(s => s.GameId == game.Id && s.SnapshotDate == snapshotDate, ct);
+                .FirstOrDefaultAsync(
+                    s => s.GameId == game.Id && s.SnapshotDate == snapshotDate && s.Source == source,
+                    ct);
 
             if (existing is not null)
             {
@@ -617,6 +623,7 @@ public class IngestionService : IIngestionService
                     Id = Guid.NewGuid(),
                     GameId = game.Id,
                     SnapshotDate = snapshotDate,
+                    Source = source,
                     MemberCount = memberCount ?? 0,
                     Error = error,
                     ScrapedAt = scrapedAt
@@ -1810,8 +1817,15 @@ public class IngestionService : IIngestionService
         string? error = data.TryGetProperty("error", out var errEl) && errEl.ValueKind == JsonValueKind.String
             ? errEl.GetString() : null;
 
+        // Scoped to this source: the SteamDB follower backfill writes rows for the
+        // same (game, date) pairs, and matching one of those here would silently
+        // overwrite years of history with today's single scrape.
+        const string source = GroupMemberCountSnapshot.SteamCommunitySource;
+
         var existing = await _db.GroupMemberCountSnapshots
-            .FirstOrDefaultAsync(s => s.GameId == game.Id && s.SnapshotDate == snapshotDate, ct);
+            .FirstOrDefaultAsync(
+                s => s.GameId == game.Id && s.SnapshotDate == snapshotDate && s.Source == source,
+                ct);
 
         if (existing is not null)
         {
@@ -1826,11 +1840,96 @@ public class IngestionService : IIngestionService
             Id = Guid.NewGuid(),
             GameId = game.Id,
             SnapshotDate = snapshotDate,
+            Source = source,
             MemberCount = memberCount ?? 0,
             Error = error,
             ScrapedAt = itemScrapedAt
         });
         return new ItemIngestResult(1, 1, 0, 0);
+    }
+
+    /// <summary>
+    /// Ingests one game's entire daily follower series from SteamDB's graph API.
+    /// Unlike every other batch source, a single item carries hundreds to thousands
+    /// of dated rows, so the snapshot date comes from each row rather than from the
+    /// scrape time, and existing rows are loaded once instead of queried per row.
+    /// </summary>
+    public async Task<ItemIngestResult> IngestFollowerHistoryItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default)
+    {
+        const string source = GroupMemberCountSnapshot.SteamDbFollowerSource;
+
+        if (!data.TryGetProperty("rows", out var rowsEl) || rowsEl.ValueKind != JsonValueKind.Array)
+        {
+            _logger.LogWarning("Follower history item for AppId {AppId} has no 'rows' array", appId);
+            return new ItemIngestResult(0, 0, 0, 1);
+        }
+
+        var game = await FindOrStubGameAsync(appId, null, ct);
+        var itemScrapedAt = scrapedAt.UtcDateTime;
+
+        // One query for the whole series. A per-row lookup would be thousands of
+        // round-trips for a single item.
+        var existing = await _db.GroupMemberCountSnapshots
+            .Where(s => s.GameId == game.Id && s.Source == source)
+            .ToDictionaryAsync(s => s.SnapshotDate, ct);
+
+        int processed = 0, inserted = 0, updated = 0, failed = 0;
+
+        foreach (var row in rowsEl.EnumerateArray())
+        {
+            ct.ThrowIfCancellationRequested();
+            processed++;
+
+            // A malformed row is skipped, never thrown: the dispatcher runs the
+            // whole batch in one transaction, so throwing here would send every
+            // other game's history in this message to the DLQ.
+            if (!row.TryGetProperty("date", out var dateEl) || dateEl.ValueKind != JsonValueKind.String
+                || !DateOnly.TryParse(dateEl.GetString(), CultureInfo.InvariantCulture,
+                                      DateTimeStyles.None, out var snapshotDate))
+            {
+                failed++;
+                continue;
+            }
+
+            if (!row.TryGetProperty("follower_count", out var countEl)
+                || countEl.ValueKind != JsonValueKind.Number
+                || !countEl.TryGetInt32(out var followerCount))
+            {
+                failed++;
+                continue;
+            }
+
+            if (existing.TryGetValue(snapshotDate, out var snapshot))
+            {
+                snapshot.MemberCount = followerCount;
+                snapshot.ScrapedAt = itemScrapedAt;
+                updated++;
+                continue;
+            }
+
+            var added = new GroupMemberCountSnapshot
+            {
+                Id = Guid.NewGuid(),
+                GameId = game.Id,
+                SnapshotDate = snapshotDate,
+                Source = source,
+                MemberCount = followerCount,
+                Error = null,
+                ScrapedAt = itemScrapedAt
+            };
+            _db.GroupMemberCountSnapshots.Add(added);
+            // Guards against a duplicate date inside the same payload, which would
+            // otherwise stage two inserts and trip the unique index on commit.
+            existing[snapshotDate] = added;
+            inserted++;
+        }
+
+        if (failed > 0)
+            _logger.LogWarning(
+                "Follower history for AppId {AppId}: {Failed} of {Processed} rows malformed",
+                appId, failed, processed);
+
+        return new ItemIngestResult(processed, inserted, updated, failed);
     }
 
     public async Task<ItemIngestResult> IngestSteamDbSnapshotItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default)

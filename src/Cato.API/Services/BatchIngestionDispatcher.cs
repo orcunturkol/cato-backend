@@ -118,6 +118,7 @@ public class BatchIngestionDispatcher : IBatchIngestionDispatcher
             "group_member_count"        => _ingestionService.IngestGroupMemberCountItemAsync(item.AppId, item.ScrapedAt, item.Data, ct),
             "steamdb_most_wished"       => _ingestionService.IngestSteamDbSnapshotItemAsync(item.AppId, item.ScrapedAt, item.Data, ct),
             "steamdb_wishlist_activity" => _ingestionService.IngestSteamDbSnapshotItemAsync(item.AppId, item.ScrapedAt, item.Data, ct),
+            "steamdb_follower_history"  => _ingestionService.IngestFollowerHistoryItemAsync(item.AppId, item.ScrapedAt, item.Data, ct),
             "steam_financial"           => _ingestionService.IngestFinancialDataItemAsync(item.AppId, item.ScrapedAt, item.Data, ct),
             _ => throw new InvalidOperationException($"Unknown batch source: '{source}'"),
         };

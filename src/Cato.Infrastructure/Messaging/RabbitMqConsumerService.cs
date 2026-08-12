@@ -9,15 +9,25 @@ using RabbitMQ.Client.Events;
 namespace Cato.Infrastructure.Messaging;
 
 /// <summary>
-/// BackgroundService that listens to both the legacy single-item queue and the
-/// v2 batch queue. Messages on <see cref="RabbitMqSettings.QueueName"/> (routing
-/// key <c>ingestion.{source}</c>) go to <see cref="IIngestionDispatcher"/>.
-/// Messages on <see cref="RabbitMqSettings.QueueNameV2"/> (routing key
-/// <c>ingestion.batch.{source}</c>) go to <see cref="IBatchIngestionDispatcher"/>.
-/// Nacks from either path are dead-lettered to the DLX.
+/// BackgroundService that listens to three queues:
+/// <see cref="RabbitMqSettings.QueueName"/> (legacy, routing key
+/// <c>ingestion.{source}</c>) goes to <see cref="IIngestionDispatcher"/>;
+/// <see cref="RabbitMqSettings.QueueNameV2"/> (routing key
+/// <c>ingestion.batch.{source}</c>) goes to <see cref="IBatchIngestionDispatcher"/>;
+/// <see cref="RabbitMqSettings.GameAnalyzedQueue"/> (routing key
+/// <c>game.analyzed.{source}</c>) goes to <see cref="IGameAnalyzedDispatcher"/>.
+/// Nacks from any path are dead-lettered to the DLX.
 /// </summary>
 public class RabbitMqConsumerService : BackgroundService
 {
+    /// <summary>Which dispatcher a delivery belongs to.</summary>
+    private enum DispatchTarget
+    {
+        Legacy,
+        Batch,
+        GameAnalyzed
+    }
+
     private readonly IServiceProvider _serviceProvider;
     private readonly RabbitMqSettings _settings;
     private readonly ILogger<RabbitMqConsumerService> _logger;
@@ -122,12 +132,31 @@ public class RabbitMqConsumerService : BackgroundService
             routingKey: "ingestion.batch.#",
             cancellationToken: stoppingToken);
 
+        // ── game.analyzed queue (reddit_metrics events) with DLX args ──────
+        await channel.QueueDeclareAsync(
+            queue: _settings.GameAnalyzedQueue,
+            durable: true,
+            exclusive: false,
+            autoDelete: false,
+            arguments: new Dictionary<string, object?>
+            {
+                ["x-dead-letter-exchange"]    = _settings.DeadLetterExchange,
+                ["x-dead-letter-routing-key"] = "game.analyzed.dead"
+            },
+            cancellationToken: stoppingToken);
+
+        await channel.QueueBindAsync(
+            queue: _settings.GameAnalyzedQueue,
+            exchange: _settings.ExchangeName,
+            routingKey: "game.analyzed.#",
+            cancellationToken: stoppingToken);
+
         await channel.BasicQosAsync(prefetchSize: 0, prefetchCount: 1, global: false, cancellationToken: stoppingToken);
 
         // ── Legacy consumer ────────────────────────────────────────────────
         var legacyConsumer = new AsyncEventingBasicConsumer(channel);
         legacyConsumer.ReceivedAsync += (_, ea) =>
-            HandleAsync(channel, ea, dispatchBatch: false, stoppingToken);
+            HandleAsync(channel, ea, DispatchTarget.Legacy, stoppingToken);
 
         await channel.BasicConsumeAsync(
             queue: _settings.QueueName,
@@ -138,7 +167,7 @@ public class RabbitMqConsumerService : BackgroundService
         // ── V2 (batch) consumer ────────────────────────────────────────────
         var batchConsumer = new AsyncEventingBasicConsumer(channel);
         batchConsumer.ReceivedAsync += (_, ea) =>
-            HandleAsync(channel, ea, dispatchBatch: true, stoppingToken);
+            HandleAsync(channel, ea, DispatchTarget.Batch, stoppingToken);
 
         await channel.BasicConsumeAsync(
             queue: _settings.QueueNameV2,
@@ -146,9 +175,21 @@ public class RabbitMqConsumerService : BackgroundService
             consumer: batchConsumer,
             cancellationToken: stoppingToken);
 
+        // ── game.analyzed consumer ─────────────────────────────────────────
+        var gameAnalyzedConsumer = new AsyncEventingBasicConsumer(channel);
+        gameAnalyzedConsumer.ReceivedAsync += (_, ea) =>
+            HandleAsync(channel, ea, DispatchTarget.GameAnalyzed, stoppingToken);
+
+        await channel.BasicConsumeAsync(
+            queue: _settings.GameAnalyzedQueue,
+            autoAck: false,
+            consumer: gameAnalyzedConsumer,
+            cancellationToken: stoppingToken);
+
         _logger.LogInformation(
-            "Listening on queues '{Legacy}' (single) and '{V2}' (batch); DLX='{DLX}'",
-            _settings.QueueName, _settings.QueueNameV2, _settings.DeadLetterExchange);
+            "Listening on queues '{Legacy}' (single), '{V2}' (batch) and '{Analyzed}' (game.analyzed); DLX='{DLX}'",
+            _settings.QueueName, _settings.QueueNameV2, _settings.GameAnalyzedQueue,
+            _settings.DeadLetterExchange);
 
         try
         {
@@ -168,28 +209,33 @@ public class RabbitMqConsumerService : BackgroundService
     private async Task HandleAsync(
         IChannel channel,
         BasicDeliverEventArgs ea,
-        bool dispatchBatch,
+        DispatchTarget target,
         CancellationToken stoppingToken)
     {
         var body = ea.Body.ToArray();
         var messageJson = Encoding.UTF8.GetString(body);
 
         _logger.LogInformation(
-            "Received message on routingKey={RoutingKey} (batch={Batch}) size={Size}",
-            ea.RoutingKey, dispatchBatch, body.Length);
+            "Received message on routingKey={RoutingKey} (target={Target}) size={Size}",
+            ea.RoutingKey, target, body.Length);
 
         try
         {
             using var scope = _serviceProvider.CreateScope();
-            if (dispatchBatch)
+            switch (target)
             {
-                var dispatcher = scope.ServiceProvider.GetRequiredService<IBatchIngestionDispatcher>();
-                await dispatcher.DispatchAsync(messageJson, stoppingToken);
-            }
-            else
-            {
-                var dispatcher = scope.ServiceProvider.GetRequiredService<IIngestionDispatcher>();
-                await dispatcher.DispatchAsync(messageJson, stoppingToken);
+                case DispatchTarget.Batch:
+                    await scope.ServiceProvider.GetRequiredService<IBatchIngestionDispatcher>()
+                        .DispatchAsync(messageJson, stoppingToken);
+                    break;
+                case DispatchTarget.GameAnalyzed:
+                    await scope.ServiceProvider.GetRequiredService<IGameAnalyzedDispatcher>()
+                        .DispatchAsync(messageJson, stoppingToken);
+                    break;
+                default:
+                    await scope.ServiceProvider.GetRequiredService<IIngestionDispatcher>()
+                        .DispatchAsync(messageJson, stoppingToken);
+                    break;
             }
 
             await channel.BasicAckAsync(ea.DeliveryTag, multiple: false, cancellationToken: stoppingToken);

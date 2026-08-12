@@ -57,6 +57,7 @@ builder.Services.Configure<Cato.Infrastructure.Messaging.RabbitMqSettings>(
     builder.Configuration.GetSection("RabbitMQ"));
 builder.Services.AddScoped<Cato.Infrastructure.Messaging.IIngestionDispatcher, Cato.API.Services.IngestionDispatcher>();
 builder.Services.AddScoped<Cato.Infrastructure.Messaging.IBatchIngestionDispatcher, Cato.API.Services.BatchIngestionDispatcher>();
+builder.Services.AddScoped<Cato.Infrastructure.Messaging.IGameAnalyzedDispatcher, Cato.API.Services.GameAnalyzedDispatcher>();
 builder.Services.AddHostedService<Cato.Infrastructure.Messaging.RabbitMqConsumerService>();
 
 // ── Game quality filter ──

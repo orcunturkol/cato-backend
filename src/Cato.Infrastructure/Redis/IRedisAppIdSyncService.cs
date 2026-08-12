@@ -18,4 +18,16 @@ public interface IRedisAppIdSyncService
 
     /// <summary>Remove the appid from every tracked set and the name hash.</summary>
     Task RemoveAsync(int appId, CancellationToken ct);
+
+    /// <summary>
+    /// Move an appid to the front of the follower-history queue by parking it at a
+    /// negative score. The Python orchestrator drains that set with ZRANGE
+    /// ascending, so negative scores sort ahead of the whole seeded population,
+    /// and <c>mark_success</c> later writes a positive timestamp that takes it out
+    /// of the band for good.
+    ///
+    /// Throws on Redis failure, unlike the best-effort methods above — see the
+    /// implementation's remarks.
+    /// </summary>
+    Task PrioritizeFollowerHistoryAsync(int appId, DateTimeOffset analyzedAt, CancellationToken ct);
 }
