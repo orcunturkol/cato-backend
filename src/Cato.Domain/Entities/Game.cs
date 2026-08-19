@@ -9,6 +9,13 @@ public class Game
     public string Name { get; set; } = string.Empty;
     public string GameType { get; set; } = "Owned"; // Owned, Competitor, Sourcing, Other
     public DateOnly? ReleaseDate { get; set; }
+
+    /// <summary>
+    /// Steam's release date exactly as the store shows it. Most unreleased games
+    /// give something no calendar date can hold — "Q4 2026", "To be announced" —
+    /// so <see cref="ReleaseDate"/> stays null for them and this keeps the answer.
+    /// </summary>
+    public string? ReleaseDateRaw { get; set; }
     public decimal? PriceUsd { get; set; }
     public int DiscountPercent { get; set; }
     public Guid? DeveloperId { get; set; }
@@ -33,6 +40,24 @@ public class Game
     public string? FilterReason { get; set; }
     public DateTime? FilteredAt { get; set; }
     public JsonDocument? ContentDescriptorIds { get; set; }
+
+    /// <summary>When the Steam store enrichment last succeeded. Null means never.</summary>
+    public DateTime? LastEnrichedAt { get; set; }
+
+    /// <summary>
+    /// Consecutive failed enrichment attempts. Delisted and region-locked apps
+    /// answer success=false forever, so the watcher stops retrying past a threshold.
+    /// Reset to 0 on every success.
+    /// </summary>
+    public int EnrichmentFailures { get; set; }
+
+    /// <summary>
+    /// Extraction time of the most recent <c>game.analyzed</c> event, i.e. when
+    /// reddit_metrics last pulled metrics for this game. Null for games CATO found
+    /// on its own. Doubles as the enrichment queue's priority key.
+    /// </summary>
+    public DateTime? AnalyzedAt { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 

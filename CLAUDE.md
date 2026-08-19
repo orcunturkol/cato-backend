@@ -54,7 +54,7 @@ Some older services (`GameService`, `GameDataService`, `IngestionService`, `Stea
 - **Messaging**: RabbitMQ with `IngestionDispatcher` (producer) and `RabbitMqConsumerService` (hosted service consumer). Exchange: `cato-data` (topic). Three queues:
   - `cato-ingestion` — legacy single-item path, routing key `ingestion.*` → `IIngestionDispatcher`
   - `cato-ingestion-v2` — batch path, routing key `ingestion.batch.#` → `IBatchIngestionDispatcher`. New collector sources need only a case in its `source` switch; the binding is a wildcard.
-  - `cato-game-analyzed` — routing key `game.analyzed.#` → `IGameAnalyzedDispatcher`. Published by the **reddit_metrics** pipeline when Gemini extracts metrics for a game. Stubs the game if unknown, then moves its app ID to the front of the follower-history queue.
+  - `cato-game-analyzed` — routing key `game.analyzed.#` → `IGameAnalyzedDispatcher`. Published by the **reddit_metrics** pipeline when Gemini extracts metrics for a game. Stubs the game if unknown, enriches it from the Steam store when it has never been enriched, stamps `AnalyzedAt`, then moves its app ID to the front of the follower-history queue.
 
   **Redis writes belong after `SaveChangesAsync`, never inside a transaction** (`GameService.cs`, `SteamGameEnrichmentService.cs`). This is why `game.analyzed` has its own queue rather than riding the batch path — `BatchIngestionDispatcher` runs every item handler inside one transaction, and a Redis write there would not roll back with it.
 - **Steam Integration**: `SteamApiService` (HTTP client for Steam Web API) and `SteamKitService` (SteamKit2 for PICS change monitoring via `SteamPicsWatcherService` background service).
@@ -65,6 +65,38 @@ Some older services (`GameService`, `GameDataService`, `IngestionService`, `Stea
 ### Database Entities
 
 Core entity is `Game` (table: `main_game`, keyed by `AppId`). Related time-series/snapshot entities: `SteamSaleFinancial`, `SteamTraffic`, `CcuHistory`, `OwnedGameData`, `GroupMemberCountSnapshot`, `SteamDbSnapshot`, `IngestionLog`. Games have `GameGenre` and `GenreTag` collections. `LegalEntity` represents developers/publishers.
+
+### Steam store enrichment
+
+`SteamGameEnrichmentService.EnrichGameAsync` is the single writer of a game's store
+record: name, descriptions, media, price, platforms, release date, developer,
+publisher, `GameGenre` rows, and `GenreTag` rows (store categories as `Mechanic`,
+scraped user tags as `UserTag` with their rank as `Weight`). Three things reach it:
+
+| Trigger | When |
+|---|---|
+| `SteamPicsWatcherService` | a newly discovered app, immediately after creation |
+| `GameAnalyzedDispatcher` | a reddit-analysed game that has never been enriched |
+| `GameEnrichmentWatcherService` | hourly sweep — everything the two above missed |
+
+The sweep (`GameEnrichment` settings section) serves reddit-analysed games first
+(`AnalyzedAt != null`, newest analysis leading), then the rest of the never-enriched
+population by app id, then — only when `RefreshAfterDays > 0`, off by default — the
+stalest already-enriched records. `LastEnrichedAt` is the "done" marker and
+`EnrichmentFailures` the retry budget: delisted and region-locked apps answer
+`success=false` forever, so past `FailureThreshold` they are dropped from the queue.
+
+Two traps worth knowing:
+
+- **Do not run the post-enrichment quality filter on reddit games.**
+  `SteamPicsWatcherService.ApplyPostEnrichmentFilterAsync` *deletes* the row it
+  rejects. That is right for an app PICS happened to surface, and wrong for a game
+  reddit_metrics holds extractions and follower history for — which is why
+  `GameAnalyzedDispatcher` enriches without it.
+- **`ReleaseDate` is null for most unreleased games and that is correct.** Steam
+  answers "Q4 2026", "2027" or "To be announced" for them; no calendar date exists.
+  `ReleaseDateRaw` keeps the store's literal string, and `IsReleased` carries
+  `coming_soon`. Query those two before concluding a release date is missing.
 
 `GroupMemberCountSnapshot` holds **two series in one table**, discriminated by `Source` and keyed `(GameId, SnapshotDate, Source)`:
 `steam_community_group` (the live daily scrape) and `steamdb_follower_history` (the SteamDB backfill of the same metric, reaching years further back). Any query or upsert against this table must filter on `Source`, or the daily scrape will silently overwrite backfilled history.

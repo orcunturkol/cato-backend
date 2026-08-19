@@ -69,6 +69,10 @@ builder.Services.Configure<SteamWebApiSettings>(builder.Configuration.GetSection
 builder.Services.Configure<PlayerProfileSettings>(builder.Configuration.GetSection(PlayerProfileSettings.SectionName));
 builder.Services.AddHostedService<SteamPlayerProfileWatcherService>();
 
+// ── Steam store enrichment backfill ──
+builder.Services.Configure<GameEnrichmentSettings>(builder.Configuration.GetSection(GameEnrichmentSettings.SectionName));
+builder.Services.AddHostedService<GameEnrichmentWatcherService>();
+
 // ── Steam achievements (schema + per-reviewer player achievements) ──
 builder.Services.Configure<AchievementSettings>(builder.Configuration.GetSection(AchievementSettings.SectionName));
 builder.Services.AddHostedService<GameAchievementSchemaWatcherService>();

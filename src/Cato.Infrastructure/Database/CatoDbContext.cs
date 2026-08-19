@@ -88,10 +88,15 @@ public class CatoDbContext : DbContext
             entity.Property(e => e.Platforms).HasColumnType("jsonb");
             entity.Property(e => e.FilterReason).HasMaxLength(100);
             entity.Property(e => e.ContentDescriptorIds).HasColumnType("jsonb");
+            entity.Property(e => e.ReleaseDateRaw).HasMaxLength(100);
 
             entity.HasIndex(e => e.GameType);
             entity.HasIndex(e => e.ReleaseDate);
             entity.HasIndex(e => new { e.IsFiltered, e.FilterReason });
+
+            // Drives the enrichment watcher's queue: never-enriched first, and
+            // reddit-analysed games ahead of the rest of that band.
+            entity.HasIndex(e => new { e.LastEnrichedAt, e.EnrichmentFailures, e.AnalyzedAt });
 
             entity.HasOne(e => e.Developer)
                 .WithMany(le => le.DeveloperGames)
