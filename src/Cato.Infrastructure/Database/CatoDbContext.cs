@@ -1,5 +1,8 @@
+using System.Text.Json;
 using Cato.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace Cato.Infrastructure.Database;
 
@@ -832,6 +835,38 @@ public class CatoDbContext : DbContext
             entity.HasIndex(e => e.QuarantinedUntil)
                 .HasDatabaseName("idx_steam_player_achievement_fetch_quarantine");
         });
+
+        MapJsonDocumentsAsTextOnNonPostgres(modelBuilder);
+    }
+
+    /// <summary>
+    /// Npgsql maps <see cref="JsonDocument"/> to jsonb natively; no other provider
+    /// does, and as of EF 10 the attempt is a hard model error rather than a warning.
+    /// The test suite runs on SQLite, so without this every test fails before it
+    /// reaches its assertion. Storing the same JSON as text keeps those tests honest —
+    /// the column type differs, the values do not.
+    /// </summary>
+    private void MapJsonDocumentsAsTextOnNonPostgres(ModelBuilder modelBuilder)
+    {
+        if (Database.IsNpgsql()) return;
+
+        var converter = new ValueConverter<JsonDocument, string>(
+            doc => doc.RootElement.GetRawText(),
+            json => JsonDocument.Parse(json, default));
+
+        var comparer = new ValueComparer<JsonDocument>(
+            (left, right) => left!.RootElement.GetRawText() == right!.RootElement.GetRawText(),
+            doc => doc.RootElement.GetRawText().GetHashCode(),
+            doc => JsonDocument.Parse(doc.RootElement.GetRawText(), default));
+
+        foreach (var property in modelBuilder.Model.GetEntityTypes()
+                     .SelectMany(entityType => entityType.GetProperties())
+                     .Where(property => property.ClrType == typeof(JsonDocument)))
+        {
+            property.SetValueConverter(converter);
+            property.SetValueComparer(comparer);
+            property.SetColumnType("TEXT");
+        }
     }
 
     public override int SaveChanges()
