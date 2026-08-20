@@ -27,6 +27,35 @@ public class SteamGameEnrichmentService : ISteamGameEnrichmentService
         _logger = logger;
     }
 
+    /// <summary>
+    /// Formats the store actually serves, most specific first. A month-only date
+    /// lands on the 1st — deliberate, and why <c>ReleaseDateRaw</c> keeps the
+    /// original text alongside it.
+    /// </summary>
+    private static readonly string[] ReleaseDateFormats =
+    [
+        "MMM d, yyyy",
+        "d MMM, yyyy",
+        "MMMM d, yyyy",
+        "d MMMM, yyyy",
+        "MMM yyyy",
+        "MMMM yyyy"
+    ];
+
+    /// <summary>
+    /// Parses a Steam release date, or reports failure. Unreleased games mostly
+    /// say "Q4 2026", "2027" or "To be announced" — no calendar date exists, so
+    /// there is nothing to salvage and guessing one would be worse than null.
+    /// </summary>
+    public static bool TryParseSteamReleaseDate(string? raw, out DateOnly date)
+    {
+        date = default;
+        if (string.IsNullOrWhiteSpace(raw)) return false;
+
+        return DateOnly.TryParseExact(raw.Trim(), ReleaseDateFormats,
+            CultureInfo.InvariantCulture, DateTimeStyles.None, out date);
+    }
+
     public async Task<bool> EnrichGameAsync(Guid gameId, CancellationToken ct = default)
     {
         // 1. Load game with related data
@@ -45,7 +74,15 @@ public class SteamGameEnrichmentService : ISteamGameEnrichmentService
         var steamData = await _steam.GetAppDetailsAsync(game.AppId, ct);
         if (steamData is null)
         {
-            _logger.LogWarning("Enrichment failed: Could not fetch Steam data for AppId {AppId}", game.AppId);
+            // Count it. Delisted apps and region-locked ones answer success=false
+            // every time, and without a tally the watcher would re-request them
+            // for the rest of the app's life.
+            game.EnrichmentFailures++;
+            await _db.SaveChangesAsync(ct);
+
+            _logger.LogWarning(
+                "Enrichment failed: Could not fetch Steam data for AppId {AppId} (consecutive failures: {Failures})",
+                game.AppId, game.EnrichmentFailures);
             return false;
         }
 
@@ -92,18 +129,12 @@ public class SteamGameEnrichmentService : ISteamGameEnrichmentService
         if (steamData.ReleaseDate is not null)
         {
             game.IsReleased = !(steamData.ReleaseDate.ComingSoon ?? true);
-            if (!string.IsNullOrWhiteSpace(steamData.ReleaseDate.Date))
-            {
-                if (DateOnly.TryParseExact(steamData.ReleaseDate.Date, "MMM d, yyyy",
-                        CultureInfo.InvariantCulture, DateTimeStyles.None, out var d1))
-                    game.ReleaseDate = d1;
-                else if (DateOnly.TryParseExact(steamData.ReleaseDate.Date, "d MMM, yyyy",
-                        CultureInfo.InvariantCulture, DateTimeStyles.None, out var d2))
-                    game.ReleaseDate = d2;
-                else if (DateOnly.TryParseExact(steamData.ReleaseDate.Date, "MMM yyyy",
-                        CultureInfo.InvariantCulture, DateTimeStyles.None, out var d3))
-                    game.ReleaseDate = d3;
-            }
+
+            var raw = steamData.ReleaseDate.Date;
+            game.ReleaseDateRaw = string.IsNullOrWhiteSpace(raw) ? null : raw.Trim();
+
+            if (TryParseSteamReleaseDate(raw, out var parsed))
+                game.ReleaseDate = parsed;
         }
 
         if (steamData.Genres?.Any(g =>
@@ -219,6 +250,8 @@ public class SteamGameEnrichmentService : ISteamGameEnrichmentService
         }
 
         // 8. Final save
+        game.LastEnrichedAt = DateTime.UtcNow;
+        game.EnrichmentFailures = 0;
         await _db.SaveChangesAsync(ct);
 
         // 9. Sync AppId + name to Redis so orchestrators can pick it up
