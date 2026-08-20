@@ -38,7 +38,7 @@ public class FollowerHistoryIngestionTests : IDisposable
     private CatoDbContext NewContext() => new(_options);
 
     private static IngestionService NewService(CatoDbContext db) =>
-        new(db, NullLogger<IngestionService>.Instance, new StubGameService());
+        new(db, NullLogger<IngestionService>.Instance);
 
     private static readonly Guid GameId = Guid.NewGuid();
     private const int AppId = 2429270;
@@ -260,23 +260,4 @@ public class FollowerHistoryIngestionTests : IDisposable
     /// Every follower test pre-seeds the game, so <c>FindOrStubGameAsync</c> returns
     /// on its first line and none of these members are ever reached.
     /// </summary>
-    private sealed class StubGameService : IGameService
-    {
-        public Task<Result<GameDto>> CreateGameAsync(CreateGameCommand c, CancellationToken ct = default)
-            => throw new NotSupportedException();
-        public Task<Result<UpsertGameResult>> UpsertGameAsync(CreateGameCommand c, CancellationToken ct = default)
-            => throw new NotSupportedException();
-        public Task<PagedResult<GameDto>> ListGamesAsync(ListGamesQuery q, CancellationToken ct = default)
-            => throw new NotSupportedException();
-        public Task<PagedResult<GameDto>> CatalogGamesAsync(CatalogGamesQuery q, CancellationToken ct = default)
-            => throw new NotSupportedException();
-        public Task<Result<GameDto>> GetGameDetailsAsync(Guid id, CancellationToken ct = default)
-            => throw new NotSupportedException();
-        public Task<Result<GameDto>> UpdateGameAsync(UpdateGameCommand c, CancellationToken ct = default)
-            => throw new NotSupportedException();
-        public Task<Result<bool>> DeleteGameAsync(Guid id, CancellationToken ct = default)
-            => throw new NotSupportedException();
-        public Task<Result<GameDto>> EnrichGameFromSteamAsync(Guid id, CancellationToken ct = default)
-            => throw new NotSupportedException();
-    }
 }
