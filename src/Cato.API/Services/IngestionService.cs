@@ -12,13 +12,11 @@ public class IngestionService : IIngestionService
 {
     private readonly CatoDbContext _db;
     private readonly ILogger<IngestionService> _logger;
-    private readonly IGameService _gameService;
 
-    public IngestionService(CatoDbContext db, ILogger<IngestionService> logger, IGameService gameService)
+    public IngestionService(CatoDbContext db, ILogger<IngestionService> logger)
     {
         _db = db;
         _logger = logger;
-        _gameService = gameService;
     }
 
     public async Task<IngestionResult> IngestPeakCcuAsync(IngestPeakCcuCommand request, CancellationToken ct = default)
@@ -237,25 +235,7 @@ public class IngestionService : IIngestionService
 
         try
         {
-            var game = await _db.Games.FirstOrDefaultAsync(g => g.AppId == request.AppId, ct);
-            if (game is null)
-            {
-                _logger.LogInformation("Game with AppId {AppId} not found. Creating stub and enriching from Steam.", request.AppId);
-
-                game = new Cato.Domain.Entities.Game
-                {
-                    Id = Guid.NewGuid(),
-                    AppId = request.AppId,
-                    Name = $"App {request.AppId}",
-                    GameType = "Other"
-                };
-                _db.Games.Add(game);
-                await _db.SaveChangesAsync(ct);
-
-                var enrichResult = await _gameService.EnrichGameFromSteamAsync(game.Id, ct);
-                if (!enrichResult.IsSuccess)
-                    _logger.LogWarning("Steam enrich failed for AppId {AppId}: {Error}", request.AppId, enrichResult.ErrorMessage);
-            }
+            var game = await FindOrStubGameAsync(request.AppId, null, ct);
 
             var doc = await JsonDocument.ParseAsync(request.Content, cancellationToken: ct);
 
@@ -580,25 +560,7 @@ public class IngestionService : IIngestionService
                 error = errEl.GetString();
 
             // Find or create the game
-            var game = await _db.Games.FirstOrDefaultAsync(g => g.AppId == request.AppId, ct);
-            if (game is null)
-            {
-                _logger.LogInformation("Game with AppId {AppId} not found. Creating stub and enriching from Steam.", request.AppId);
-
-                game = new Cato.Domain.Entities.Game
-                {
-                    Id = Guid.NewGuid(),
-                    AppId = request.AppId,
-                    Name = $"App {request.AppId}",
-                    GameType = "Other"
-                };
-                _db.Games.Add(game);
-                await _db.SaveChangesAsync(ct);
-
-                var enrichResult = await _gameService.EnrichGameFromSteamAsync(game.Id, ct);
-                if (!enrichResult.IsSuccess)
-                    _logger.LogWarning("Steam enrich failed for AppId {AppId}: {Error}", request.AppId, enrichResult.ErrorMessage);
-            }
+            var game = await FindOrStubGameAsync(request.AppId, null, ct);
 
             // Upsert by (GameId, SnapshotDate, Source). Source must be part of the
             // match: the SteamDB follower backfill writes the same (game, date)
@@ -697,28 +659,9 @@ public class IngestionService : IIngestionService
                 ? releaseEl.GetString() : null;
 
             // Find or create Game
-            var game = await _db.Games.FirstOrDefaultAsync(g => g.AppId == request.AppId, ct);
-            if (game is null)
-            {
-                _logger.LogInformation("Game with AppId {AppId} not found. Creating stub and enriching from Steam.", request.AppId);
-
-                string gameName = root.TryGetProperty("name", out var nameEl) && nameEl.ValueKind != JsonValueKind.Null
-                    ? nameEl.GetString()! : $"App {request.AppId}";
-
-                game = new Game
-                {
-                    Id = Guid.NewGuid(),
-                    AppId = request.AppId,
-                    Name = gameName,
-                    GameType = "Other"
-                };
-                _db.Games.Add(game);
-                await _db.SaveChangesAsync(ct);
-
-                var enrichResult = await _gameService.EnrichGameFromSteamAsync(game.Id, ct);
-                if (!enrichResult.IsSuccess)
-                    _logger.LogWarning("Steam enrich failed for AppId {AppId}: {Error}", request.AppId, enrichResult.ErrorMessage);
-            }
+            var stubName = root.TryGetProperty("name", out var nameEl) && nameEl.ValueKind != JsonValueKind.Null
+                ? nameEl.GetString() : null;
+            var game = await FindOrStubGameAsync(request.AppId, stubName, ct);
 
             // Upsert by (GameId, SnapshotDate, Source)
             var existing = await _db.SteamDbSnapshots
@@ -900,24 +843,8 @@ public class IngestionService : IIngestionService
                                 if (!appId.HasValue || itemType is not ("game" or "demo") || !seenAppIds.Add(appId.Value))
                                     continue;
 
-                                var game = await _db.Games.FirstOrDefaultAsync(g => g.AppId == appId.Value, ct);
-                                if (game is null)
-                                {
-                                    _logger.LogInformation("Game with AppId {AppId} not found. Creating stub and enriching from Steam.", appId.Value);
-                                    game = new Game
-                                    {
-                                        Id = Guid.NewGuid(),
-                                        AppId = appId.Value,
-                                        Name = Str(gameEl, "name") ?? $"App {appId.Value}",
-                                        GameType = "Other"
-                                    };
-                                    _db.Games.Add(game);
-                                    await _db.SaveChangesAsync(ct);
-
-                                    var enrichResult = await _gameService.EnrichGameFromSteamAsync(game.Id, ct);
-                                    if (!enrichResult.IsSuccess)
-                                        _logger.LogWarning("Steam enrich failed for AppId {AppId}: {Error}", appId.Value, enrichResult.ErrorMessage);
-                                }
+                                var game = await FindOrStubGameAsync(
+                                    appId.Value, Str(gameEl, "name"), ct);
 
                                 var link = await _db.SteamSpecialEventGames
                                     .FirstOrDefaultAsync(l => l.SteamSpecialEventId == ev.Id && l.GameId == game.Id, ct);
@@ -2058,12 +1985,22 @@ public class IngestionService : IIngestionService
         return new ItemIngestResult(processed, inserted, 0, failed);
     }
 
+    /// <summary>
+    /// Returns the game for this app id, creating a bare row if CATO has never seen
+    /// it. Ingestion needs the row to hang a foreign key on; it never reads the
+    /// store fields.
+    ///
+    /// It deliberately does not fetch anything from Steam. Every caller runs inside
+    /// the batch dispatcher's single transaction and on the shared consumer channel,
+    /// so a store call here holds a Postgres transaction open for ~15 seconds per new
+    /// app *and* blocks every other queue behind it. Leaving <c>LastEnrichedAt</c>
+    /// null is the handoff — <c>GameEnrichmentWatcherService</c> picks the row up on
+    /// its next sweep.
+    /// </summary>
     private async Task<Game> FindOrStubGameAsync(int appId, string? stubName, CancellationToken ct)
     {
         var game = await _db.Games.FirstOrDefaultAsync(g => g.AppId == appId, ct);
         if (game is not null) return game;
-
-        _logger.LogInformation("Game with AppId {AppId} not found. Creating stub and enriching from Steam.", appId);
 
         game = new Game
         {
@@ -2075,9 +2012,8 @@ public class IngestionService : IIngestionService
         _db.Games.Add(game);
         await _db.SaveChangesAsync(ct);
 
-        var enrichResult = await _gameService.EnrichGameFromSteamAsync(game.Id, ct);
-        if (!enrichResult.IsSuccess)
-            _logger.LogWarning("Steam enrich failed for AppId {AppId}: {Error}", appId, enrichResult.ErrorMessage);
+        _logger.LogInformation(
+            "Stubbed AppId {AppId} — queued for Steam enrichment", appId);
 
         return game;
     }
