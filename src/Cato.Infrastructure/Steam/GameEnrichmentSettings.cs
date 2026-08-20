@@ -20,9 +20,17 @@ public class GameEnrichmentSettings
     public int FailureThreshold { get; set; } = 5;
 
     /// <summary>
-    /// Re-enrich games last enriched more than this many days ago. Tags, price and
-    /// release dates all drift, but a full refresh is 70k games' worth of Steam
-    /// traffic — 0 disables it, which is the default.
+    /// Re-enrich games last enriched more than this many days ago; 0 disables it.
+    /// Tags, price and release dates all drift, and a full pass is ~62k games' worth
+    /// of Steam traffic, so it runs behind everything that has no store record at all
+    /// — except for reddit-analysed games, which are refreshed before either general
+    /// band.
+    ///
+    /// Do not use this to repair records written by an older version of the
+    /// enrichment code. It keys off <c>LastEnrichedAt</c>, which was seeded from
+    /// <c>UpdatedAt</c> for pre-existing rows and therefore reads "last touched by
+    /// anything"; a 30-day window found 426 of 721 known-stale games. Requeue those
+    /// explicitly instead — see the RequeueStaleAnalyzedGamesForEnrichment migration.
     /// </summary>
     public int RefreshAfterDays { get; set; }
 
