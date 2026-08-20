@@ -116,6 +116,54 @@ public class GameEnrichmentQueueTests : IDisposable
     }
 
     [Fact]
+    public async Task A_stale_reddit_game_outranks_a_never_enriched_discovered_one()
+    {
+        // The reason the bands exist. On "never enriched first" ordering, the stale
+        // reddit game would sit behind every discovered game in the catalogue.
+        var staleReddit = await SeedAsync(
+            900, analyzedAt: Now.AddDays(-1), lastEnrichedAt: Now.AddDays(-90));
+        var neverDiscovered = await SeedAsync(1);
+
+        var batch = await SelectAsync(
+            new GameEnrichmentSettings { BatchSize = 10, RefreshAfterDays = 30 });
+
+        Assert.Equal([staleReddit, neverDiscovered], batch.GameIds);
+    }
+
+    [Fact]
+    public async Task A_never_enriched_reddit_game_still_outranks_a_stale_one()
+    {
+        var staleReddit = await SeedAsync(
+            900, analyzedAt: Now.AddDays(-1), lastEnrichedAt: Now.AddDays(-90));
+        var neverReddit = await SeedAsync(901, analyzedAt: Now.AddDays(-5));
+
+        var batch = await SelectAsync(
+            new GameEnrichmentSettings { BatchSize = 10, RefreshAfterDays = 30 });
+
+        Assert.Equal([neverReddit, staleReddit], batch.GameIds);
+        Assert.Equal(2, batch.Analysed);
+        Assert.Equal(1, batch.Refresh);
+    }
+
+    [Fact]
+    public async Task Reddit_games_can_be_refreshed_while_the_rest_are_left_alone()
+    {
+        var staleReddit = await SeedAsync(
+            900, analyzedAt: Now.AddDays(-1), lastEnrichedAt: Now.AddDays(-90));
+        await SeedAsync(1, lastEnrichedAt: Now.AddDays(-90));
+        await SeedAsync(2);
+
+        var batch = await SelectAsync(new GameEnrichmentSettings
+        {
+            BatchSize = 10,
+            RefreshAfterDays = 30,
+            IncludeUnanalyzedGames = false
+        });
+
+        Assert.Equal([staleReddit], batch.GameIds);
+    }
+
+    [Fact]
     public async Task Games_at_the_failure_threshold_are_dropped()
     {
         await SeedAsync(100, analyzedAt: Now.AddDays(-1), failures: 5);

@@ -88,12 +88,20 @@ scraped user tags as `UserTag` with their rank as `Weight`). Two things reach it
 | `SteamPicsWatcherService` | a newly discovered app, immediately after creation |
 | `GameEnrichmentWatcherService` | hourly sweep — every game that has none |
 
-The sweep (`GameEnrichment` settings section) serves reddit-analysed games first
-(`AnalyzedAt != null`, newest analysis leading), then the rest of the never-enriched
-population by app id, then — only when `RefreshAfterDays > 0`, off by default — the
-stalest already-enriched records. `LastEnrichedAt` is the "done" marker and
-`EnrichmentFailures` the retry budget: delisted and region-locked apps answer
-`success=false` forever, so past `FailureThreshold` they are dropped from the queue.
+The sweep (`GameEnrichment` settings section) works four bands in order:
+
+1. reddit-analysed games with no store record (`AnalyzedAt != null`, newest first)
+2. reddit-analysed games whose record has gone stale
+3. everything else with no store record, by app id
+4. everything else that has gone stale, stalest first
+
+Bands 2 and 4 need `RefreshAfterDays > 0`. **Both reddit bands come before either
+general band** — on plain "never enriched first" ordering a stale reddit game sits
+behind ~9k discovered ones and would not be reached for two days.
+
+`LastEnrichedAt` is the "done" marker and `EnrichmentFailures` the retry budget:
+delisted and region-locked apps answer `success=false` forever, so past
+`FailureThreshold` they are dropped from the never-enriched bands.
 
 Three traps worth knowing:
 
@@ -112,6 +120,15 @@ Three traps worth knowing:
   rejects. That is right for an app PICS happened to surface, and wrong for a game
   reddit_metrics holds extractions and follower history for — which is why
   `GameEnrichmentWatcherService` enriches without it.
+- **`LastEnrichedAt` is only as good as what seeded it.** For rows that predate the
+  column it was backfilled from `UpdatedAt`, which means "last modified by anything"
+  — and the price watcher touches games daily. So a game whose store record is a year
+  old can look freshly enriched, and `RefreshAfterDays` will never find it: measured,
+  a 30-day window caught 426 of 721 known-stale games. To repair records written by
+  an older enrichment build, key off a column that build could not have written
+  (`ReleaseDateRaw IS NULL` is the current marker) and clear `LastEnrichedAt` so the
+  first band picks them up. `RefreshAfterDays` is for genuine drift, not for repair.
+
 - **`ReleaseDate` is null for most unreleased games and that is correct.** Steam
   answers "Q4 2026", "2027" or "To be announced" for them; no calendar date exists.
   `ReleaseDateRaw` keeps the store's literal string, and `IsReleased` carries

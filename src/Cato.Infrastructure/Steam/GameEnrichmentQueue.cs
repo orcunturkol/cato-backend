@@ -17,12 +17,25 @@ public record GameEnrichmentBatch(IReadOnlyList<Guid> GameIds, int Analysed, int
 public static class GameEnrichmentQueue
 {
     /// <summary>
-    /// Picks games in priority order: never-enriched reddit-analysed games (most
-    /// recently analysed first), then never-enriched games generally, then — only
-    /// when a refresh window is configured — the stalest already-enriched records.
+    /// Picks games in priority order, in four bands:
     ///
-    /// Games at or past the failure threshold are excluded from the never-enriched
-    /// bands entirely: an app with no store page answers the same way every cycle.
+    /// <list type="number">
+    /// <item>reddit-analysed games with no store record at all</item>
+    /// <item>reddit-analysed games whose record has gone stale</item>
+    /// <item>everything else with no store record, by app id</item>
+    /// <item>everything else that has gone stale, stalest first</item>
+    /// </list>
+    ///
+    /// Both reddit bands come before either general one, deliberately. Ordering
+    /// purely by "never enriched first" would put ~9k discovered games ahead of a
+    /// stale reddit game, so a refresh of the games someone is actually asking about
+    /// would not start for two days.
+    ///
+    /// Bands 2 and 4 exist only when <see cref="GameEnrichmentSettings.RefreshAfterDays"/>
+    /// is set; bands 3 and 4 only when
+    /// <see cref="GameEnrichmentSettings.IncludeUnanalyzedGames"/> is on. Games at or
+    /// past the failure threshold are excluded from the never-enriched bands: an app
+    /// with no store page answers the same way every cycle.
     /// </summary>
     public static async Task<GameEnrichmentBatch> SelectAsync(
         CatoDbContext db,
@@ -36,45 +49,58 @@ public static class GameEnrichmentQueue
             .Where(g => g.LastEnrichedAt == null)
             .Where(g => g.EnrichmentFailures < settings.FailureThreshold);
 
-        // Most recently analysed first — the freshest question gets the freshest data.
-        var analysedIds = await neverEnriched
+        var stale = settings.RefreshAfterDays > 0
+            ? db.Games.Where(g => g.LastEnrichedAt != null
+                                  && g.LastEnrichedAt < DateTime.UtcNow.AddDays(-settings.RefreshAfterDays))
+            : null;
+
+        var gameIds = new List<Guid>();
+        var analysed = 0;
+        var refreshed = 0;
+
+        async Task<int> TakeAsync(IQueryable<Guid> query)
+        {
+            if (budget <= 0) return 0;
+            var ids = await query.Take(budget).ToListAsync(ct);
+            gameIds.AddRange(ids);
+            budget -= ids.Count;
+            return ids.Count;
+        }
+
+        // 1. Never-enriched reddit games — most recently analysed first, so the
+        //    freshest question gets the freshest data.
+        analysed += await TakeAsync(neverEnriched
             .Where(g => g.AnalyzedAt != null)
             .OrderByDescending(g => g.AnalyzedAt)
-            .Select(g => g.Id)
-            .Take(budget)
-            .ToListAsync(ct);
+            .Select(g => g.Id));
 
-        var gameIds = new List<Guid>(analysedIds);
-        budget -= analysedIds.Count;
-
-        if (budget > 0 && settings.IncludeUnanalyzedGames)
+        // 2. Stale reddit games.
+        if (stale is not null)
         {
-            var otherIds = await neverEnriched
+            var n = await TakeAsync(stale
+                .Where(g => g.AnalyzedAt != null)
+                .OrderByDescending(g => g.AnalyzedAt)
+                .Select(g => g.Id));
+            analysed += n;
+            refreshed += n;
+        }
+
+        if (settings.IncludeUnanalyzedGames)
+        {
+            // 3. Everything else that has never been enriched.
+            await TakeAsync(neverEnriched
                 .Where(g => g.AnalyzedAt == null)
                 .OrderBy(g => g.AppId)
-                .Select(g => g.Id)
-                .Take(budget)
-                .ToListAsync(ct);
+                .Select(g => g.Id));
 
-            gameIds.AddRange(otherIds);
-            budget -= otherIds.Count;
+            // 4. Everything else that has gone stale.
+            if (stale is not null)
+                refreshed += await TakeAsync(stale
+                    .Where(g => g.AnalyzedAt == null)
+                    .OrderBy(g => g.LastEnrichedAt)
+                    .Select(g => g.Id));
         }
 
-        var refreshCount = 0;
-        if (budget > 0 && settings.RefreshAfterDays > 0)
-        {
-            var cutoff = DateTime.UtcNow.AddDays(-settings.RefreshAfterDays);
-            var refreshIds = await db.Games
-                .Where(g => g.LastEnrichedAt != null && g.LastEnrichedAt < cutoff)
-                .OrderBy(g => g.LastEnrichedAt)
-                .Select(g => g.Id)
-                .Take(budget)
-                .ToListAsync(ct);
-
-            gameIds.AddRange(refreshIds);
-            refreshCount = refreshIds.Count;
-        }
-
-        return new GameEnrichmentBatch(gameIds, analysedIds.Count, refreshCount);
+        return new GameEnrichmentBatch(gameIds, analysed, refreshed);
     }
 }
