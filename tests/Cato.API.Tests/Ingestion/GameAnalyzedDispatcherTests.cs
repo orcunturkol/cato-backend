@@ -10,16 +10,18 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Cato.API.Tests.Ingestion;
 
 /// <summary>
-/// Covers the enrichment half of <see cref="GameAnalyzedDispatcher"/>: a game reddit
-/// surfaced should come out of this with its store record, and a Steam failure should
-/// cost nothing but the enrichment.
+/// Covers <see cref="GameAnalyzedDispatcher"/>. The contract worth protecting is the
+/// handoff: this consumer does database and Redis work only, and hands enrichment to
+/// the watcher by stamping <c>AnalyzedAt</c>. An earlier version called Steam inline
+/// and starved the queue, so "the game ends up at the front of the enrichment queue"
+/// is asserted here directly rather than assumed.
 /// </summary>
-public class GameAnalyzedEnrichmentTests : IDisposable
+public class GameAnalyzedDispatcherTests : IDisposable
 {
     private readonly SqliteConnection _connection;
     private readonly DbContextOptions<CatoDbContext> _options;
 
-    public GameAnalyzedEnrichmentTests()
+    public GameAnalyzedDispatcherTests()
     {
         _connection = new SqliteConnection("DataSource=:memory:");
         _connection.Open();
@@ -50,67 +52,86 @@ public class GameAnalyzedEnrichmentTests : IDisposable
         }
         """;
 
-    private static GameAnalyzedDispatcher NewDispatcher(
-        CatoDbContext db, StubEnrichment enrichment, StubRedisSync? redis = null) =>
-        new(db, redis ?? new StubRedisSync(), enrichment,
-            NullLogger<GameAnalyzedDispatcher>.Instance);
+    private static GameAnalyzedDispatcher NewDispatcher(CatoDbContext db, StubRedisSync? redis = null) =>
+        new(db, redis ?? new StubRedisSync(), NullLogger<GameAnalyzedDispatcher>.Instance);
 
     [Fact]
-    public async Task Stubbed_game_is_enriched_and_marked_analysed()
+    public async Task Unknown_game_is_created_and_marked_analysed()
     {
-        var enrichment = new StubEnrichment();
-
         await using (var db = NewContext())
-            await NewDispatcher(db, enrichment).DispatchAsync(Message(), default);
+            await NewDispatcher(db).DispatchAsync(Message(), default);
 
         await using var check = NewContext();
         var game = await check.Games.SingleAsync(g => g.AppId == AppId);
 
-        Assert.Equal([game.Id], enrichment.Enriched);
+        Assert.Equal("The RPG", game.Name);
+        Assert.Equal("Other", game.GameType);
         Assert.Equal(ExtractedAt.UtcDateTime, game.AnalyzedAt);
+        Assert.Null(game.LastEnrichedAt);
     }
 
     [Fact]
-    public async Task Already_enriched_game_is_not_enriched_again()
+    public async Task A_dispatched_game_goes_to_the_front_of_the_enrichment_queue()
     {
-        await SeedAsync(g => g.LastEnrichedAt = new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc));
+        // A game CATO discovered on its own, waiting its turn by app id.
+        await SeedAsync(g => { g.AppId = 10; g.Name = "Discovered"; });
 
-        var enrichment = new StubEnrichment();
         await using (var db = NewContext())
-            await NewDispatcher(db, enrichment).DispatchAsync(Message(), default);
+            await NewDispatcher(db).DispatchAsync(Message(), default);
 
-        Assert.Empty(enrichment.Enriched);
+        await using var db2 = NewContext();
+        var batch = await GameEnrichmentQueue.SelectAsync(
+            db2, new GameEnrichmentSettings { BatchSize = 10 });
 
-        // The event still records that reddit looked at it again.
+        var first = await db2.Games.SingleAsync(g => g.AppId == AppId);
+        Assert.Equal(first.Id, batch.GameIds[0]);
+        Assert.Equal(1, batch.Analysed);
+    }
+
+    [Fact]
+    public async Task An_existing_game_is_re_marked_without_losing_its_store_data()
+    {
+        var enrichedAt = new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc);
+        await SeedAsync(g =>
+        {
+            g.LastEnrichedAt = enrichedAt;
+            g.ReleaseDateRaw = "Q4 2026";
+        });
+
+        await using (var db = NewContext())
+            await NewDispatcher(db).DispatchAsync(Message(), default);
+
         await using var check = NewContext();
-        Assert.Equal(ExtractedAt.UtcDateTime, (await check.Games.SingleAsync()).AnalyzedAt);
+        var game = await check.Games.SingleAsync();
+
+        Assert.Equal(ExtractedAt.UtcDateTime, game.AnalyzedAt);
+        Assert.Equal(enrichedAt, game.LastEnrichedAt);
+        Assert.Equal("Q4 2026", game.ReleaseDateRaw);
     }
 
     [Fact]
-    public async Task Game_past_the_inline_failure_ceiling_is_left_to_the_watcher()
+    public async Task An_already_enriched_game_is_not_re_queued_for_enrichment()
     {
-        await SeedAsync(g => g.EnrichmentFailures = 3);
+        await SeedAsync(g => g.LastEnrichedAt = DateTime.UtcNow);
 
-        var enrichment = new StubEnrichment();
         await using (var db = NewContext())
-            await NewDispatcher(db, enrichment).DispatchAsync(Message(), default);
+            await NewDispatcher(db).DispatchAsync(Message(), default);
 
-        Assert.Empty(enrichment.Enriched);
+        await using var db2 = NewContext();
+        var batch = await GameEnrichmentQueue.SelectAsync(
+            db2, new GameEnrichmentSettings { BatchSize = 10 });
+
+        Assert.Empty(batch.GameIds);
     }
 
     [Fact]
-    public async Task Steam_failure_does_not_fail_the_message()
+    public async Task The_follower_queue_priority_is_still_applied()
     {
-        var enrichment = new StubEnrichment { Throw = new HttpRequestException("Steam is down") };
         var redis = new StubRedisSync();
 
         await using (var db = NewContext())
-            await NewDispatcher(db, enrichment, redis).DispatchAsync(Message(), default);
+            await NewDispatcher(db, redis).DispatchAsync(Message(), default);
 
-        // The row and the follower-queue priority — the parts that do not depend on
-        // Steam answering — must still be there.
-        await using var check = NewContext();
-        Assert.Equal(AppId, (await check.Games.SingleAsync()).AppId);
         Assert.Equal([AppId], redis.Prioritized);
     }
 
@@ -124,13 +145,13 @@ public class GameAnalyzedEnrichmentTests : IDisposable
         });
 
         await using (var db = NewContext())
-            await NewDispatcher(db, new StubEnrichment()).DispatchAsync(Message(name: "The RPG"), default);
+            await NewDispatcher(db).DispatchAsync(Message(name: "The RPG"), default);
 
         await using (var check = NewContext())
             Assert.Equal("The RPG", (await check.Games.SingleAsync()).Name);
 
         await using (var db = NewContext())
-            await NewDispatcher(db, new StubEnrichment()).DispatchAsync(Message(name: "the rpg (reddit)"), default);
+            await NewDispatcher(db).DispatchAsync(Message(name: "the rpg (reddit)"), default);
 
         await using (var check = NewContext())
             Assert.Equal("The RPG", (await check.Games.SingleAsync()).Name);
@@ -150,20 +171,6 @@ public class GameAnalyzedEnrichmentTests : IDisposable
         await using var db = NewContext();
         db.Games.Add(game);
         await db.SaveChangesAsync();
-    }
-
-    private sealed class StubEnrichment : ISteamGameEnrichmentService
-    {
-        public List<Guid> Enriched { get; } = [];
-        public Exception? Throw { get; init; }
-        public bool Result { get; init; } = true;
-
-        public Task<bool> EnrichGameAsync(Guid gameId, CancellationToken ct = default)
-        {
-            if (Throw is not null) throw Throw;
-            Enriched.Add(gameId);
-            return Task.FromResult(Result);
-        }
     }
 
     private sealed class StubRedisSync : IRedisAppIdSyncService
