@@ -54,7 +54,7 @@ Some older services (`GameService`, `GameDataService`, `IngestionService`, `Stea
 - **Messaging**: RabbitMQ with `IngestionDispatcher` (producer) and `RabbitMqConsumerService` (hosted service consumer). Exchange: `cato-data` (topic). Three queues:
   - `cato-ingestion` — legacy single-item path, routing key `ingestion.*` → `IIngestionDispatcher`
   - `cato-ingestion-v2` — batch path, routing key `ingestion.batch.#` → `IBatchIngestionDispatcher`. New collector sources need only a case in its `source` switch; the binding is a wildcard.
-  - `cato-game-analyzed` — routing key `game.analyzed.#` → `IGameAnalyzedDispatcher`. Published by the **reddit_metrics** pipeline when Gemini extracts metrics for a game. Stubs the game if unknown, enriches it from the Steam store when it has never been enriched, stamps `AnalyzedAt`, then moves its app ID to the front of the follower-history queue.
+  - `cato-game-analyzed` — routing key `game.analyzed.#` → `IGameAnalyzedDispatcher`. Published by the **reddit_metrics** pipeline when Gemini extracts metrics for a game. Stubs the game if unknown, stamps `AnalyzedAt`, then moves its app ID to the front of the follower-history queue. Database and Redis work only — see the enrichment section for why nothing slow may go in here.
 
   **Redis writes belong after `SaveChangesAsync`, never inside a transaction** (`GameService.cs`, `SteamGameEnrichmentService.cs`). This is why `game.analyzed` has its own queue rather than riding the batch path — `BatchIngestionDispatcher` runs every item handler inside one transaction, and a Redis write there would not roll back with it.
 - **Steam Integration**: `SteamApiService` (HTTP client for Steam Web API) and `SteamKitService` (SteamKit2 for PICS change monitoring via `SteamPicsWatcherService` background service).
@@ -71,13 +71,12 @@ Core entity is `Game` (table: `main_game`, keyed by `AppId`). Related time-serie
 `SteamGameEnrichmentService.EnrichGameAsync` is the single writer of a game's store
 record: name, descriptions, media, price, platforms, release date, developer,
 publisher, `GameGenre` rows, and `GenreTag` rows (store categories as `Mechanic`,
-scraped user tags as `UserTag` with their rank as `Weight`). Three things reach it:
+scraped user tags as `UserTag` with their rank as `Weight`). Two things reach it:
 
 | Trigger | When |
 |---|---|
 | `SteamPicsWatcherService` | a newly discovered app, immediately after creation |
-| `GameAnalyzedDispatcher` | a reddit-analysed game that has never been enriched |
-| `GameEnrichmentWatcherService` | hourly sweep — everything the two above missed |
+| `GameEnrichmentWatcherService` | hourly sweep — every game that has none |
 
 The sweep (`GameEnrichment` settings section) serves reddit-analysed games first
 (`AnalyzedAt != null`, newest analysis leading), then the rest of the never-enriched
@@ -86,13 +85,23 @@ stalest already-enriched records. `LastEnrichedAt` is the "done" marker and
 `EnrichmentFailures` the retry budget: delisted and region-locked apps answer
 `success=false` forever, so past `FailureThreshold` they are dropped from the queue.
 
-Two traps worth knowing:
+Three traps worth knowing:
+
+- **Never enrich from inside a queue consumer.** `GameAnalyzedDispatcher` used to
+  enrich inline for a game it had just stubbed, which reads as obviously correct and
+  is not. `SteamApiService` throttles every Steam call through one **static**
+  `SemaphoreSlim` shared by the whole process, and `cato-game-analyzed` is consumed
+  serially with a prefetch of one. So while the enrichment watcher held that throttle
+  for its 200-game cycle, a 1310-message backfill drained at **six messages per ten
+  minutes** — a ~50-hour queue, with nothing in the logs but healthy-looking progress
+  from the watcher. The consumer's job is the row, `AnalyzedAt`, and the Redis
+  priority; `AnalyzedAt` is the handoff, and the watcher does the slow part.
 
 - **Do not run the post-enrichment quality filter on reddit games.**
   `SteamPicsWatcherService.ApplyPostEnrichmentFilterAsync` *deletes* the row it
   rejects. That is right for an app PICS happened to surface, and wrong for a game
   reddit_metrics holds extractions and follower history for — which is why
-  `GameAnalyzedDispatcher` enriches without it.
+  `GameEnrichmentWatcherService` enriches without it.
 - **`ReleaseDate` is null for most unreleased games and that is correct.** Steam
   answers "Q4 2026", "2027" or "To be announced" for them; no calendar date exists.
   `ReleaseDateRaw` keeps the store's literal string, and `IsReleased` carries
