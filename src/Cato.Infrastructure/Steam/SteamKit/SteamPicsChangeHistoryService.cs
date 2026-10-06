@@ -140,7 +140,7 @@ public sealed class SteamPicsChangeHistoryService : BackgroundService
 
     private async Task PollForChangesAsync(CancellationToken ct)
     {
-        await using var job = await _jobRunTracker.StartAsync("SteamPicsChangeHistory", ct: ct);
+        await using var job = await _jobRunTracker.StartAsync(BackendJobNames.SteamPicsChangeHistory, ct: ct);
         try
         {
         var lastChangeNumber = LoadLastChangeNumber();

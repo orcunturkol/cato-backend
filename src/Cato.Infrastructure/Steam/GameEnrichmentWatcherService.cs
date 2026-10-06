@@ -81,7 +81,7 @@ public sealed class GameEnrichmentWatcherService : BackgroundService
         var enrichment = scope.ServiceProvider.GetRequiredService<ISteamGameEnrichmentService>();
         var tracker = scope.ServiceProvider.GetRequiredService<IJobRunTracker>();
 
-        await using var job = await tracker.StartAsync("GameEnrichmentWatcher", ct: ct);
+        await using var job = await tracker.StartAsync(BackendJobNames.GameEnrichmentWatcher, ct: ct);
         try
         {
             var batch = await GameEnrichmentQueue.SelectAsync(db, _settings, ct);

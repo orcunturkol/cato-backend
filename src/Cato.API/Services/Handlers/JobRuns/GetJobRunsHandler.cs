@@ -1,6 +1,5 @@
-using System.Text.Json;
 using Cato.API.Models.JobRuns;
-using Cato.Domain.Entities;
+using Cato.API.Services.JobRuns;
 using Cato.Infrastructure.Database;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -10,8 +9,15 @@ namespace Cato.API.Services.Handlers.JobRuns;
 public class GetJobRunsHandler : IRequestHandler<GetJobRunsQuery, List<JobRunDto>>
 {
     private readonly CatoDbContext _db;
+    private readonly IJobCatalog _catalog;
+    private readonly JobRunStatusResolver _resolver;
 
-    public GetJobRunsHandler(CatoDbContext db) => _db = db;
+    public GetJobRunsHandler(CatoDbContext db, IJobCatalog catalog, JobRunStatusResolver resolver)
+    {
+        _db = db;
+        _catalog = catalog;
+        _resolver = resolver;
+    }
 
     public async Task<List<JobRunDto>> Handle(GetJobRunsQuery request, CancellationToken ct)
     {
@@ -19,6 +25,9 @@ public class GetJobRunsHandler : IRequestHandler<GetJobRunsQuery, List<JobRunDto
 
         if (!string.IsNullOrWhiteSpace(request.JobName))
             query = query.Where(j => j.JobName == request.JobName);
+        if (!string.IsNullOrWhiteSpace(request.Producer))
+            query = query.Where(j => j.Producer == request.Producer);
+        // Filters on the stored status; a "Lost" row is stored as "Running".
         if (!string.IsNullOrWhiteSpace(request.Status))
             query = query.Where(j => j.Status == request.Status);
 
@@ -29,32 +38,7 @@ public class GetJobRunsHandler : IRequestHandler<GetJobRunsQuery, List<JobRunDto
             .Take(limit)
             .ToListAsync(ct);
 
-        // Parse MetricsJson -> JsonElement in memory (EF can't translate it).
-        return rows.Select(JobRunMapper.ToDto).ToList();
-    }
-}
-
-/// <summary>Shared <see cref="JobRun"/> -> <see cref="JobRunDto"/> mapping (parses the jsonb metrics bag).</summary>
-internal static class JobRunMapper
-{
-    public static JobRunDto ToDto(JobRun run)
-    {
-        JsonElement? metrics = null;
-        if (!string.IsNullOrWhiteSpace(run.MetricsJson))
-        {
-            using var doc = JsonDocument.Parse(run.MetricsJson);
-            metrics = doc.RootElement.Clone();
-        }
-
-        return new JobRunDto(
-            run.Id,
-            run.JobName,
-            run.Producer,
-            run.StartTime,
-            run.EndTime,
-            run.DurationMs,
-            run.Status,
-            metrics,
-            run.ErrorMessage);
+        var catalog = await _catalog.LoadAsync(ct);
+        return await _resolver.ToDtosAsync(rows, catalog, ct);
     }
 }
