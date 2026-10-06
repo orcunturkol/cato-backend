@@ -57,8 +57,9 @@ public static class JobRunStatus
     public const string Interrupted = "Interrupted";
 
     /// <summary>
-    /// Read-time only, never stored: a <see cref="Running"/> row whose process is gone
-    /// (killed, API restarted) so it will never report a finish.
+    /// A <see cref="Running"/> row whose process is gone (killed, API restarted) so it
+    /// will never report a finish. Computed at read time, never reported by producers;
+    /// rows orphaned before 2026-10-06 were stored as Lost once by hand.
     /// </summary>
     public const string Lost = "Lost";
 
