@@ -50,6 +50,22 @@ public static class JobRunStatus
     /// <summary>Threw / aborted before completing.</summary>
     public const string Failed = "Failed";
 
+    /// <summary>Did not run because another run held the job's lock.</summary>
+    public const string Skipped = "Skipped";
+
+    /// <summary>Stopped by a signal (SIGTERM/SIGINT), usually the cron timeout.</summary>
+    public const string Interrupted = "Interrupted";
+
+    /// <summary>
+    /// Read-time only, never stored: a <see cref="Running"/> row whose process is gone
+    /// (killed, API restarted) so it will never report a finish.
+    /// </summary>
+    public const string Lost = "Lost";
+
+    /// <summary>Statuses a producer may report.</summary>
+    public static readonly string[] Reportable =
+        [Running, Succeeded, PartialSuccess, Failed, Skipped, Interrupted];
+
     /// <summary>True when the run did not complete cleanly (used for alerting).</summary>
     public static bool IsFailure(string status) => status == Failed;
 }

@@ -90,6 +90,10 @@ builder.Services.AddHostedService<SteamReviewWatcherService>();
 
 // ── Job-run tracking ──
 builder.Services.AddSingleton<Cato.Infrastructure.Jobs.IJobRunTracker, Cato.Infrastructure.Jobs.JobRunTracker>();
+builder.Services.AddSingleton(new Cato.API.Services.JobRuns.ApiProcessInfo(DateTime.UtcNow));
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<Cato.API.Services.JobRuns.IJobCatalog, Cato.API.Services.JobRuns.JobCatalog>();
+builder.Services.AddScoped<Cato.API.Services.JobRuns.JobRunStatusResolver>();
 
 // ── Application Services ──
 builder.Services.AddScoped<ISteamGameEnrichmentService, SteamGameEnrichmentService>();
