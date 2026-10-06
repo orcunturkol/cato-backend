@@ -58,6 +58,43 @@ public class SteamGameEnrichmentService : ISteamGameEnrichmentService
 
     public async Task<bool> EnrichGameAsync(Guid gameId, CancellationToken ct = default)
     {
+        try
+        {
+            return await EnrichGameCoreAsync(gameId, ct);
+        }
+        catch (Exception ex)
+        {
+            // Callers share this context across games; a rejected save left tracked fails every later one.
+            _db.ChangeTracker.Clear();
+            if (ex is DbUpdateException)
+                await CountFailureAsync(gameId, ct);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Counts a failed save towards <c>FailureThreshold</c>, so a game whose store data
+    /// the schema rejects drops out of the never-enriched queue instead of leading it forever.
+    /// </summary>
+    private async Task CountFailureAsync(Guid gameId, CancellationToken ct)
+    {
+        try
+        {
+            var game = await _db.Games.FirstOrDefaultAsync(g => g.Id == gameId, ct);
+            if (game is null) return;
+
+            game.EnrichmentFailures++;
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _db.ChangeTracker.Clear();
+            _logger.LogWarning(ex, "Could not record the enrichment failure for game {GameId}", gameId);
+        }
+    }
+
+    private async Task<bool> EnrichGameCoreAsync(Guid gameId, CancellationToken ct)
+    {
         // 1. Load game with related data
         var game = await _db.Games
             .Include(g => g.Genres)
@@ -187,10 +224,14 @@ public class SteamGameEnrichmentService : ISteamGameEnrichmentService
 
         if (steamData.Genres is not null)
         {
+            // The store can list a genre twice (app 2885250 sends "Strategy" two times).
+            var addedGenres = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var isFirst = true;
             foreach (var genre in steamData.Genres)
             {
                 if (string.IsNullOrWhiteSpace(genre.Description)) continue;
+                if (!addedGenres.Add(genre.Description)) continue;
+
                 _db.GameGenres.Add(new GameGenre
                 {
                     Id = Guid.NewGuid(),
