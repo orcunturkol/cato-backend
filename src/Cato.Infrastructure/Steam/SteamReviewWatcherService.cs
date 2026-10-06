@@ -62,7 +62,7 @@ public class SteamReviewWatcherService : BackgroundService
         var rotation = scope.ServiceProvider.GetRequiredService<ISteamIdRotationService>();
         var tracker = scope.ServiceProvider.GetRequiredService<IJobRunTracker>();
 
-        await using var job = await tracker.StartAsync("SteamReviewWatcher", ct: ct);
+        await using var job = await tracker.StartAsync(BackendJobNames.SteamReviewWatcher, ct: ct);
         try
         {
         var games = await db.Games

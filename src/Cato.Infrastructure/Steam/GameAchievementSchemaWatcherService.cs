@@ -81,7 +81,7 @@ public class GameAchievementSchemaWatcherService : BackgroundService
         var steamApi = scope.ServiceProvider.GetRequiredService<ISteamApiService>();
         var tracker = scope.ServiceProvider.GetRequiredService<IJobRunTracker>();
 
-        await using var job = await tracker.StartAsync("GameAchievementSchemaWatcher", ct: ct);
+        await using var job = await tracker.StartAsync(BackendJobNames.GameAchievementSchemaWatcher, ct: ct);
         try
         {
         var games = await db.Games

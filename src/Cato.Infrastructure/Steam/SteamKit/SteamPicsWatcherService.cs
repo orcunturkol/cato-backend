@@ -81,7 +81,7 @@ public sealed class SteamPicsWatcherService : BackgroundService
 
     private async Task PollForNewGamesAsync(CancellationToken ct)
     {
-        await using var job = await _jobRunTracker.StartAsync("SteamPicsWatcher", ct: ct);
+        await using var job = await _jobRunTracker.StartAsync(BackendJobNames.SteamPicsWatcher, ct: ct);
         try
         {
         var lastChangeNumber = LoadLastChangeNumber();

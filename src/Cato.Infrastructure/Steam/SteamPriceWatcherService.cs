@@ -64,7 +64,7 @@ public sealed class SteamPriceWatcherService : BackgroundService
         var steam = scope.ServiceProvider.GetRequiredService<ISteamApiService>();
         var tracker = scope.ServiceProvider.GetRequiredService<IJobRunTracker>();
 
-        await using var job = await tracker.StartAsync("SteamPriceWatcher", ct: ct);
+        await using var job = await tracker.StartAsync(BackendJobNames.SteamPriceWatcher, ct: ct);
         try
         {
         var games = await db.Games

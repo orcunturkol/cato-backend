@@ -84,7 +84,7 @@ public class SteamPlayerProfileWatcherService : BackgroundService
         var rotation = scope.ServiceProvider.GetRequiredService<ISteamIdRotationService>();
         var tracker = scope.ServiceProvider.GetRequiredService<IJobRunTracker>();
 
-        await using var job = await tracker.StartAsync("SteamPlayerProfileWatcher", ct: ct);
+        await using var job = await tracker.StartAsync(BackendJobNames.SteamPlayerProfileWatcher, ct: ct);
         try
         {
         var ids = await rotation.FetchBatchAsync(_settings.BatchSize, ct);
