@@ -134,6 +134,16 @@ Three traps worth knowing:
   `ReleaseDateRaw` keeps the store's literal string, and `IsReleased` carries
   `coming_soon`. Query those two before concluding a release date is missing.
 
+### Steamworks wishlist reports (owned games)
+
+`steamworks_wishlist_daily` (unique `GameId, DateLocal`) and `steamworks_wishlist_cohort`
+(unique `GameId, DateLocal, MonthCohort`) hold the two partner-site CSV exports. The
+collector's `run_steamworks_wishlist` re-sends each game's **whole history** every day
+under batch source `steamworks_wishlist_report`; `IngestSteamworksWishlistReportItemAsync`
+loads a game's rows once, untracked, and writes only new or changed ones, so a re-export
+updates in place. Rows missing from a later export are kept. Both exports are **sparse**
+(no row = zero), and `DateLocal` is a Pacific-time date.
+
 `GroupMemberCountSnapshot` holds **two series in one table**, discriminated by `Source` and keyed `(GameId, SnapshotDate, Source)`:
 `steam_community_group` (the live daily scrape) and `steamdb_follower_history` (the SteamDB backfill of the same metric, reaching years further back). Any query or upsert against this table must filter on `Source`, or the daily scrape will silently overwrite backfilled history.
 

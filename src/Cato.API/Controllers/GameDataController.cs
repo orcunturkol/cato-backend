@@ -64,6 +64,30 @@ public class GameDataController : ControllerBase
         return Results.Ok(result);
     }
 
+    /// <summary>Get the daily Steamworks wishlist actions (adds, deletes, purchases, gifts) for an owned game.</summary>
+    [HttpGet("steamworks-wishlist/daily")]
+    [ProducesResponseType(typeof(List<SteamworksWishlistDailyDto>), StatusCodes.Status200OK)]
+    public async Task<IResult> GetSteamworksWishlistDaily(
+        int appId,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to)
+    {
+        var result = await _mediator.Send(new GetSteamworksWishlistDailyQuery(appId, from, to));
+        return Results.Ok(result);
+    }
+
+    /// <summary>Get the Steamworks wishlist conversions by monthly cohort for an owned game.</summary>
+    [HttpGet("steamworks-wishlist/cohorts")]
+    [ProducesResponseType(typeof(List<SteamworksWishlistCohortDto>), StatusCodes.Status200OK)]
+    public async Task<IResult> GetSteamworksWishlistCohorts(
+        int appId,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to)
+    {
+        var result = await _mediator.Send(new GetSteamworksWishlistCohortsQuery(appId, from, to));
+        return Results.Ok(result);
+    }
+
     /// <summary>Get group member count history for a game.</summary>
     [HttpGet("group-members")]
     [ProducesResponseType(typeof(List<GroupMemberCountDto>), StatusCodes.Status200OK)]

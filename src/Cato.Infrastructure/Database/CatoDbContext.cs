@@ -31,6 +31,8 @@ public class CatoDbContext : DbContext
     public DbSet<TargetMatch> TargetMatches => Set<TargetMatch>();
     public DbSet<ActionImpact> ActionImpacts => Set<ActionImpact>();
     public DbSet<WishlistInsight> WishlistInsights => Set<WishlistInsight>();
+    public DbSet<SteamworksWishlistDaily> SteamworksWishlistDaily => Set<SteamworksWishlistDaily>();
+    public DbSet<SteamworksWishlistCohort> SteamworksWishlistCohorts => Set<SteamworksWishlistCohort>();
     public DbSet<SteamTrafficBreakdown> SteamTrafficBreakdowns => Set<SteamTrafficBreakdown>();
     public DbSet<GameNews> GameNews => Set<GameNews>();
     public DbSet<ActiveUsersHistory> ActiveUsersHistories => Set<ActiveUsersHistory>();
@@ -375,6 +377,40 @@ public class CatoDbContext : DbContext
 
             entity.HasOne(e => e.Game)
                 .WithMany(g => g.WishlistInsights)
+                .HasForeignKey(e => e.GameId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── SteamworksWishlistDaily ──
+        modelBuilder.Entity<SteamworksWishlistDaily>(entity =>
+        {
+            entity.ToTable("steamworks_wishlist_daily");
+            entity.HasKey(e => e.Id);
+
+            entity.HasIndex(e => new { e.GameId, e.DateLocal })
+                .IsUnique()
+                .HasDatabaseName("unique_steamworks_wishlist_daily");
+
+            entity.HasOne(e => e.Game)
+                .WithMany()
+                .HasForeignKey(e => e.GameId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── SteamworksWishlistCohort ──
+        modelBuilder.Entity<SteamworksWishlistCohort>(entity =>
+        {
+            entity.ToTable("steamworks_wishlist_cohort");
+            entity.HasKey(e => e.Id);
+
+            entity.HasIndex(e => new { e.GameId, e.DateLocal, e.MonthCohort })
+                .IsUnique()
+                .HasDatabaseName("unique_steamworks_wishlist_cohort");
+            entity.HasIndex(e => new { e.GameId, e.MonthCohort })
+                .HasDatabaseName("idx_steamworks_wishlist_cohort_game_month");
+
+            entity.HasOne(e => e.Game)
+                .WithMany()
                 .HasForeignKey(e => e.GameId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
@@ -1031,6 +1067,32 @@ public class CatoDbContext : DbContext
         }
 
         foreach (var entry in ChangeTracker.Entries<WishlistInsight>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<SteamworksWishlistDaily>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<SteamworksWishlistCohort>())
         {
             if (entry.State == EntityState.Added)
             {
