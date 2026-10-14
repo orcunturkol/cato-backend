@@ -100,6 +100,30 @@ public class GameDataController : ControllerBase
         return Results.Ok(result);
     }
 
+    /// <summary>Get Steam sales per day (units, gross and net USD) for a game.</summary>
+    [HttpGet("sales/daily")]
+    [ProducesResponseType(typeof(List<SalesDailyDto>), StatusCodes.Status200OK)]
+    public async Task<IResult> GetSalesDaily(
+        int appId,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to)
+    {
+        var result = await _mediator.Send(new GetSalesDailyQuery(appId, from, to));
+        return Results.Ok(result);
+    }
+
+    /// <summary>Get Steam sales per country, with Steam's region, summed over a date range.</summary>
+    [HttpGet("sales/countries")]
+    [ProducesResponseType(typeof(SalesCountriesDto), StatusCodes.Status200OK)]
+    public async Task<IResult> GetSalesCountries(
+        int appId,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to)
+    {
+        var result = await _mediator.Send(new GetSalesCountriesQuery(appId, from, to));
+        return Results.Ok(result);
+    }
+
     /// <summary>Get group member count history for a game.</summary>
     [HttpGet("group-members")]
     [ProducesResponseType(typeof(List<GroupMemberCountDto>), StatusCodes.Status200OK)]

@@ -34,6 +34,8 @@ public class CatoDbContext : DbContext
     public DbSet<SteamworksWishlistDaily> SteamworksWishlistDaily => Set<SteamworksWishlistDaily>();
     public DbSet<SteamworksWishlistCohort> SteamworksWishlistCohorts => Set<SteamworksWishlistCohort>();
     public DbSet<SteamworksWishlistCountry> SteamworksWishlistCountries => Set<SteamworksWishlistCountry>();
+    public DbSet<SteamCountry> SteamCountries => Set<SteamCountry>();
+    public DbSet<SteamworksBundle> SteamworksBundles => Set<SteamworksBundle>();
     public DbSet<SteamTrafficBreakdown> SteamTrafficBreakdowns => Set<SteamTrafficBreakdown>();
     public DbSet<GameNews> GameNews => Set<GameNews>();
     public DbSet<ActiveUsersHistory> ActiveUsersHistories => Set<ActiveUsersHistory>();
@@ -415,6 +417,25 @@ public class CatoDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(e => e.GameId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── SteamCountry ──
+        modelBuilder.Entity<SteamCountry>(entity =>
+        {
+            entity.ToTable("steam_country");
+            entity.HasKey(e => e.CountryCode);
+            entity.Property(e => e.CountryCode).HasMaxLength(10);
+            entity.Property(e => e.CountryName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Region).HasMaxLength(100).IsRequired();
+        });
+
+        // ── SteamworksBundle ──
+        modelBuilder.Entity<SteamworksBundle>(entity =>
+        {
+            entity.ToTable("steamworks_bundle");
+            entity.HasKey(e => e.BundleId);
+            entity.Property(e => e.BundleId).ValueGeneratedNever();
+            entity.Property(e => e.Name).HasMaxLength(300).IsRequired();
         });
 
         // ── SteamworksWishlistCountry ──
@@ -1113,6 +1134,32 @@ public class CatoDbContext : DbContext
         }
 
         foreach (var entry in ChangeTracker.Entries<SteamworksWishlistCohort>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<SteamCountry>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<SteamworksBundle>())
         {
             if (entry.State == EntityState.Added)
             {

@@ -208,6 +208,132 @@ public class GameDataService : IGameDataService
         return new SteamworksWishlistSummaryDto(latest, rows);
     }
 
+    public async Task<List<SalesDailyDto>> GetSalesDailyAsync(GetSalesDailyQuery request, CancellationToken ct = default)
+    {
+        var query = _db.SteamSaleFinancials
+            .AsNoTracking()
+            .Where(s => s.Game.AppId == request.AppId);
+
+        if (request.From is { } from) query = query.Where(s => s.SaleDate >= from);
+        if (request.To is { } to) query = query.Where(s => s.SaleDate <= to);
+
+        var days = await query
+            .GroupBy(s => s.SaleDate)
+            .Select(g => new
+            {
+                Date = g.Key,
+                Gross = g.Sum(s => s.SalesUnits),
+                Returned = g.Sum(s => s.ReturnsUnits),
+                GrossUsd = g.Sum(s => s.GrossRevenueUsd),
+                ReturnsUsd = g.Sum(s => s.GrossReturnsUsd),
+                NetUsd = g.Sum(s => s.NetRevenueUsd),
+            })
+            .ToListAsync(ct);
+
+        return days
+            .OrderBy(d => d.Date)
+            .Select(d => new SalesDailyDto(d.Date, d.Gross, d.Returned, d.Gross - d.Returned, d.GrossUsd, d.ReturnsUsd, d.NetUsd))
+            .ToList();
+    }
+
+    public async Task<SalesCountriesDto> GetSalesCountriesAsync(GetSalesCountriesQuery request, CancellationToken ct = default)
+    {
+        var all = _db.SteamSaleFinancials
+            .AsNoTracking()
+            .Where(s => s.Game.AppId == request.AppId);
+
+        var firstDate = await all.MinAsync(s => (DateOnly?)s.SaleDate, ct);
+        var lastDate = await all.MaxAsync(s => (DateOnly?)s.SaleDate, ct);
+
+        var query = all;
+        if (request.From is { } from) query = query.Where(s => s.SaleDate >= from);
+        if (request.To is { } to) query = query.Where(s => s.SaleDate <= to);
+
+        var totals = await query
+            .GroupBy(s => s.CountryCode)
+            .Select(g => new
+            {
+                Code = g.Key,
+                Gross = g.Sum(s => s.SalesUnits),
+                Returned = g.Sum(s => s.ReturnsUnits),
+                GrossUsd = g.Sum(s => s.GrossRevenueUsd),
+                NetUsd = g.Sum(s => s.NetRevenueUsd),
+            })
+            .ToListAsync(ct);
+
+        var codes = totals.Select(t => t.Code).ToList();
+        var countries = await _db.SteamCountries
+            .AsNoTracking()
+            .Where(c => codes.Contains(c.CountryCode))
+            .ToDictionaryAsync(c => c.CountryCode, ct);
+
+        var rows = totals
+            .Select(t =>
+            {
+                countries.TryGetValue(t.Code, out var country);
+                return new SalesCountryDto(
+                    t.Code,
+                    country?.CountryName ?? t.Code,
+                    country?.Region ?? string.Empty,
+                    t.Gross, t.Returned, t.Gross - t.Returned, t.GrossUsd, t.NetUsd);
+            })
+            .OrderByDescending(r => r.NetUsd)
+            .ThenBy(r => r.CountryCode, StringComparer.Ordinal)
+            .ToList();
+
+        return new SalesCountriesDto(firstDate, lastDate, rows);
+    }
+
+    public async Task<SalesSummaryDto> GetSalesSummaryAsync(CancellationToken ct = default)
+    {
+        var latest = await _db.SteamSaleFinancials.MaxAsync(s => (DateOnly?)s.SaleDate, ct);
+        if (latest is null)
+            return new SalesSummaryDto(null, []);
+
+        // Same inclusive 30-day window as the wishlist summary.
+        var from30 = latest.Value.AddDays(-29);
+
+        var totals = await _db.SteamSaleFinancials
+            .AsNoTracking()
+            .GroupBy(s => s.GameId)
+            .Select(g => new
+            {
+                GameId = g.Key,
+                FirstDate = g.Min(s => s.SaleDate),
+                LastDate = g.Max(s => s.SaleDate),
+                Gross = g.Sum(s => s.SalesUnits),
+                Returned = g.Sum(s => s.ReturnsUnits),
+                GrossUsd = g.Sum(s => s.GrossRevenueUsd),
+                NetUsd = g.Sum(s => s.NetRevenueUsd),
+                NetUnits30d = g.Sum(s => s.SaleDate >= from30 ? s.SalesUnits - s.ReturnsUnits : 0),
+                NetUsd30d = g.Sum(s => s.SaleDate >= from30 ? s.NetRevenueUsd : 0m),
+            })
+            .ToListAsync(ct);
+
+        var gameIds = totals.Select(t => t.GameId).ToList();
+        var games = await _db.Games
+            .AsNoTracking()
+            .Where(g => gameIds.Contains(g.Id))
+            .Select(g => new { g.Id, g.AppId, g.Name, g.GameType, g.HeaderImageUrl })
+            .ToDictionaryAsync(g => g.Id, ct);
+
+        var rows = totals
+            .Where(t => games.ContainsKey(t.GameId))
+            .Select(t =>
+            {
+                var game = games[t.GameId];
+                return new SalesGameSummaryDto(
+                    t.GameId, game.AppId, game.Name, game.GameType, game.HeaderImageUrl,
+                    t.FirstDate, t.LastDate,
+                    t.Gross, t.Returned, t.Gross - t.Returned,
+                    t.GrossUsd, t.NetUsd, t.NetUnits30d, t.NetUsd30d);
+            })
+            .OrderByDescending(r => r.NetUsd)
+            .ToList();
+
+        return new SalesSummaryDto(latest, rows);
+    }
+
     public async Task<List<GroupMemberCountDto>> GetGroupMemberCountAsync(GetGroupMemberCountQuery request, CancellationToken ct = default)
     {
         return await _db.GroupMemberCountSnapshots
