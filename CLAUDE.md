@@ -150,7 +150,11 @@ from the collector side (`run_daily_financial --since`).
 Each item's `reference_data` also refreshes `steam_country` (code → name, Steam region) and
 `steamworks_bundle` (id → name); sales by region join through `steam_country`. Read side:
 `GET /api/games/{appId}/sales/daily|countries` and `GET /api/sales/summary`. "Net" is Steam's
-`net_sales_usd` (after refunds and VAT, before Steam's share). Decimal `Sum` works on the
+`net_sales_usd` (after refunds and VAT, before Steam's share). **Steam sends returns as
+negatives** (`gross_units_returned` −17, `net_units_sold` = sold + returned); ingestion
+stores `ReturnsUnits`/`GrossReturnsUsd` positive so the `NetUnits` column
+(`SalesUnits - ReturnsUnits`) is right. Key activations (`gross_units_activated`, about a
+third of all lines, no revenue) go to `ActivatedUnits`, never `SalesUnits`. Decimal `Sum` works on the
 SQLite test database (EF's `ef_sum`), so the tests cover the real queries.
 
 ### Steamworks wishlist reports (owned games)

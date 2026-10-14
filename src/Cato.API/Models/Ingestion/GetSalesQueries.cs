@@ -4,7 +4,8 @@ namespace Cato.API.Models.Ingestion;
 
 // Steam sales from steam_sale_financial (GetDetailedSales lines). "Net" is Steam's
 // net_sales_usd: gross sales minus refunds and VAT, before Steam's revenue share.
-// Units: gross = sold (or activated), returned = refunded, net = gross − returned.
+// Units: gross = sold through Steam, returned = refunded (positive), net = gross − returned.
+// Activated = retail/CD keys activated on Steam: not sales, no Steam revenue.
 
 /// <summary>A game's sales per day, oldest first. A day with no row had no sales.</summary>
 public record GetSalesDailyQuery(int AppId, DateOnly? From, DateOnly? To) : IRequest<List<SalesDailyDto>>;
@@ -14,6 +15,7 @@ public record SalesDailyDto(
     int GrossUnits,
     int ReturnedUnits,
     int NetUnits,
+    int ActivatedUnits,
     decimal GrossUsd,
     decimal ReturnsUsd,
     decimal NetUsd);
@@ -61,6 +63,7 @@ public record SalesGameSummaryDto(
     int GrossUnits,
     int ReturnedUnits,
     int NetUnits,
+    int ActivatedUnits,
     decimal GrossUsd,
     decimal NetUsd,
     int NetUnits30d,

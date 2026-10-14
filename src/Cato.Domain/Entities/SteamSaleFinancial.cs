@@ -14,8 +14,12 @@ public class SteamSaleFinancial
     public string CountryCode { get; set; } = string.Empty;
     public string Platform { get; set; } = "Steam";
     public int? PackageId { get; set; }
+    // Units sold through Steam (gross_units_sold). Key activations are not sales.
     public int SalesUnits { get; set; }
+    // Positive: Steam sends gross_units_returned / gross_returns_usd as negatives.
     public int ReturnsUnits { get; set; }
+    // Retail/CD keys activated on Steam (gross_units_activated); no Steam revenue.
+    public int ActivatedUnits { get; set; }
     public int NetUnits { get; set; } // Computed: sales_units - returns_units
     public decimal GrossRevenueUsd { get; set; }
     public decimal GrossReturnsUsd { get; set; }

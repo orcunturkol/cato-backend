@@ -1650,6 +1650,9 @@ namespace Cato.Infrastructure.Database.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("ActivatedUnits")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("AppId")
                         .HasColumnType("integer");
 
