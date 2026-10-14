@@ -119,6 +119,58 @@ public class GameDataService : IGameDataService
             .ToListAsync(ct);
     }
 
+    public async Task<SteamworksWishlistSummaryDto> GetSteamworksWishlistSummaryAsync(CancellationToken ct = default)
+    {
+        var latest = await _db.SteamworksWishlistDaily.MaxAsync(d => (DateOnly?)d.DateLocal, ct);
+        if (latest is null)
+            return new SteamworksWishlistSummaryDto(null, []);
+
+        // Same inclusive 30-day window as the per-game view: the latest day and the 29 before it.
+        var from30 = latest.Value.AddDays(-29);
+
+        var totals = await _db.SteamworksWishlistDaily
+            .AsNoTracking()
+            .GroupBy(d => d.GameId)
+            .Select(g => new
+            {
+                GameId = g.Key,
+                FirstDate = g.Min(d => d.DateLocal),
+                LastDate = g.Max(d => d.DateLocal),
+                Adds = g.Sum(d => d.Adds),
+                Deletes = g.Sum(d => d.Deletes),
+                Purchases = g.Sum(d => d.PurchasesAndActivations),
+                Gifts = g.Sum(d => d.Gifts),
+                Adds30d = g.Sum(d => d.DateLocal >= from30 ? d.Adds : 0),
+                Deletes30d = g.Sum(d => d.DateLocal >= from30 ? d.Deletes : 0),
+                Conversions30d = g.Sum(d => d.DateLocal >= from30 ? d.PurchasesAndActivations + d.Gifts : 0),
+            })
+            .ToListAsync(ct);
+
+        var gameIds = totals.Select(t => t.GameId).ToList();
+        var games = await _db.Games
+            .AsNoTracking()
+            .Where(g => gameIds.Contains(g.Id))
+            .Select(g => new { g.Id, g.AppId, g.Name, g.GameType, g.HeaderImageUrl })
+            .ToDictionaryAsync(g => g.Id, ct);
+
+        var rows = totals
+            .Where(t => games.ContainsKey(t.GameId))
+            .Select(t =>
+            {
+                var game = games[t.GameId];
+                return new SteamworksWishlistGameSummaryDto(
+                    t.GameId, game.AppId, game.Name, game.GameType, game.HeaderImageUrl,
+                    t.FirstDate, t.LastDate,
+                    t.Adds, t.Deletes, t.Purchases, t.Gifts,
+                    t.Adds - t.Deletes - t.Purchases - t.Gifts,
+                    t.Adds30d, t.Deletes30d, t.Conversions30d);
+            })
+            .OrderByDescending(r => r.Outstanding)
+            .ToList();
+
+        return new SteamworksWishlistSummaryDto(latest, rows);
+    }
+
     public async Task<List<GroupMemberCountDto>> GetGroupMemberCountAsync(GetGroupMemberCountQuery request, CancellationToken ct = default)
     {
         return await _db.GroupMemberCountSnapshots
