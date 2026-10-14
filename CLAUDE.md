@@ -144,6 +144,11 @@ loads a game's rows once, untracked, and writes only new or changed ones, so a r
 updates in place. Rows missing from a later export are kept. Both exports are **sparse**
 (no row = zero), and `DateLocal` is a Pacific-time date.
 
+`POST /api/games/owned-sync` runs before the collector downloads anything: it creates or
+promotes every app the collector's Steamworks login can see to `GameType = "Owned"` (Redis after save) and
+queues Steam enrichment in the background for rows with `LastEnrichedAt == null`. It is
+synchronous so the wishlist batch never stubs a new game as `Other`.
+
 `GroupMemberCountSnapshot` holds **two series in one table**, discriminated by `Source` and keyed `(GameId, SnapshotDate, Source)`:
 `steam_community_group` (the live daily scrape) and `steamdb_follower_history` (the SteamDB backfill of the same metric, reaching years further back). Any query or upsert against this table must filter on `Source`, or the daily scrape will silently overwrite backfilled history.
 

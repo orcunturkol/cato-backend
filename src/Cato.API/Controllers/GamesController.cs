@@ -169,6 +169,26 @@ public class GamesController : ControllerBase
 
     }
 
+    /// <summary>Create or promote the Steamworks account's apps as Owned games.
+    /// Rows are written before the response; Steam enrichment of new or never-enriched games runs in the background.</summary>
+    [HttpPost("owned-sync")]
+    [ProducesResponseType(typeof(SyncOwnedGamesResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> SyncOwnedGames(
+        [FromBody] SyncOwnedGamesCommand command,
+        [FromServices] IValidator<SyncOwnedGamesCommand> validator,
+        CancellationToken ct)
+    {
+        var validation = await validator.ValidateAsync(command, ct);
+        if (!validation.IsValid)
+            return Results.BadRequest(validation.Errors.Select(e => e.ErrorMessage));
+
+        var result = await _mediator.Send(command, ct);
+        return result.IsSuccess
+            ? Results.Ok(result.Data)
+            : Results.BadRequest(result.ErrorMessage);
+    }
+
     /// <summary>Re-enrich all games where enrichment was not successful (HeaderImageUrl is null).
     /// Returns immediately with the count of queued games; enrichment runs in the background.</summary>
     [HttpPost("re-enrich")]
