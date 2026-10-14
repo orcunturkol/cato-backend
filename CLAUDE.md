@@ -142,7 +142,9 @@ collector's `run_steamworks_wishlist` re-sends each game's **whole history** eve
 under batch source `steamworks_wishlist_report`; `IngestSteamworksWishlistReportItemAsync`
 loads a game's rows once, untracked, and writes only new or changed ones, so a re-export
 updates in place. Rows missing from a later export are kept. Both exports are **sparse**
-(no row = zero), and `DateLocal` is a Pacific-time date.
+(no row = zero), and `DateLocal` is a Pacific-time date. The manual upload
+(`POST /api/ingestion/wishlists` → `IngestWishlistDataAsync`) shares the same upsert; it no
+longer writes `steam_traffic`.
 
 `POST /api/games/owned-sync` runs before the collector downloads anything: it creates or
 promotes every app the collector's Steamworks login can see to `GameType = "Owned"` (Redis after save) and

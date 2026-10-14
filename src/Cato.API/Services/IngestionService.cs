@@ -349,79 +349,67 @@ public class IngestionService : IIngestionService
                 throw new InvalidOperationException($"Game with AppId {request.AppId} not found. Create the game first.");
 
             using var wishlistCsvReader = new StreamReader(request.Content);
-            var wishlistLinesList = new List<string>();
+            var lines = new List<string>();
             string? wishlistLn;
-            while ((wishlistLn = await wishlistCsvReader.ReadLineAsync(ct)) is not null) wishlistLinesList.Add(wishlistLn);
-            var lines = wishlistLinesList.ToArray();
+            while ((wishlistLn = await wishlistCsvReader.ReadLineAsync(ct)) is not null) lines.Add(wishlistLn);
 
-            int processed = 0, inserted = 0, failed = 0;
+            // The partner export opens with "sep=,", a title line and a blank line;
+            // the header row starts with "DateLocal,". Columns are found by name.
+            var headerAt = lines.FindIndex(l => l.StartsWith("DateLocal,", StringComparison.OrdinalIgnoreCase));
+            if (headerAt < 0)
+                throw new InvalidOperationException("Unrecognized wishlist CSV: no 'DateLocal,' header row.");
 
-            // CSV: first header row starts with "DateLocal,"
-            var dataStart = 0;
-            for (int i = 0; i < lines.Length; i++)
+            var header = ParseCsvLine(lines[headerAt]);
+            int Column(string name)
             {
-                if (lines[i].StartsWith("DateLocal,", StringComparison.OrdinalIgnoreCase))
-                {
-                    dataStart = i + 1;
-                    break;
-                }
+                var index = Array.FindIndex(header, h => h.Trim().Equals(name, StringComparison.OrdinalIgnoreCase));
+                return index >= 0
+                    ? index
+                    : throw new InvalidOperationException($"Wishlist CSV is missing the '{name}' column.");
             }
+            int dateCol = Column("DateLocal"), addsCol = Column("Adds"), deletesCol = Column("Deletes"),
+                purchasesCol = Column("PurchasesAndActivations"), giftsCol = Column("Gifts");
 
-            for (int i = dataStart; i < lines.Length; i++)
+            var rows = new List<SteamworksWishlistDailyRow>();
+            int processed = 0, failed = 0;
+
+            for (int i = headerAt + 1; i < lines.Count; i++)
             {
                 var line = lines[i].Trim();
                 if (string.IsNullOrEmpty(line)) continue;
 
                 processed++;
-                try
-                {
-                    var parts = line.Split(',');
-                    if (parts.Length < 6) continue;
-
-                    var trafficDate = DateOnly.Parse(parts[0], CultureInfo.InvariantCulture);
-                    var adds = int.Parse(parts[2], CultureInfo.InvariantCulture);
-                    var deletes = int.Parse(parts[3], CultureInfo.InvariantCulture);
-                    var purchases = int.Parse(parts[4], CultureInfo.InvariantCulture);
-                    var gifts = int.Parse(parts[5], CultureInfo.InvariantCulture);
-
-                    var exists = await _db.SteamTraffic.AnyAsync(
-                        t => t.GameId == game.Id && t.TrafficDate == trafficDate && t.TrafficSource == "steamworks_wishlist", ct);
-
-                    if (!exists)
-                    {
-                        _db.SteamTraffic.Add(new SteamTraffic
-                        {
-                            Id = Guid.NewGuid(),
-                            GameId = game.Id,
-                            TrafficDate = trafficDate,
-                            WishlistAdditions = adds,
-                            WishlistDeletions = deletes,
-                            Purchases = purchases,
-                            TrafficSource = "steamworks_wishlist"
-                        });
-                        inserted++;
-                    }
-                }
-                catch (Exception ex)
+                var parts = ParseCsvLine(line);
+                if (parts.Length != header.Length
+                    || !DateOnly.TryParse(parts[dateCol], CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateLocal)
+                    || !int.TryParse(parts[addsCol], NumberStyles.Integer, CultureInfo.InvariantCulture, out var adds)
+                    || !int.TryParse(parts[deletesCol], NumberStyles.Integer, CultureInfo.InvariantCulture, out var deletes)
+                    || !int.TryParse(parts[purchasesCol], NumberStyles.Integer, CultureInfo.InvariantCulture, out var purchases)
+                    || !int.TryParse(parts[giftsCol], NumberStyles.Integer, CultureInfo.InvariantCulture, out var gifts))
                 {
                     failed++;
-                    _logger.LogWarning(ex, "Failed to parse wishlist CSV line {Line}", i);
+                    _logger.LogWarning("Failed to parse wishlist CSV line {Line}", i);
+                    continue;
                 }
+
+                rows.Add(new SteamworksWishlistDailyRow(dateLocal, adds, deletes, purchases, gifts));
             }
 
+            var (inserted, updated) = await UpsertSteamworksWishlistDailyAsync(game.Id, rows, ct);
             await _db.SaveChangesAsync(ct);
 
             log.EndTime = DateTime.UtcNow;
             log.Status = "Completed";
             log.RecordsProcessed = processed;
             log.RecordsInserted = inserted;
+            log.RecordsUpdated = updated;
             log.RecordsFailed = failed;
             await _db.SaveChangesAsync(ct);
 
-            _logger.LogInformation("Wishlist ingestion complete: {Processed} processed, {Inserted} inserted, {Failed} failed",
-                processed, inserted, failed);
+            _logger.LogInformation("Wishlist ingestion complete: {Processed} processed, {Inserted} inserted, {Updated} updated, {Failed} failed",
+                processed, inserted, updated, failed);
 
-            return new IngestionResult(processed, inserted, 0, failed, log.Id);
+            return new IngestionResult(processed, inserted, updated, failed, log.Id);
         }
         catch (Exception ex)
         {

@@ -1,5 +1,7 @@
+using System.Text;
 using System.Text.Json;
 using Cato.API.DTOs;
+using Cato.API.Models.Ingestion;
 using Cato.API.Services;
 using Cato.Domain.Entities;
 using Cato.Infrastructure.Database;
@@ -244,5 +246,43 @@ public class SteamworksWishlistIngestionTests : IDisposable
         var game = await db.Games.SingleAsync(g => g.AppId == 9999990);
         Assert.Equal("New Game", game.Name);
         Assert.Equal("Other", game.GameType);
+    }
+
+    [Fact]
+    public async Task ManualUploadParsesThePartnerExportAndUpserts()
+    {
+        await SeedGameAsync();
+        const string csv = """
+            sep=,
+            Steam Wishlisting data for 2000-01-01 - 2026-01-30
+
+            DateLocal,Game,Adds,Deletes,PurchasesAndActivations,Gifts
+            2026-01-29,The Chef's Shift,254,31,32,1
+            2026-01-30,"Chef, The",266,35,39,2
+            not-a-date,The Chef's Shift,1,1,1,1
+            """;
+
+        IngestionResult first;
+        await using (var db = NewContext())
+            first = await NewService(db).IngestWishlistDataAsync(
+                new IngestWishlistDataCommand(AppId, "wishlist.csv", new MemoryStream(Encoding.UTF8.GetBytes(csv))));
+
+        Assert.Equal(3, first.RecordsProcessed);
+        Assert.Equal(2, first.RecordsInserted);
+        Assert.Equal(1, first.RecordsFailed);
+
+        var revised = csv.Replace("2026-01-30,\"Chef, The\",266", "2026-01-30,\"Chef, The\",300");
+        IngestionResult second;
+        await using (var db = NewContext())
+            second = await NewService(db).IngestWishlistDataAsync(
+                new IngestWishlistDataCommand(AppId, "wishlist.csv", new MemoryStream(Encoding.UTF8.GetBytes(revised))));
+
+        Assert.Equal(0, second.RecordsInserted);
+        Assert.Equal(1, second.RecordsUpdated);
+
+        var days = await DaysAsync();
+        Assert.Equal(2, days.Count);
+        Assert.Equal(300, days[1].Adds);
+        Assert.Equal(2, days[1].Gifts);
     }
 }
