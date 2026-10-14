@@ -1976,6 +1976,87 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.ToTable("steam_traffic_breakdown", (string)null);
                 });
 
+            modelBuilder.Entity("Cato.Domain.Entities.SteamworksWishlistCohort", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("DateLocal")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("GameId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Gifts")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("MonthCohort")
+                        .HasColumnType("date");
+
+                    b.Property<int>("PurchasesAndActivations")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TotalConversions")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GameId", "MonthCohort")
+                        .HasDatabaseName("idx_steamworks_wishlist_cohort_game_month");
+
+                    b.HasIndex("GameId", "DateLocal", "MonthCohort")
+                        .IsUnique()
+                        .HasDatabaseName("unique_steamworks_wishlist_cohort");
+
+                    b.ToTable("steamworks_wishlist_cohort", (string)null);
+                });
+
+            modelBuilder.Entity("Cato.Domain.Entities.SteamworksWishlistDaily", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Adds")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("DateLocal")
+                        .HasColumnType("date");
+
+                    b.Property<int>("Deletes")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("GameId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Gifts")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PurchasesAndActivations")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GameId", "DateLocal")
+                        .IsUnique()
+                        .HasDatabaseName("unique_steamworks_wishlist_daily");
+
+                    b.ToTable("steamworks_wishlist_daily", (string)null);
+                });
+
             modelBuilder.Entity("Cato.Domain.Entities.TargetMatch", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2373,6 +2454,28 @@ namespace Cato.Infrastructure.Database.Migrations
                 {
                     b.HasOne("Cato.Domain.Entities.Game", "Game")
                         .WithMany("TrafficBreakdowns")
+                        .HasForeignKey("GameId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Game");
+                });
+
+            modelBuilder.Entity("Cato.Domain.Entities.SteamworksWishlistCohort", b =>
+                {
+                    b.HasOne("Cato.Domain.Entities.Game", "Game")
+                        .WithMany()
+                        .HasForeignKey("GameId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Game");
+                });
+
+            modelBuilder.Entity("Cato.Domain.Entities.SteamworksWishlistDaily", b =>
+                {
+                    b.HasOne("Cato.Domain.Entities.Game", "Game")
+                        .WithMany()
                         .HasForeignKey("GameId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();

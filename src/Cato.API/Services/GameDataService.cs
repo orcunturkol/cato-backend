@@ -86,6 +86,39 @@ public class GameDataService : IGameDataService
             .ToListAsync(ct);
     }
 
+    public async Task<List<SteamworksWishlistDailyDto>> GetSteamworksWishlistDailyAsync(GetSteamworksWishlistDailyQuery request, CancellationToken ct = default)
+    {
+        var query = _db.SteamworksWishlistDaily
+            .AsNoTracking()
+            .Where(d => d.Game.AppId == request.AppId);
+
+        if (request.From is { } from) query = query.Where(d => d.DateLocal >= from);
+        if (request.To is { } to) query = query.Where(d => d.DateLocal <= to);
+
+        return await query
+            .OrderBy(d => d.DateLocal)
+            .Select(d => new SteamworksWishlistDailyDto(
+                d.DateLocal, d.Adds, d.Deletes, d.PurchasesAndActivations, d.Gifts))
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<SteamworksWishlistCohortDto>> GetSteamworksWishlistCohortsAsync(GetSteamworksWishlistCohortsQuery request, CancellationToken ct = default)
+    {
+        var query = _db.SteamworksWishlistCohorts
+            .AsNoTracking()
+            .Where(c => c.Game.AppId == request.AppId);
+
+        if (request.From is { } from) query = query.Where(c => c.DateLocal >= from);
+        if (request.To is { } to) query = query.Where(c => c.DateLocal <= to);
+
+        return await query
+            .OrderBy(c => c.DateLocal)
+            .ThenBy(c => c.MonthCohort)
+            .Select(c => new SteamworksWishlistCohortDto(
+                c.DateLocal, c.MonthCohort, c.PurchasesAndActivations, c.Gifts, c.TotalConversions))
+            .ToListAsync(ct);
+    }
+
     public async Task<List<GroupMemberCountDto>> GetGroupMemberCountAsync(GetGroupMemberCountQuery request, CancellationToken ct = default)
     {
         return await _db.GroupMemberCountSnapshots

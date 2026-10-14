@@ -349,79 +349,67 @@ public class IngestionService : IIngestionService
                 throw new InvalidOperationException($"Game with AppId {request.AppId} not found. Create the game first.");
 
             using var wishlistCsvReader = new StreamReader(request.Content);
-            var wishlistLinesList = new List<string>();
+            var lines = new List<string>();
             string? wishlistLn;
-            while ((wishlistLn = await wishlistCsvReader.ReadLineAsync(ct)) is not null) wishlistLinesList.Add(wishlistLn);
-            var lines = wishlistLinesList.ToArray();
+            while ((wishlistLn = await wishlistCsvReader.ReadLineAsync(ct)) is not null) lines.Add(wishlistLn);
 
-            int processed = 0, inserted = 0, failed = 0;
+            // The partner export opens with "sep=,", a title line and a blank line;
+            // the header row starts with "DateLocal,". Columns are found by name.
+            var headerAt = lines.FindIndex(l => l.StartsWith("DateLocal,", StringComparison.OrdinalIgnoreCase));
+            if (headerAt < 0)
+                throw new InvalidOperationException("Unrecognized wishlist CSV: no 'DateLocal,' header row.");
 
-            // CSV: first header row starts with "DateLocal,"
-            var dataStart = 0;
-            for (int i = 0; i < lines.Length; i++)
+            var header = ParseCsvLine(lines[headerAt]);
+            int Column(string name)
             {
-                if (lines[i].StartsWith("DateLocal,", StringComparison.OrdinalIgnoreCase))
-                {
-                    dataStart = i + 1;
-                    break;
-                }
+                var index = Array.FindIndex(header, h => h.Trim().Equals(name, StringComparison.OrdinalIgnoreCase));
+                return index >= 0
+                    ? index
+                    : throw new InvalidOperationException($"Wishlist CSV is missing the '{name}' column.");
             }
+            int dateCol = Column("DateLocal"), addsCol = Column("Adds"), deletesCol = Column("Deletes"),
+                purchasesCol = Column("PurchasesAndActivations"), giftsCol = Column("Gifts");
 
-            for (int i = dataStart; i < lines.Length; i++)
+            var rows = new List<SteamworksWishlistDailyRow>();
+            int processed = 0, failed = 0;
+
+            for (int i = headerAt + 1; i < lines.Count; i++)
             {
                 var line = lines[i].Trim();
                 if (string.IsNullOrEmpty(line)) continue;
 
                 processed++;
-                try
-                {
-                    var parts = line.Split(',');
-                    if (parts.Length < 6) continue;
-
-                    var trafficDate = DateOnly.Parse(parts[0], CultureInfo.InvariantCulture);
-                    var adds = int.Parse(parts[2], CultureInfo.InvariantCulture);
-                    var deletes = int.Parse(parts[3], CultureInfo.InvariantCulture);
-                    var purchases = int.Parse(parts[4], CultureInfo.InvariantCulture);
-                    var gifts = int.Parse(parts[5], CultureInfo.InvariantCulture);
-
-                    var exists = await _db.SteamTraffic.AnyAsync(
-                        t => t.GameId == game.Id && t.TrafficDate == trafficDate && t.TrafficSource == "steamworks_wishlist", ct);
-
-                    if (!exists)
-                    {
-                        _db.SteamTraffic.Add(new SteamTraffic
-                        {
-                            Id = Guid.NewGuid(),
-                            GameId = game.Id,
-                            TrafficDate = trafficDate,
-                            WishlistAdditions = adds,
-                            WishlistDeletions = deletes,
-                            Purchases = purchases,
-                            TrafficSource = "steamworks_wishlist"
-                        });
-                        inserted++;
-                    }
-                }
-                catch (Exception ex)
+                var parts = ParseCsvLine(line);
+                if (parts.Length != header.Length
+                    || !DateOnly.TryParse(parts[dateCol], CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateLocal)
+                    || !int.TryParse(parts[addsCol], NumberStyles.Integer, CultureInfo.InvariantCulture, out var adds)
+                    || !int.TryParse(parts[deletesCol], NumberStyles.Integer, CultureInfo.InvariantCulture, out var deletes)
+                    || !int.TryParse(parts[purchasesCol], NumberStyles.Integer, CultureInfo.InvariantCulture, out var purchases)
+                    || !int.TryParse(parts[giftsCol], NumberStyles.Integer, CultureInfo.InvariantCulture, out var gifts))
                 {
                     failed++;
-                    _logger.LogWarning(ex, "Failed to parse wishlist CSV line {Line}", i);
+                    _logger.LogWarning("Failed to parse wishlist CSV line {Line}", i);
+                    continue;
                 }
+
+                rows.Add(new SteamworksWishlistDailyRow(dateLocal, adds, deletes, purchases, gifts));
             }
 
+            var (inserted, updated) = await UpsertSteamworksWishlistDailyAsync(game.Id, rows, ct);
             await _db.SaveChangesAsync(ct);
 
             log.EndTime = DateTime.UtcNow;
             log.Status = "Completed";
             log.RecordsProcessed = processed;
             log.RecordsInserted = inserted;
+            log.RecordsUpdated = updated;
             log.RecordsFailed = failed;
             await _db.SaveChangesAsync(ct);
 
-            _logger.LogInformation("Wishlist ingestion complete: {Processed} processed, {Inserted} inserted, {Failed} failed",
-                processed, inserted, failed);
+            _logger.LogInformation("Wishlist ingestion complete: {Processed} processed, {Inserted} inserted, {Updated} updated, {Failed} failed",
+                processed, inserted, updated, failed);
 
-            return new IngestionResult(processed, inserted, 0, failed, log.Id);
+            return new IngestionResult(processed, inserted, updated, failed, log.Id);
         }
         catch (Exception ex)
         {
@@ -1857,6 +1845,219 @@ public class IngestionService : IIngestionService
                 appId, failed, processed);
 
         return new ItemIngestResult(processed, inserted, updated, failed);
+    }
+
+    /// <summary>
+    /// One owned game's Steamworks wishlist report: the full daily action series
+    /// (<c>actions</c>) and the full cohort-conversion series (<c>cohorts</c>), both
+    /// from the partner CSV exports. Each run re-sends the whole history, so this
+    /// is an upsert: a changed day is updated in place, never duplicated. A missing
+    /// or null array leaves that table untouched (the collector sends one series
+    /// alone when the other download failed).
+    /// </summary>
+    public async Task<ItemIngestResult> IngestSteamworksWishlistReportItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default)
+    {
+        string? stubName = data.TryGetProperty("game_name", out var nameEl) && nameEl.ValueKind == JsonValueKind.String
+            ? nameEl.GetString() : null;
+        var game = await FindOrStubGameAsync(appId, stubName, ct);
+
+        int processed = 0, inserted = 0, updated = 0, failed = 0;
+
+        // Malformed rows are skipped, never thrown: the dispatcher runs the whole
+        // batch in one transaction, so throwing would send every other game in
+        // this message to the DLQ.
+        if (data.TryGetProperty("actions", out var actionsEl) && actionsEl.ValueKind == JsonValueKind.Array)
+        {
+            var rows = new List<SteamworksWishlistDailyRow>();
+            foreach (var row in actionsEl.EnumerateArray())
+            {
+                processed++;
+                if (TryReadWishlistDailyRow(row, out var parsed)) rows.Add(parsed);
+                else failed++;
+            }
+
+            var (i, u) = await UpsertSteamworksWishlistDailyAsync(game.Id, rows, ct);
+            inserted += i;
+            updated += u;
+        }
+
+        if (data.TryGetProperty("cohorts", out var cohortsEl) && cohortsEl.ValueKind == JsonValueKind.Array)
+        {
+            var rows = new List<SteamworksWishlistCohortRow>();
+            foreach (var row in cohortsEl.EnumerateArray())
+            {
+                processed++;
+                if (TryReadWishlistCohortRow(row, out var parsed)) rows.Add(parsed);
+                else failed++;
+            }
+
+            var (i, u) = await UpsertSteamworksWishlistCohortsAsync(game.Id, rows, ct);
+            inserted += i;
+            updated += u;
+        }
+
+        if (failed > 0)
+            _logger.LogWarning(
+                "Steamworks wishlist report for AppId {AppId}: {Failed} of {Processed} rows malformed",
+                appId, failed, processed);
+
+        return new ItemIngestResult(processed, inserted, updated, failed);
+    }
+
+    private readonly record struct SteamworksWishlistDailyRow(
+        DateOnly DateLocal, int Adds, int Deletes, int PurchasesAndActivations, int Gifts);
+
+    private readonly record struct SteamworksWishlistCohortRow(
+        DateOnly DateLocal, DateOnly MonthCohort, int PurchasesAndActivations, int Gifts, int TotalConversions);
+
+    private static bool TryReadWishlistDailyRow(JsonElement row, out SteamworksWishlistDailyRow parsed)
+    {
+        parsed = default;
+        if (!TryGetDate(row, "date_local", out var dateLocal)
+            || !TryGetInt(row, "adds", out var adds)
+            || !TryGetInt(row, "deletes", out var deletes)
+            || !TryGetInt(row, "purchases_and_activations", out var purchases)
+            || !TryGetInt(row, "gifts", out var gifts))
+            return false;
+
+        parsed = new SteamworksWishlistDailyRow(dateLocal, adds, deletes, purchases, gifts);
+        return true;
+    }
+
+    private static bool TryReadWishlistCohortRow(JsonElement row, out SteamworksWishlistCohortRow parsed)
+    {
+        parsed = default;
+        if (!TryGetDate(row, "date_local", out var dateLocal)
+            || !TryGetDate(row, "month_cohort", out var monthCohort)
+            || !TryGetInt(row, "purchases_and_activations", out var purchases)
+            || !TryGetInt(row, "gifts", out var gifts)
+            || !TryGetInt(row, "total_conversions", out var total))
+            return false;
+
+        parsed = new SteamworksWishlistCohortRow(dateLocal, monthCohort, purchases, gifts, total);
+        return true;
+    }
+
+    private static bool TryGetDate(JsonElement row, string name, out DateOnly value)
+    {
+        value = default;
+        return row.ValueKind == JsonValueKind.Object
+            && row.TryGetProperty(name, out var el)
+            && el.ValueKind == JsonValueKind.String
+            && DateOnly.TryParseExact(el.GetString(), "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                                      DateTimeStyles.None, out value);
+    }
+
+    private static bool TryGetInt(JsonElement row, string name, out int value)
+    {
+        value = default;
+        return row.ValueKind == JsonValueKind.Object
+            && row.TryGetProperty(name, out var el)
+            && el.ValueKind == JsonValueKind.Number
+            && el.TryGetInt32(out value);
+    }
+
+    /// <summary>
+    /// Upserts a game's daily wishlist actions keyed by <c>DateLocal</c>. One query
+    /// loads the existing series untracked; only new and changed rows are tracked,
+    /// so re-sending a multi-year history that barely changed costs almost nothing
+    /// at SaveChanges. Rows absent from <paramref name="rows"/> are kept.
+    /// </summary>
+    private async Task<(int Inserted, int Updated)> UpsertSteamworksWishlistDailyAsync(
+        Guid gameId, IEnumerable<SteamworksWishlistDailyRow> rows, CancellationToken ct)
+    {
+        var existing = await _db.SteamworksWishlistDaily
+            .AsNoTracking()
+            .Where(d => d.GameId == gameId)
+            .ToDictionaryAsync(d => d.DateLocal, ct);
+
+        int inserted = 0, updated = 0;
+        foreach (var row in rows)
+        {
+            if (existing.TryGetValue(row.DateLocal, out var day))
+            {
+                if (day.Adds == row.Adds && day.Deletes == row.Deletes
+                    && day.PurchasesAndActivations == row.PurchasesAndActivations && day.Gifts == row.Gifts)
+                    continue;
+
+                day.Adds = row.Adds;
+                day.Deletes = row.Deletes;
+                day.PurchasesAndActivations = row.PurchasesAndActivations;
+                day.Gifts = row.Gifts;
+                // A day repeated inside one payload is already tracked (Added or
+                // Modified); Update() would flip an Added row to Modified and the
+                // UPDATE would hit no row.
+                if (_db.Entry(day).State == EntityState.Detached)
+                    _db.SteamworksWishlistDaily.Update(day);
+                updated++;
+                continue;
+            }
+
+            var added = new SteamworksWishlistDaily
+            {
+                Id = Guid.NewGuid(),
+                GameId = gameId,
+                DateLocal = row.DateLocal,
+                Adds = row.Adds,
+                Deletes = row.Deletes,
+                PurchasesAndActivations = row.PurchasesAndActivations,
+                Gifts = row.Gifts
+            };
+            _db.SteamworksWishlistDaily.Add(added);
+            existing[row.DateLocal] = added;
+            inserted++;
+        }
+
+        return (inserted, updated);
+    }
+
+    /// <summary>
+    /// Upserts a game's cohort conversions keyed by (<c>DateLocal</c>, <c>MonthCohort</c>).
+    /// Same shape as <see cref="UpsertSteamworksWishlistDailyAsync"/>.
+    /// </summary>
+    private async Task<(int Inserted, int Updated)> UpsertSteamworksWishlistCohortsAsync(
+        Guid gameId, IEnumerable<SteamworksWishlistCohortRow> rows, CancellationToken ct)
+    {
+        var existing = await _db.SteamworksWishlistCohorts
+            .AsNoTracking()
+            .Where(c => c.GameId == gameId)
+            .ToDictionaryAsync(c => (c.DateLocal, c.MonthCohort), ct);
+
+        int inserted = 0, updated = 0;
+        foreach (var row in rows)
+        {
+            var key = (row.DateLocal, row.MonthCohort);
+            if (existing.TryGetValue(key, out var cohort))
+            {
+                if (cohort.PurchasesAndActivations == row.PurchasesAndActivations
+                    && cohort.Gifts == row.Gifts && cohort.TotalConversions == row.TotalConversions)
+                    continue;
+
+                cohort.PurchasesAndActivations = row.PurchasesAndActivations;
+                cohort.Gifts = row.Gifts;
+                cohort.TotalConversions = row.TotalConversions;
+                if (_db.Entry(cohort).State == EntityState.Detached)
+                    _db.SteamworksWishlistCohorts.Update(cohort);
+                updated++;
+                continue;
+            }
+
+            var added = new SteamworksWishlistCohort
+            {
+                Id = Guid.NewGuid(),
+                GameId = gameId,
+                DateLocal = row.DateLocal,
+                MonthCohort = row.MonthCohort,
+                PurchasesAndActivations = row.PurchasesAndActivations,
+                Gifts = row.Gifts,
+                TotalConversions = row.TotalConversions
+            };
+            _db.SteamworksWishlistCohorts.Add(added);
+            existing[key] = added;
+            inserted++;
+        }
+
+        return (inserted, updated);
     }
 
     public async Task<ItemIngestResult> IngestSteamDbSnapshotItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default)
