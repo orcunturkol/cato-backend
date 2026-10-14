@@ -1105,8 +1105,10 @@ public class IngestionService : IIngestionService
             string? trafficLn;
             while ((trafficLn = await trafficCsvReader.ReadLineAsync(ct)) is not null) trafficLinesList.Add(trafficLn);
             var lines = trafficLinesList.ToArray();
+            // The uploaded CSV carries no dates; it is filed under the upload day.
             var snapshotDate = DateOnly.FromDateTime(DateTime.UtcNow);
-            int processed = 0, inserted = 0, updated = 0, failed = 0;
+            int processed = 0, failed = 0;
+            var rows = new List<StoreTrafficRow>();
 
             // Skip header row
             for (int i = 1; i < lines.Length; i++)
@@ -1118,39 +1120,18 @@ public class IngestionService : IIngestionService
                 try
                 {
                     // CSV columns: Page / Category, Page / Feature, Impressions, Visits
-                    // Values may be quoted and contain commas (e.g. "12,755")
+                    // [, Owner Impressions, Owner Visits]. Values may be quoted and
+                    // contain commas (e.g. "12,755").
                     var cols = ParseCsvLine(line);
                     if (cols.Length < 4) { failed++; continue; }
 
-                    var category = cols[0].Trim();
-                    var feature = cols[1].Trim();
-                    var impressions = ParseFormattedLong(cols[2]);
-                    var visits = ParseFormattedLong(cols[3]);
-
-                    var existing = await _db.SteamTrafficBreakdowns.FirstOrDefaultAsync(
-                        t => t.GameId == game.Id && t.SnapshotDate == snapshotDate
-                             && t.PageCategory == category && t.PageFeature == feature, ct);
-
-                    if (existing is null)
-                    {
-                        _db.SteamTrafficBreakdowns.Add(new SteamTrafficBreakdown
-                        {
-                            Id = Guid.NewGuid(),
-                            GameId = game.Id,
-                            SnapshotDate = snapshotDate,
-                            PageCategory = category,
-                            PageFeature = feature,
-                            Impressions = impressions,
-                            Visits = visits
-                        });
-                        inserted++;
-                    }
-                    else
-                    {
-                        existing.Impressions = impressions;
-                        existing.Visits = visits;
-                        updated++;
-                    }
+                    rows.Add(new StoreTrafficRow(
+                        cols[0].Trim(),
+                        cols[1].Trim(),
+                        ParseFormattedLong(cols[2]),
+                        ParseFormattedLong(cols[3]),
+                        cols.Length > 4 ? ParseFormattedLong(cols[4]) : 0,
+                        cols.Length > 5 ? ParseFormattedLong(cols[5]) : 0));
                 }
                 catch (Exception ex)
                 {
@@ -1158,6 +1139,8 @@ public class IngestionService : IIngestionService
                     _logger.LogWarning(ex, "Failed to parse store traffic CSV line {Line}", i);
                 }
             }
+
+            var (inserted, updated) = await UpsertStoreTrafficAsync(game.Id, snapshotDate, snapshotDate, rows, ct);
 
             await _db.SaveChangesAsync(ct);
 
@@ -2386,6 +2369,123 @@ public class IngestionService : IIngestionService
         };
         if (string.IsNullOrEmpty(text)) return null;
         return text.Length > maxLength ? text[..maxLength] : text;
+    }
+
+    /// <summary>
+    /// One owned game's Steamworks store traffic for one period (<c>period_start</c> ..
+    /// <c>period_end</c>, GMT, inclusive): the rows of the navtrafficstats CSV. A
+    /// re-fetched period updates in place; rows missing from a later fetch are kept.
+    /// </summary>
+    public async Task<ItemIngestResult> IngestSteamworksStoreTrafficItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default)
+    {
+        if (!data.TryGetProperty("rows", out var rowsEl) || rowsEl.ValueKind != JsonValueKind.Array)
+            return new ItemIngestResult(0, 0, 0, 0);
+        if (!TryGetDate(data, "period_start", out var start) || !TryGetDate(data, "period_end", out var end) || end < start)
+        {
+            var count = rowsEl.GetArrayLength();
+            _logger.LogWarning("Store traffic item for AppId {AppId} has no valid period; {Count} rows skipped", appId, count);
+            return new ItemIngestResult(count, 0, 0, count);
+        }
+
+        string? stubName = data.TryGetProperty("game_name", out var nameEl) && nameEl.ValueKind == JsonValueKind.String
+            ? nameEl.GetString() : null;
+        var game = await FindOrStubGameAsync(appId, stubName, ct);
+
+        int processed = 0, failed = 0;
+        var rows = new List<StoreTrafficRow>();
+        foreach (var row in rowsEl.EnumerateArray())
+        {
+            processed++;
+            if (TryGetText(row, "category", 200, out var category)
+                && TryGetText(row, "feature", 300, out var feature)
+                && TryGetLong(row, "impressions", out var impressions)
+                && TryGetLong(row, "visits", out var visits))
+            {
+                rows.Add(new StoreTrafficRow(
+                    category, feature, impressions, visits,
+                    TryGetLong(row, "owner_impressions", out var oi) ? oi : 0,
+                    TryGetLong(row, "owner_visits", out var ov) ? ov : 0));
+            }
+            else failed++;
+        }
+
+        var (inserted, updated) = await UpsertStoreTrafficAsync(game.Id, start, end, rows, ct);
+        if (failed > 0)
+            _logger.LogWarning("Store traffic for AppId {AppId}: {Failed} of {Processed} rows malformed", appId, failed, processed);
+
+        return new ItemIngestResult(processed, inserted, updated, failed);
+    }
+
+    private readonly record struct StoreTrafficRow(
+        string Category, string Feature, long Impressions, long Visits, long OwnerImpressions, long OwnerVisits);
+
+    private static bool TryGetLong(JsonElement row, string name, out long value)
+    {
+        value = default;
+        return row.ValueKind == JsonValueKind.Object
+            && row.TryGetProperty(name, out var el)
+            && el.ValueKind == JsonValueKind.Number
+            && el.TryGetInt64(out value);
+    }
+
+    /// <summary>
+    /// Upserts one game's store traffic rows for one period, keyed by (category,
+    /// feature). Rows repeated within the payload are summed first: they are
+    /// parts of the same total. One untracked load of the period's rows.
+    /// </summary>
+    private async Task<(int Inserted, int Updated)> UpsertStoreTrafficAsync(
+        Guid gameId, DateOnly start, DateOnly end, IEnumerable<StoreTrafficRow> rows, CancellationToken ct)
+    {
+        var merged = rows
+            .GroupBy(r => (r.Category, r.Feature))
+            .Select(g => new StoreTrafficRow(
+                g.Key.Category, g.Key.Feature,
+                g.Sum(r => r.Impressions), g.Sum(r => r.Visits),
+                g.Sum(r => r.OwnerImpressions), g.Sum(r => r.OwnerVisits)))
+            .ToList();
+        if (merged.Count == 0) return (0, 0);
+
+        var existing = await _db.SteamTrafficBreakdowns
+            .AsNoTracking()
+            .Where(t => t.GameId == gameId && t.SnapshotDate == start && t.PeriodEnd == end)
+            .ToDictionaryAsync(t => (t.PageCategory, t.PageFeature), ct);
+
+        int inserted = 0, updated = 0;
+        foreach (var row in merged)
+        {
+            if (existing.TryGetValue((row.Category, row.Feature), out var current))
+            {
+                if (current.Impressions == row.Impressions && current.Visits == row.Visits
+                    && current.OwnerImpressions == row.OwnerImpressions && current.OwnerVisits == row.OwnerVisits)
+                    continue;
+
+                current.Impressions = row.Impressions;
+                current.Visits = row.Visits;
+                current.OwnerImpressions = row.OwnerImpressions;
+                current.OwnerVisits = row.OwnerVisits;
+                if (_db.Entry(current).State == EntityState.Detached)
+                    _db.SteamTrafficBreakdowns.Update(current);
+                updated++;
+                continue;
+            }
+
+            _db.SteamTrafficBreakdowns.Add(new SteamTrafficBreakdown
+            {
+                Id = Guid.NewGuid(),
+                GameId = gameId,
+                SnapshotDate = start,
+                PeriodEnd = end,
+                PageCategory = row.Category,
+                PageFeature = row.Feature,
+                Impressions = row.Impressions,
+                Visits = row.Visits,
+                OwnerImpressions = row.OwnerImpressions,
+                OwnerVisits = row.OwnerVisits,
+            });
+            inserted++;
+        }
+
+        return (inserted, updated);
     }
 
     /// <summary>

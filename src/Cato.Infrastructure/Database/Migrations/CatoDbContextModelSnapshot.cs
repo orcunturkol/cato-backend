@@ -1996,6 +1996,12 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.Property<long>("Impressions")
                         .HasColumnType("bigint");
 
+                    b.Property<long>("OwnerImpressions")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("OwnerVisits")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("PageCategory")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -2006,15 +2012,21 @@ namespace Cato.Infrastructure.Database.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
 
+                    b.Property<DateOnly>("PeriodEnd")
+                        .HasColumnType("date");
+
                     b.Property<DateOnly>("SnapshotDate")
                         .HasColumnType("date");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<long>("Visits")
                         .HasColumnType("bigint");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("GameId", "SnapshotDate", "PageCategory", "PageFeature")
+                    b.HasIndex("GameId", "SnapshotDate", "PeriodEnd", "PageCategory", "PageFeature")
                         .IsUnique()
                         .HasDatabaseName("unique_traffic_breakdown");
 

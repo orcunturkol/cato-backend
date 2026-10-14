@@ -124,6 +124,30 @@ public class GameDataController : ControllerBase
         return Results.Ok(result);
     }
 
+    /// <summary>Get Steamworks store traffic totals (impressions, visits, bot and owner traffic) per period.</summary>
+    [HttpGet("store-traffic/periods")]
+    [ProducesResponseType(typeof(List<StoreTrafficPeriodDto>), StatusCodes.Status200OK)]
+    public async Task<IResult> GetStoreTrafficPeriods(
+        int appId,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to)
+    {
+        var result = await _mediator.Send(new GetStoreTrafficPeriodsQuery(appId, from, to));
+        return Results.Ok(result);
+    }
+
+    /// <summary>Get Steamworks store traffic by page source and by country over a date range.</summary>
+    [HttpGet("store-traffic/breakdown")]
+    [ProducesResponseType(typeof(StoreTrafficBreakdownDto), StatusCodes.Status200OK)]
+    public async Task<IResult> GetStoreTrafficBreakdown(
+        int appId,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to)
+    {
+        var result = await _mediator.Send(new GetStoreTrafficBreakdownQuery(appId, from, to));
+        return Results.Ok(result);
+    }
+
     /// <summary>Get group member count history for a game.</summary>
     [HttpGet("group-members")]
     [ProducesResponseType(typeof(List<GroupMemberCountDto>), StatusCodes.Status200OK)]
