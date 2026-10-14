@@ -2198,6 +2198,8 @@ public class IngestionService : IIngestionService
             && TryParseSaleDate(sdEl.GetString(), out var sd) ? sd : null;
 
         var (processed, inserted, failed) = await ReplaceFinancialSalesAsync(game.Id, transactions, salesDate, ct);
+        if (data.TryGetProperty("reference_data", out var reference) && reference.ValueKind == JsonValueKind.Object)
+            await UpsertFinancialReferenceAsync(reference, ct);
         if (failed > 0)
             _logger.LogWarning("Financial item for AppId {AppId}: {Failed} of {Processed} lines malformed", appId, failed, processed);
 
@@ -2243,6 +2245,63 @@ public class IngestionService : IIngestionService
 
         _db.SteamSaleFinancials.AddRange(rows);
         return (processed, rows.Count, failed);
+    }
+
+    // Loaded once per service instance (one batch): every item repeats the
+    // same ~25 countries and a few bundles.
+    private Dictionary<string, SteamCountry>? _steamCountries;
+    private Dictionary<int, SteamworksBundle>? _steamworksBundles;
+
+    /// <summary>
+    /// Keeps <c>steam_country</c> and <c>steamworks_bundle</c> current from a financial
+    /// item's <c>reference_data</c>. Tracked rows: a changed name or region is saved
+    /// with the batch.
+    /// </summary>
+    private async Task UpsertFinancialReferenceAsync(JsonElement reference, CancellationToken ct)
+    {
+        if (reference.TryGetProperty("country_info", out var countries) && countries.ValueKind == JsonValueKind.Array)
+        {
+            _steamCountries ??= await _db.SteamCountries.ToDictionaryAsync(c => c.CountryCode, ct);
+            foreach (var info in countries.EnumerateArray())
+            {
+                if (info.ValueKind != JsonValueKind.Object || SaleText(info, "country_code", 10) is not { } code)
+                    continue;
+                var name = SaleText(info, "country_name", 100) ?? SaleText(info, "name", 100) ?? code;
+                var region = SaleText(info, "region", 100) ?? string.Empty;
+
+                if (_steamCountries.TryGetValue(code, out var country))
+                {
+                    if (country.CountryName != name) country.CountryName = name;
+                    if (country.Region != region) country.Region = region;
+                    continue;
+                }
+
+                country = new SteamCountry { CountryCode = code, CountryName = name, Region = region };
+                _db.SteamCountries.Add(country);
+                _steamCountries[code] = country;
+            }
+        }
+
+        if (reference.TryGetProperty("bundle_info", out var bundles) && bundles.ValueKind == JsonValueKind.Array)
+        {
+            _steamworksBundles ??= await _db.SteamworksBundles.ToDictionaryAsync(b => b.BundleId, ct);
+            foreach (var info in bundles.EnumerateArray())
+            {
+                if (info.ValueKind != JsonValueKind.Object || SaleInt(info, "bundleid") is not { } id)
+                    continue;
+                var name = SaleText(info, "bundle_name", 300) ?? SaleText(info, "name", 300) ?? $"Bundle {id}";
+
+                if (_steamworksBundles.TryGetValue(id, out var bundle))
+                {
+                    if (bundle.Name != name) bundle.Name = name;
+                    continue;
+                }
+
+                bundle = new SteamworksBundle { BundleId = id, Name = name };
+                _db.SteamworksBundles.Add(bundle);
+                _steamworksBundles[id] = bundle;
+            }
+        }
     }
 
     private static bool TryParseSaleDate(string? value, out DateOnly date) =>

@@ -1295,6 +1295,33 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.ToTable("review_summary_snapshot", (string)null);
                 });
 
+            modelBuilder.Entity("Cato.Domain.Entities.SteamCountry", b =>
+                {
+                    b.Property<string>("CountryCode")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("CountryName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Region")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("CountryCode");
+
+                    b.ToTable("steam_country", (string)null);
+                });
+
             modelBuilder.Entity("Cato.Domain.Entities.SteamDbSnapshot", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1989,6 +2016,27 @@ namespace Cato.Infrastructure.Database.Migrations
                         .HasDatabaseName("unique_traffic_breakdown");
 
                     b.ToTable("steam_traffic_breakdown", (string)null);
+                });
+
+            modelBuilder.Entity("Cato.Domain.Entities.SteamworksBundle", b =>
+                {
+                    b.Property<int>("BundleId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("BundleId");
+
+                    b.ToTable("steamworks_bundle", (string)null);
                 });
 
             modelBuilder.Entity("Cato.Domain.Entities.SteamworksWishlistCohort", b =>

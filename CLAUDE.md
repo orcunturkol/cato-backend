@@ -145,7 +145,13 @@ inside the batch transaction) and inserts the new set. Restated dates update; a 
 twice is idempotent (staged rows of the first copy are detached). The manual upload uses
 the same replace. Until 2026-10 a unique index on those five columns sent every batch to
 the DLQ; the collector's highwatermark had advanced anyway, so recovering needs a resync
-from the collector side.
+from the collector side (`run_daily_financial --since`).
+
+Each item's `reference_data` also refreshes `steam_country` (code → name, Steam region) and
+`steamworks_bundle` (id → name); sales by region join through `steam_country`. Read side:
+`GET /api/games/{appId}/sales/daily|countries` and `GET /api/sales/summary`. "Net" is Steam's
+`net_sales_usd` (after refunds and VAT, before Steam's share). Decimal `Sum` works on the
+SQLite test database (EF's `ef_sum`), so the tests cover the real queries.
 
 ### Steamworks wishlist reports (owned games)
 
