@@ -162,23 +162,24 @@ public class CatoDbContext : DbContext
 
             entity.Property(e => e.CountryCode).HasMaxLength(10).IsRequired();
             entity.Property(e => e.Platform).HasMaxLength(50).HasDefaultValue("Steam");
-            entity.Property(e => e.GrossRevenueUsd).HasColumnType("decimal(15,2)");
-            entity.Property(e => e.GrossReturnsUsd).HasColumnType("decimal(15,2)");
-            entity.Property(e => e.SteamCommissionUsd).HasColumnType("decimal(15,2)");
-            entity.Property(e => e.TaxUsd).HasColumnType("decimal(15,2)");
-            entity.Property(e => e.NetRevenueUsd).HasColumnType("decimal(15,2)");
+            // Four decimals: Steam reports line amounts like 43.5558, and rounding
+            // every line to cents drifts the sums.
+            entity.Property(e => e.GrossRevenueUsd).HasColumnType("decimal(18,4)");
+            entity.Property(e => e.GrossReturnsUsd).HasColumnType("decimal(18,4)");
+            entity.Property(e => e.SteamCommissionUsd).HasColumnType("decimal(18,4)");
+            entity.Property(e => e.TaxUsd).HasColumnType("decimal(18,4)");
+            entity.Property(e => e.NetRevenueUsd).HasColumnType("decimal(18,4)");
             entity.Property(e => e.Currency).HasMaxLength(10);
             entity.Property(e => e.BasePrice).HasMaxLength(20);
             entity.Property(e => e.SalePrice).HasMaxLength(20);
             entity.Property(e => e.SaleType).HasMaxLength(50);
+            entity.Property(e => e.LineItemType).HasMaxLength(50);
             entity.Property(e => e.NetUnits)
                 .HasComputedColumnSql("\"SalesUnits\" - \"ReturnsUnits\"", stored: true);
 
             entity.HasIndex(e => new { e.GameId, e.SaleDate }).HasDatabaseName("idx_steam_sale_game_date");
             entity.HasIndex(e => e.CountryCode).HasDatabaseName("idx_steam_sale_country");
             entity.HasIndex(e => e.SaleDate).HasDatabaseName("idx_steam_sale_date");
-            entity.HasIndex(e => new { e.GameId, e.SaleDate, e.CountryCode, e.PackageId, e.Platform })
-                .IsUnique().HasDatabaseName("unique_sale_record");
 
             entity.HasOne(e => e.Game)
                 .WithMany(g => g.SalesFinancials)

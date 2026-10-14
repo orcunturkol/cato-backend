@@ -1623,9 +1623,15 @@ namespace Cato.Infrastructure.Database.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("AppId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("BasePrice")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
+
+                    b.Property<int?>("BundleId")
+                        .HasColumnType("integer");
 
                     b.Property<int?>("CombinedDiscountId")
                         .HasColumnType("integer");
@@ -1649,13 +1655,20 @@ namespace Cato.Infrastructure.Database.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<decimal>("GrossReturnsUsd")
-                        .HasColumnType("decimal(15,2)");
+                        .HasColumnType("decimal(18,4)");
 
                     b.Property<decimal>("GrossRevenueUsd")
-                        .HasColumnType("decimal(15,2)");
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int?>("KeyRequestId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("LineItemType")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<decimal>("NetRevenueUsd")
-                        .HasColumnType("decimal(15,2)");
+                        .HasColumnType("decimal(18,4)");
 
                     b.Property<int>("NetUnits")
                         .ValueGeneratedOnAddOrUpdate()
@@ -1665,12 +1678,18 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.Property<int?>("PackageId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("PartnerId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Platform")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
                         .HasDefaultValue("Steam");
+
+                    b.Property<int?>("PrimaryAppId")
+                        .HasColumnType("integer");
 
                     b.Property<int>("ReturnsUnits")
                         .HasColumnType("integer");
@@ -1693,10 +1712,10 @@ namespace Cato.Infrastructure.Database.Migrations
                         .HasColumnType("integer");
 
                     b.Property<decimal>("SteamCommissionUsd")
-                        .HasColumnType("decimal(15,2)");
+                        .HasColumnType("decimal(18,4)");
 
                     b.Property<decimal>("TaxUsd")
-                        .HasColumnType("decimal(15,2)");
+                        .HasColumnType("decimal(18,4)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -1711,10 +1730,6 @@ namespace Cato.Infrastructure.Database.Migrations
 
                     b.HasIndex("GameId", "SaleDate")
                         .HasDatabaseName("idx_steam_sale_game_date");
-
-                    b.HasIndex("GameId", "SaleDate", "CountryCode", "PackageId", "Platform")
-                        .IsUnique()
-                        .HasDatabaseName("unique_sale_record");
 
                     b.ToTable("steam_sale_financial", (string)null);
                 });

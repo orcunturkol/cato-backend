@@ -101,9 +101,13 @@ public class BatchIngestionDispatcher : IBatchIngestionDispatcher
             catch (Exception ex)
             {
                 await tx.RollbackAsync(ct);
+                // The rows that failed are still staged; saving the log with them
+                // tracked would re-send them, fail again and leave the log Running.
+                _db.ChangeTracker.Clear();
                 log.EndTime = DateTime.UtcNow;
                 log.Status = "Failed";
                 log.ErrorMessage = ex.Message;
+                _db.IngestionLogs.Update(log);
                 try { await _db.SaveChangesAsync(ct); }
                 catch (Exception logEx) { _logger.LogWarning(logEx, "Failed to persist failed batch log entry"); }
                 throw;
