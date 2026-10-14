@@ -119,6 +119,43 @@ public class GameDataService : IGameDataService
             .ToListAsync(ct);
     }
 
+    public async Task<SteamworksWishlistCountriesDto> GetSteamworksWishlistCountriesAsync(GetSteamworksWishlistCountriesQuery request, CancellationToken ct = default)
+    {
+        var all = _db.SteamworksWishlistCountries
+            .AsNoTracking()
+            .Where(c => c.Game.AppId == request.AppId);
+
+        var firstDate = await all.MinAsync(c => (DateOnly?)c.DateLocal, ct);
+        var lastDate = await all.MaxAsync(c => (DateOnly?)c.DateLocal, ct);
+
+        var query = all;
+        if (request.From is { } from) query = query.Where(c => c.DateLocal >= from);
+        if (request.To is { } to) query = query.Where(c => c.DateLocal <= to);
+
+        // Grouped by name only: a country's region could change between exports,
+        // and splitting one country into two rows over that would be wrong.
+        var totals = await query
+            .GroupBy(c => c.Country)
+            .Select(g => new
+            {
+                Country = g.Key,
+                Region = g.Max(c => c.Region),
+                Adds = g.Sum(c => c.Adds),
+                Deletes = g.Sum(c => c.Deletes),
+                Purchases = g.Sum(c => c.PurchasesAndActivations),
+                Gifts = g.Sum(c => c.Gifts),
+            })
+            .ToListAsync(ct);
+
+        var countries = totals
+            .Select(t => new SteamworksWishlistCountryTotalDto(t.Country, t.Region ?? string.Empty, t.Adds, t.Deletes, t.Purchases, t.Gifts))
+            .OrderByDescending(t => t.Adds)
+            .ThenBy(t => t.Country, StringComparer.Ordinal)
+            .ToList();
+
+        return new SteamworksWishlistCountriesDto(firstDate, lastDate, countries);
+    }
+
     public async Task<SteamworksWishlistSummaryDto> GetSteamworksWishlistSummaryAsync(CancellationToken ct = default)
     {
         var latest = await _db.SteamworksWishlistDaily.MaxAsync(d => (DateOnly?)d.DateLocal, ct);

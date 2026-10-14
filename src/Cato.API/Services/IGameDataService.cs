@@ -12,6 +12,7 @@ public interface IGameDataService
     Task<List<OwnedGameDto>> GetOwnedGameDataAsync(GetOwnedGameDataQuery query, CancellationToken ct = default);
     Task<List<SteamworksWishlistDailyDto>> GetSteamworksWishlistDailyAsync(GetSteamworksWishlistDailyQuery query, CancellationToken ct = default);
     Task<List<SteamworksWishlistCohortDto>> GetSteamworksWishlistCohortsAsync(GetSteamworksWishlistCohortsQuery query, CancellationToken ct = default);
+    Task<SteamworksWishlistCountriesDto> GetSteamworksWishlistCountriesAsync(GetSteamworksWishlistCountriesQuery query, CancellationToken ct = default);
     Task<SteamworksWishlistSummaryDto> GetSteamworksWishlistSummaryAsync(CancellationToken ct = default);
     Task<List<GroupMemberCountDto>> GetGroupMemberCountAsync(GetGroupMemberCountQuery query, CancellationToken ct = default);
     Task<List<SteamDbSnapshotDto>> GetSteamDbSnapshotsAsync(GetSteamDbSnapshotQuery query, CancellationToken ct = default);

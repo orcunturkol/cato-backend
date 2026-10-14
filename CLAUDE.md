@@ -146,6 +146,13 @@ updates in place. Rows missing from a later export are kept. Both exports are **
 (`POST /api/ingestion/wishlists` → `IngestWishlistDataAsync`) shares the same upsert; it no
 longer writes `steam_traffic`.
 
+`steamworks_wishlist_country` (unique `GameId, DateLocal, Country`) is the third export,
+wishlist actions by country, in the same item as `countries`. It is **not** full history:
+the collector sends only the last ~35 days (one-off backfills send everything), so its
+upsert loads only the payload's date range. `Country` is Steam's country *name* (the CSV
+column is misleadingly called `CountryCode`) and `Region` is Steam's region for it; region
+totals are a GROUP BY, no lookup table.
+
 `POST /api/games/owned-sync` runs before the collector downloads anything: it creates or
 promotes every app the collector's Steamworks login can see to `GameType = "Owned"` (Redis after save) and
 queues Steam enrichment in the background for rows with `LastEnrichedAt == null`. It is

@@ -1854,6 +1854,10 @@ public class IngestionService : IIngestionService
     /// is an upsert: a changed day is updated in place, never duplicated. A missing
     /// or null array leaves that table untouched (the collector sends one series
     /// alone when the other download failed).
+    ///
+    /// <c>countries</c> (wishlist actions by country) is different: it covers only a
+    /// recent window, given by <c>countries_start</c>/<c>date_end</c>, because the
+    /// full by-country history is too large to re-send daily.
     /// </summary>
     public async Task<ItemIngestResult> IngestSteamworksWishlistReportItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default)
     {
@@ -1896,6 +1900,21 @@ public class IngestionService : IIngestionService
             updated += u;
         }
 
+        if (data.TryGetProperty("countries", out var countriesEl) && countriesEl.ValueKind == JsonValueKind.Array)
+        {
+            var rows = new List<SteamworksWishlistCountryRow>();
+            foreach (var row in countriesEl.EnumerateArray())
+            {
+                processed++;
+                if (TryReadWishlistCountryRow(row, out var parsed)) rows.Add(parsed);
+                else failed++;
+            }
+
+            var (i, u) = await UpsertSteamworksWishlistCountriesAsync(game.Id, rows, ct);
+            inserted += i;
+            updated += u;
+        }
+
         if (failed > 0)
             _logger.LogWarning(
                 "Steamworks wishlist report for AppId {AppId}: {Failed} of {Processed} rows malformed",
@@ -1909,6 +1928,9 @@ public class IngestionService : IIngestionService
 
     private readonly record struct SteamworksWishlistCohortRow(
         DateOnly DateLocal, DateOnly MonthCohort, int PurchasesAndActivations, int Gifts, int TotalConversions);
+
+    private readonly record struct SteamworksWishlistCountryRow(
+        DateOnly DateLocal, string Country, string Region, int Adds, int Deletes, int PurchasesAndActivations, int Gifts);
 
     private static bool TryReadWishlistDailyRow(JsonElement row, out SteamworksWishlistDailyRow parsed)
     {
@@ -1935,6 +1957,39 @@ public class IngestionService : IIngestionService
             return false;
 
         parsed = new SteamworksWishlistCohortRow(dateLocal, monthCohort, purchases, gifts, total);
+        return true;
+    }
+
+    private static bool TryReadWishlistCountryRow(JsonElement row, out SteamworksWishlistCountryRow parsed)
+    {
+        parsed = default;
+        if (!TryGetDate(row, "date_local", out var dateLocal)
+            || !TryGetText(row, "country", 100, out var country)
+            || !TryGetInt(row, "adds", out var adds)
+            || !TryGetInt(row, "deletes", out var deletes)
+            || !TryGetInt(row, "purchases_and_activations", out var purchases)
+            || !TryGetInt(row, "gifts", out var gifts))
+            return false;
+
+        // Region is informative only; a blank one must not drop the row.
+        var region = TryGetText(row, "region", 100, out var r) ? r : string.Empty;
+        parsed = new SteamworksWishlistCountryRow(dateLocal, country, region, adds, deletes, purchases, gifts);
+        return true;
+    }
+
+    private static bool TryGetText(JsonElement row, string name, int maxLength, out string value)
+    {
+        value = string.Empty;
+        if (row.ValueKind != JsonValueKind.Object
+            || !row.TryGetProperty(name, out var el)
+            || el.ValueKind != JsonValueKind.String)
+            return false;
+
+        var text = el.GetString()?.Trim();
+        if (string.IsNullOrEmpty(text) || text.Length > maxLength)
+            return false;
+
+        value = text;
         return true;
     }
 
@@ -2005,6 +2060,65 @@ public class IngestionService : IIngestionService
             };
             _db.SteamworksWishlistDaily.Add(added);
             existing[row.DateLocal] = added;
+            inserted++;
+        }
+
+        return (inserted, updated);
+    }
+
+    /// <summary>
+    /// Upserts a game's wishlist actions by country keyed by (<c>DateLocal</c>,
+    /// <c>Country</c>). Same shape as <see cref="UpsertSteamworksWishlistDailyAsync"/>,
+    /// but it loads only the dates the payload covers: a game's by-country history is
+    /// ~30 rows a day, and each run sends a short window of it.
+    /// </summary>
+    private async Task<(int Inserted, int Updated)> UpsertSteamworksWishlistCountriesAsync(
+        Guid gameId, IReadOnlyCollection<SteamworksWishlistCountryRow> rows, CancellationToken ct)
+    {
+        if (rows.Count == 0) return (0, 0);
+
+        var from = rows.Min(r => r.DateLocal);
+        var to = rows.Max(r => r.DateLocal);
+        var existing = await _db.SteamworksWishlistCountries
+            .AsNoTracking()
+            .Where(c => c.GameId == gameId && c.DateLocal >= from && c.DateLocal <= to)
+            .ToDictionaryAsync(c => (c.DateLocal, c.Country), ct);
+
+        int inserted = 0, updated = 0;
+        foreach (var row in rows)
+        {
+            var key = (row.DateLocal, row.Country);
+            if (existing.TryGetValue(key, out var day))
+            {
+                if (day.Region == row.Region && day.Adds == row.Adds && day.Deletes == row.Deletes
+                    && day.PurchasesAndActivations == row.PurchasesAndActivations && day.Gifts == row.Gifts)
+                    continue;
+
+                day.Region = row.Region;
+                day.Adds = row.Adds;
+                day.Deletes = row.Deletes;
+                day.PurchasesAndActivations = row.PurchasesAndActivations;
+                day.Gifts = row.Gifts;
+                if (_db.Entry(day).State == EntityState.Detached)
+                    _db.SteamworksWishlistCountries.Update(day);
+                updated++;
+                continue;
+            }
+
+            var added = new SteamworksWishlistCountry
+            {
+                Id = Guid.NewGuid(),
+                GameId = gameId,
+                DateLocal = row.DateLocal,
+                Country = row.Country,
+                Region = row.Region,
+                Adds = row.Adds,
+                Deletes = row.Deletes,
+                PurchasesAndActivations = row.PurchasesAndActivations,
+                Gifts = row.Gifts
+            };
+            _db.SteamworksWishlistCountries.Add(added);
+            existing[key] = added;
             inserted++;
         }
 
