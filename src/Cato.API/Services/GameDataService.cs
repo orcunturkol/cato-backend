@@ -1,6 +1,7 @@
 using Cato.API.DTOs;
 using Cato.API.Models.Ingestion;
 using Cato.API.Models.SteamDb;
+using Cato.Domain.Entities;
 using Cato.Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 
@@ -334,6 +335,90 @@ public class GameDataService : IGameDataService
             .ToList();
 
         return new SalesSummaryDto(latest, rows);
+    }
+
+    // Store traffic CSV categories that are not page sources (see SteamTrafficBreakdown).
+    private const string TrafficCountryCategory = "Country";
+    private const string TrafficBotCategory = "Bot Traffic";
+
+    private IQueryable<SteamTrafficBreakdown> StoreTrafficRows(int appId, DateOnly? from, DateOnly? to)
+    {
+        var query = _db.SteamTrafficBreakdowns.AsNoTracking().Where(t => t.Game.AppId == appId);
+        if (from is { } f) query = query.Where(t => t.SnapshotDate >= f);
+        if (to is { } e) query = query.Where(t => t.PeriodEnd <= e);
+        return query;
+    }
+
+    public async Task<List<StoreTrafficPeriodDto>> GetStoreTrafficPeriodsAsync(GetStoreTrafficPeriodsQuery request, CancellationToken ct = default)
+    {
+        var periods = await StoreTrafficRows(request.AppId, request.From, request.To)
+            .Where(t => t.PageCategory != TrafficCountryCategory)
+            .GroupBy(t => new { t.SnapshotDate, t.PeriodEnd })
+            .Select(g => new
+            {
+                g.Key.SnapshotDate,
+                g.Key.PeriodEnd,
+                Impressions = g.Sum(t => t.Impressions),
+                Visits = g.Sum(t => t.PageCategory == TrafficBotCategory ? 0 : t.Visits),
+                BotVisits = g.Sum(t => t.PageCategory == TrafficBotCategory ? t.Visits : 0),
+                OwnerImpressions = g.Sum(t => t.OwnerImpressions),
+                OwnerVisits = g.Sum(t => t.PageCategory == TrafficBotCategory ? 0 : t.OwnerVisits),
+            })
+            .ToListAsync(ct);
+
+        return periods
+            .OrderBy(p => p.SnapshotDate)
+            .Select(p => new StoreTrafficPeriodDto(
+                p.SnapshotDate, p.PeriodEnd, p.Impressions, p.Visits, p.BotVisits, p.OwnerImpressions, p.OwnerVisits))
+            .ToList();
+    }
+
+    public async Task<StoreTrafficBreakdownDto> GetStoreTrafficBreakdownAsync(GetStoreTrafficBreakdownQuery request, CancellationToken ct = default)
+    {
+        var all = StoreTrafficRows(request.AppId, null, null);
+        var firstDate = await all.MinAsync(t => (DateOnly?)t.SnapshotDate, ct);
+        var lastDate = await all.MaxAsync(t => (DateOnly?)t.PeriodEnd, ct);
+        var firstDailyDate = await all.Where(t => t.SnapshotDate == t.PeriodEnd).MinAsync(t => (DateOnly?)t.SnapshotDate, ct);
+
+        var grouped = await StoreTrafficRows(request.AppId, request.From, request.To)
+            .GroupBy(t => new { t.PageCategory, t.PageFeature })
+            .Select(g => new
+            {
+                g.Key.PageCategory,
+                g.Key.PageFeature,
+                Impressions = g.Sum(t => t.Impressions),
+                Visits = g.Sum(t => t.Visits),
+                OwnerImpressions = g.Sum(t => t.OwnerImpressions),
+                OwnerVisits = g.Sum(t => t.OwnerVisits),
+            })
+            .ToListAsync(ct);
+
+        var sources = grouped
+            .Where(g => g.PageCategory != TrafficCountryCategory)
+            .Select(g => new StoreTrafficSourceDto(g.PageCategory, g.PageFeature, g.Impressions, g.Visits, g.OwnerImpressions, g.OwnerVisits))
+            .OrderByDescending(s => s.Visits)
+            .ThenByDescending(s => s.Impressions)
+            .ToList();
+
+        var countryRows = grouped.Where(g => g.PageCategory == TrafficCountryCategory).ToList();
+        var codes = countryRows.Select(c => c.PageFeature).ToList();
+        var names = await _db.SteamCountries
+            .AsNoTracking()
+            .Where(c => codes.Contains(c.CountryCode))
+            .ToDictionaryAsync(c => c.CountryCode, ct);
+        var countries = countryRows
+            .Select(c =>
+            {
+                names.TryGetValue(c.PageFeature, out var country);
+                return new StoreTrafficCountryDto(
+                    c.PageFeature, country?.CountryName ?? c.PageFeature, country?.Region ?? string.Empty,
+                    c.Impressions, c.Visits);
+            })
+            .OrderByDescending(c => c.Visits)
+            .ThenBy(c => c.CountryCode, StringComparer.Ordinal)
+            .ToList();
+
+        return new StoreTrafficBreakdownDto(firstDate, lastDate, firstDailyDate, sources, countries);
     }
 
     public async Task<List<GroupMemberCountDto>> GetGroupMemberCountAsync(GetGroupMemberCountQuery request, CancellationToken ct = default)

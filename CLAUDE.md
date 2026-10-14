@@ -157,6 +157,19 @@ stores `ReturnsUnits`/`GrossReturnsUsd` positive so the `NetUnits` column
 third of all lines, no revenue) go to `ActivatedUnits`, never `SalesUnits`. Decimal `Sum` works on the
 SQLite test database (EF's `ef_sum`), so the tests cover the real queries.
 
+### Steamworks store traffic (`steam_traffic_breakdown`)
+
+The `/apps/navtrafficstats/{appid}` CSV (partner.steamgames.com) has no date column: each
+row is a page category/feature total for the requested range. So rows are keyed by period,
+`SnapshotDate`..`PeriodEnd` (GMT, inclusive): the collector stores one-day periods daily and
+backfills history as whole months, never overlapping. **Totals are not a row**: measured,
+the non-`Country` rows sum to the page's impressions/visits; `Bot Traffic` carries visits
+only; the `Country` rows (feature = country code) split the same totals again. The read side
+(`/api/games/{appId}/store-traffic/periods|breakdown`) applies exactly that, and a range keeps
+only periods that lie entirely inside it. Batch source `steamworks_store_traffic`; the manual
+upload (`POST /api/ingestion/store-traffic`) shares the upsert and files rows under the
+upload day.
+
 ### Steamworks wishlist reports (owned games)
 
 `steamworks_wishlist_daily` (unique `GameId, DateLocal`) and `steamworks_wishlist_cohort`

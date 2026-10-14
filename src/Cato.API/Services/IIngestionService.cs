@@ -33,6 +33,7 @@ public interface IIngestionService
     Task<ItemIngestResult> IngestFollowerHistoryItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default);
     Task<ItemIngestResult> IngestFinancialDataItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default);
     Task<ItemIngestResult> IngestSteamworksWishlistReportItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default);
+    Task<ItemIngestResult> IngestSteamworksStoreTrafficItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default);
 }
 
 public readonly record struct ItemIngestResult(int Processed, int Inserted, int Updated, int Failed);

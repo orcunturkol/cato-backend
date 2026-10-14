@@ -465,7 +465,7 @@ public class CatoDbContext : DbContext
             entity.Property(e => e.PageCategory).HasMaxLength(200);
             entity.Property(e => e.PageFeature).HasMaxLength(300);
 
-            entity.HasIndex(e => new { e.GameId, e.SnapshotDate, e.PageCategory, e.PageFeature })
+            entity.HasIndex(e => new { e.GameId, e.SnapshotDate, e.PeriodEnd, e.PageCategory, e.PageFeature })
                 .IsUnique()
                 .HasDatabaseName("unique_traffic_breakdown");
 
@@ -1188,7 +1188,14 @@ public class CatoDbContext : DbContext
         foreach (var entry in ChangeTracker.Entries<SteamTrafficBreakdown>())
         {
             if (entry.State == EntityState.Added)
+            {
                 entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
         }
 
         foreach (var entry in ChangeTracker.Entries<GameNews>())
