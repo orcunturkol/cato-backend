@@ -21,3 +21,32 @@ public record SteamworksWishlistCohortDto(
     int PurchasesAndActivations,
     int Gifts,
     int TotalConversions);
+
+/// <summary>
+/// One row per game with Steamworks wishlist data. The "last 30 days" window ends at
+/// the latest DateLocal in the table, the same anchor the per-game view uses.
+/// </summary>
+public record GetSteamworksWishlistSummaryQuery : IRequest<SteamworksWishlistSummaryDto>;
+
+public record SteamworksWishlistSummaryDto(
+    DateOnly? LatestDate,
+    List<SteamworksWishlistGameSummaryDto> Games);
+
+public record SteamworksWishlistGameSummaryDto(
+    Guid GameId,
+    int AppId,
+    string Name,
+    string GameType,
+    string? HeaderImageUrl,
+    DateOnly FirstDate,
+    DateOnly LastDate,
+    int Adds,
+    int Deletes,
+    int PurchasesAndActivations,
+    int Gifts,
+    // Adds − deletes − purchases − gifts over all rows.
+    int Outstanding,
+    int Adds30d,
+    int Deletes30d,
+    int Conversions30d);
+
