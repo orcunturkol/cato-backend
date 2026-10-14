@@ -33,6 +33,7 @@ public class CatoDbContext : DbContext
     public DbSet<WishlistInsight> WishlistInsights => Set<WishlistInsight>();
     public DbSet<SteamworksWishlistDaily> SteamworksWishlistDaily => Set<SteamworksWishlistDaily>();
     public DbSet<SteamworksWishlistCohort> SteamworksWishlistCohorts => Set<SteamworksWishlistCohort>();
+    public DbSet<SteamworksWishlistCountry> SteamworksWishlistCountries => Set<SteamworksWishlistCountry>();
     public DbSet<SteamTrafficBreakdown> SteamTrafficBreakdowns => Set<SteamTrafficBreakdown>();
     public DbSet<GameNews> GameNews => Set<GameNews>();
     public DbSet<ActiveUsersHistory> ActiveUsersHistories => Set<ActiveUsersHistory>();
@@ -408,6 +409,24 @@ public class CatoDbContext : DbContext
                 .HasDatabaseName("unique_steamworks_wishlist_cohort");
             entity.HasIndex(e => new { e.GameId, e.MonthCohort })
                 .HasDatabaseName("idx_steamworks_wishlist_cohort_game_month");
+
+            entity.HasOne(e => e.Game)
+                .WithMany()
+                .HasForeignKey(e => e.GameId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── SteamworksWishlistCountry ──
+        modelBuilder.Entity<SteamworksWishlistCountry>(entity =>
+        {
+            entity.ToTable("steamworks_wishlist_country");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Country).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Region).HasMaxLength(100).IsRequired();
+
+            entity.HasIndex(e => new { e.GameId, e.DateLocal, e.Country })
+                .IsUnique()
+                .HasDatabaseName("unique_steamworks_wishlist_country");
 
             entity.HasOne(e => e.Game)
                 .WithMany()
@@ -1093,6 +1112,19 @@ public class CatoDbContext : DbContext
         }
 
         foreach (var entry in ChangeTracker.Entries<SteamworksWishlistCohort>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<SteamworksWishlistCountry>())
         {
             if (entry.State == EntityState.Added)
             {

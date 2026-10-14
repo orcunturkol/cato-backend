@@ -88,6 +88,18 @@ public class GameDataController : ControllerBase
         return Results.Ok(result);
     }
 
+    /// <summary>Get Steamworks wishlist actions by country, summed over a date range, for an owned game.</summary>
+    [HttpGet("steamworks-wishlist/countries")]
+    [ProducesResponseType(typeof(SteamworksWishlistCountriesDto), StatusCodes.Status200OK)]
+    public async Task<IResult> GetSteamworksWishlistCountries(
+        int appId,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to)
+    {
+        var result = await _mediator.Send(new GetSteamworksWishlistCountriesQuery(appId, from, to));
+        return Results.Ok(result);
+    }
+
     /// <summary>Get group member count history for a game.</summary>
     [HttpGet("group-members")]
     [ProducesResponseType(typeof(List<GroupMemberCountDto>), StatusCodes.Status200OK)]

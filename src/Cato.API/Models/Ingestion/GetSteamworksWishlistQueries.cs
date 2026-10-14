@@ -23,6 +23,27 @@ public record SteamworksWishlistCohortDto(
     int TotalConversions);
 
 /// <summary>
+/// Steamworks wishlist actions by country, summed over the range (both ends
+/// inclusive), most adds first. <c>FirstDate</c>/<c>LastDate</c> are the game's
+/// whole by-country coverage, not the range: the collector sends a short recent
+/// window each day, so older ranges may have no country rows at all.
+/// </summary>
+public record GetSteamworksWishlistCountriesQuery(int AppId, DateOnly? From, DateOnly? To) : IRequest<SteamworksWishlistCountriesDto>;
+
+public record SteamworksWishlistCountriesDto(
+    DateOnly? FirstDate,
+    DateOnly? LastDate,
+    List<SteamworksWishlistCountryTotalDto> Countries);
+
+public record SteamworksWishlistCountryTotalDto(
+    string Country,
+    string Region,
+    int Adds,
+    int Deletes,
+    int PurchasesAndActivations,
+    int Gifts);
+
+/// <summary>
 /// One row per game with Steamworks wishlist data. The "last 30 days" window ends at
 /// the latest DateLocal in the table, the same anchor the per-game view uses.
 /// </summary>

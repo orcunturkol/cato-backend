@@ -2018,6 +2018,55 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.ToTable("steamworks_wishlist_cohort", (string)null);
                 });
 
+            modelBuilder.Entity("Cato.Domain.Entities.SteamworksWishlistCountry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Adds")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Country")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("DateLocal")
+                        .HasColumnType("date");
+
+                    b.Property<int>("Deletes")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("GameId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Gifts")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PurchasesAndActivations")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Region")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GameId", "DateLocal", "Country")
+                        .IsUnique()
+                        .HasDatabaseName("unique_steamworks_wishlist_country");
+
+                    b.ToTable("steamworks_wishlist_country", (string)null);
+                });
+
             modelBuilder.Entity("Cato.Domain.Entities.SteamworksWishlistDaily", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2462,6 +2511,17 @@ namespace Cato.Infrastructure.Database.Migrations
                 });
 
             modelBuilder.Entity("Cato.Domain.Entities.SteamworksWishlistCohort", b =>
+                {
+                    b.HasOne("Cato.Domain.Entities.Game", "Game")
+                        .WithMany()
+                        .HasForeignKey("GameId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Game");
+                });
+
+            modelBuilder.Entity("Cato.Domain.Entities.SteamworksWishlistCountry", b =>
                 {
                     b.HasOne("Cato.Domain.Entities.Game", "Game")
                         .WithMany()
