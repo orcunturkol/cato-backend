@@ -224,6 +224,7 @@ public class GameDataService : IGameDataService
                 Date = g.Key,
                 Gross = g.Sum(s => s.SalesUnits),
                 Returned = g.Sum(s => s.ReturnsUnits),
+                Activated = g.Sum(s => s.ActivatedUnits),
                 GrossUsd = g.Sum(s => s.GrossRevenueUsd),
                 ReturnsUsd = g.Sum(s => s.GrossReturnsUsd),
                 NetUsd = g.Sum(s => s.NetRevenueUsd),
@@ -232,7 +233,7 @@ public class GameDataService : IGameDataService
 
         return days
             .OrderBy(d => d.Date)
-            .Select(d => new SalesDailyDto(d.Date, d.Gross, d.Returned, d.Gross - d.Returned, d.GrossUsd, d.ReturnsUsd, d.NetUsd))
+            .Select(d => new SalesDailyDto(d.Date, d.Gross, d.Returned, d.Gross - d.Returned, d.Activated, d.GrossUsd, d.ReturnsUsd, d.NetUsd))
             .ToList();
     }
 
@@ -303,6 +304,7 @@ public class GameDataService : IGameDataService
                 LastDate = g.Max(s => s.SaleDate),
                 Gross = g.Sum(s => s.SalesUnits),
                 Returned = g.Sum(s => s.ReturnsUnits),
+                Activated = g.Sum(s => s.ActivatedUnits),
                 GrossUsd = g.Sum(s => s.GrossRevenueUsd),
                 NetUsd = g.Sum(s => s.NetRevenueUsd),
                 NetUnits30d = g.Sum(s => s.SaleDate >= from30 ? s.SalesUnits - s.ReturnsUnits : 0),
@@ -325,7 +327,7 @@ public class GameDataService : IGameDataService
                 return new SalesGameSummaryDto(
                     t.GameId, game.AppId, game.Name, game.GameType, game.HeaderImageUrl,
                     t.FirstDate, t.LastDate,
-                    t.Gross, t.Returned, t.Gross - t.Returned,
+                    t.Gross, t.Returned, t.Gross - t.Returned, t.Activated,
                     t.GrossUsd, t.NetUsd, t.NetUnits30d, t.NetUsd30d);
             })
             .OrderByDescending(r => r.NetUsd)

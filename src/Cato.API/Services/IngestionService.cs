@@ -2329,10 +2329,13 @@ public class IngestionService : IIngestionService
             CountryCode        = SaleText(txn, "country_code", 10) ?? "XX",
             Platform           = SaleText(txn, "platform", 50) ?? "Steam",
             PackageId          = SaleInt(txn, "packageid"),
-            SalesUnits         = SaleInt(txn, "gross_units_sold") ?? SaleInt(txn, "gross_units_activated") ?? 0,
-            ReturnsUnits       = SaleInt(txn, "gross_units_returned") ?? 0,
+            // Steam reports returns as negatives (net_units_sold = sold + returned);
+            // they are stored positive so NetUnits = SalesUnits - ReturnsUnits holds.
+            SalesUnits         = SaleInt(txn, "gross_units_sold") ?? 0,
+            ReturnsUnits       = Math.Abs(SaleInt(txn, "gross_units_returned") ?? 0),
+            ActivatedUnits     = SaleInt(txn, "gross_units_activated") ?? 0,
             GrossRevenueUsd    = SaleMoney(txn, "gross_sales_usd"),
-            GrossReturnsUsd    = SaleMoney(txn, "gross_returns_usd"),
+            GrossReturnsUsd    = Math.Abs(SaleMoney(txn, "gross_returns_usd")),
             TaxUsd             = SaleMoney(txn, "net_tax_usd"),
             NetRevenueUsd      = SaleMoney(txn, "net_sales_usd"),
             Currency           = SaleText(txn, "currency", 10),

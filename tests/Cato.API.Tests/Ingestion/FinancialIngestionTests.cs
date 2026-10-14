@@ -176,6 +176,40 @@ public class FinancialIngestionTests : IDisposable
     }
 
     [Fact]
+    public async Task NegativeReturnsAreStoredPositiveAndActivationsApart()
+    {
+        await SeedGameAsync();
+
+        // Real shapes from GetDetailedSales on 2026-10-05: returns are negative, and
+        // key activations come as their own lines with no sale and no revenue.
+        await IngestAsync(Item("2026/10/05",
+            new
+            {
+                date = "2026/10/05", country_code = "CN", packageid = 874080, platform = "Windows",
+                gross_units_sold = 292, gross_units_returned = -17, net_units_sold = 275,
+                gross_sales_usd = "1515.7034", gross_returns_usd = "-88.2300", net_tax_usd = "0.0000",
+                net_sales_usd = "1427.4734",
+            },
+            new
+            {
+                date = "2026/10/05", country_code = "US", packageid = 874080, platform = "Windows",
+                gross_units_activated = 2, net_units_sold = (int?)null, net_sales_usd = (string?)null,
+            }));
+
+        var sales = await SalesAsync();
+        var sale = sales.Single(s => s.CountryCode == "CN");
+        Assert.Equal((292, 17, 0), (sale.SalesUnits, sale.ReturnsUnits, sale.ActivatedUnits));
+        Assert.Equal(88.23m, sale.GrossReturnsUsd);
+        var keys = sales.Single(s => s.CountryCode == "US");
+        Assert.Equal((0, 0, 2, 0m), (keys.SalesUnits, keys.ReturnsUnits, keys.ActivatedUnits, keys.NetRevenueUsd));
+
+        await using var db = NewContext();
+        var day = Assert.Single(await new GameDataService(db).GetSalesDailyAsync(new GetSalesDailyQuery(AppId, null, null)));
+        Assert.Equal((292, 17, 275, 2), (day.GrossUnits, day.ReturnedUnits, day.NetUnits, day.ActivatedUnits));
+        Assert.Equal(1427.4734m, day.NetUsd);
+    }
+
+    [Fact]
     public async Task FourDecimalAmountsArePreserved()
     {
         await SeedGameAsync();
