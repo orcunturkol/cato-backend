@@ -241,71 +241,20 @@ public class IngestionService : IIngestionService
 
             int processed = 0, inserted = 0, failed = 0;
 
-            if (doc.RootElement.TryGetProperty("transactions", out var transactions))
+            if (doc.RootElement.TryGetProperty("transactions", out var transactions)
+                && transactions.ValueKind == JsonValueKind.Array)
             {
-                foreach (var txn in transactions.EnumerateArray())
-                {
-                    processed++;
-                    try
-                    {
-                        var dateStr = txn.GetProperty("date").GetString() ?? string.Empty;
-                        var saleDate = DateOnly.ParseExact(
-                            dateStr.Replace("/", "-"),
-                            ["yyyy-MM-dd", "yyyyMMdd"],
-                            System.Globalization.CultureInfo.InvariantCulture);
-
-                        var countryCode = txn.TryGetProperty("country_code", out var ccEl) ? ccEl.GetString() ?? "XX" : "XX";
-                        var platform    = txn.TryGetProperty("platform",     out var plEl) && plEl.GetString() is { Length: > 0 } pl ? pl : "Steam";
-                        var packageId   = txn.TryGetProperty("packageid",    out var pkEl) && pkEl.ValueKind != JsonValueKind.Null ? pkEl.GetInt32() : (int?)null;
-
-                        var exists = await _db.SteamSaleFinancials.AnyAsync(
-                            s => s.GameId == game.Id
-                              && s.SaleDate == saleDate
-                              && s.CountryCode == countryCode
-                              && s.PackageId == packageId
-                              && s.Platform == platform, ct);
-
-                        if (!exists)
-                        {
-                            static decimal ParseMoney(JsonElement el) =>
-                                el.ValueKind == JsonValueKind.Null ? 0m
-                                : el.ValueKind == JsonValueKind.String ? decimal.TryParse(el.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : 0m
-                                : el.GetDecimal();
-
-                            _db.SteamSaleFinancials.Add(new SteamSaleFinancial
-                            {
-                                Id              = Guid.NewGuid(),
-                                GameId          = game.Id,
-                                SaleDate        = saleDate,
-                                CountryCode     = countryCode,
-                                Platform        = platform,
-                                PackageId       = packageId,
-                                SalesUnits      = txn.TryGetProperty("gross_units_sold",      out var guEl) && guEl.ValueKind != JsonValueKind.Null ? guEl.GetInt32()
-                                              : txn.TryGetProperty("gross_units_activated", out var gaEl) && gaEl.ValueKind != JsonValueKind.Null ? gaEl.GetInt32() : 0,
-                                ReturnsUnits    = txn.TryGetProperty("gross_units_returned", out var grEl) && grEl.ValueKind != JsonValueKind.Null ? grEl.GetInt32() : 0,
-                                GrossRevenueUsd = txn.TryGetProperty("gross_sales_usd",      out var gsEl) ? ParseMoney(gsEl) : 0m,
-                                GrossReturnsUsd = txn.TryGetProperty("gross_returns_usd",    out var gRetEl) ? ParseMoney(gRetEl) : 0m,
-                                TaxUsd          = txn.TryGetProperty("net_tax_usd",          out var taxEl) ? ParseMoney(taxEl) : 0m,
-                                NetRevenueUsd   = txn.TryGetProperty("net_sales_usd",        out var nsEl) ? ParseMoney(nsEl) : 0m,
-                                Currency        = txn.TryGetProperty("currency",             out var curEl) ? curEl.GetString() : null,
-                                BasePrice       = txn.TryGetProperty("base_price",           out var bpEl)  ? bpEl.GetString()  : null,
-                                SalePrice       = txn.TryGetProperty("sale_price",           out var spEl)  ? spEl.GetString()  : null,
-                                SaleType        = txn.TryGetProperty("package_sale_type",    out var stEl)  ? stEl.GetString()  : null,
-                                CombinedDiscountId    = txn.TryGetProperty("combined_discount_id",         out var cdEl) && cdEl.ValueKind != JsonValueKind.Null ? cdEl.GetInt32() : (int?)null,
-                                RevenueShareTier      = txn.TryGetProperty("additional_revenue_share_tier", out var rsEl) && rsEl.ValueKind != JsonValueKind.Null ? rsEl.GetInt32() : (int?)null,
-                            });
-                            inserted++;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        failed++;
-                        _logger.LogWarning(ex, "Failed to process financial transaction in {FileName}", request.FileName);
-                    }
-                }
+                // Same replace-per-date as the batch path: an uploaded export
+                // overwrites the dates it covers instead of skipping them. The
+                // delete runs at once, so it shares a transaction with the inserts.
+                await using var tx = await _db.Database.BeginTransactionAsync(ct);
+                (processed, inserted, failed) = await ReplaceFinancialSalesAsync(game.Id, transactions, null, ct);
+                await _db.SaveChangesAsync(ct);
+                await tx.CommitAsync(ct);
+                if (failed > 0)
+                    _logger.LogWarning("{Failed} of {Processed} financial lines in {FileName} were malformed",
+                        failed, processed, request.FileName);
             }
-
-            await _db.SaveChangesAsync(ct);
 
             log.EndTime = DateTime.UtcNow;
             log.Status = "Completed";
@@ -321,9 +270,13 @@ public class IngestionService : IIngestionService
         }
         catch (Exception ex)
         {
+            // Staged sale lines from the rolled-back transaction would be
+            // re-sent (and fail again) by the log save; drop them first.
+            _db.ChangeTracker.Clear();
             log.EndTime = DateTime.UtcNow;
             log.Status = "Failed";
             log.ErrorMessage = ex.Message;
+            _db.IngestionLogs.Update(log);
             await _db.SaveChangesAsync(ct);
             throw;
         }
@@ -2228,76 +2181,149 @@ public class IngestionService : IIngestionService
         return new ItemIngestResult(1, 1, 0, 0);
     }
 
+    /// <summary>
+    /// One app's Steam sales for one date: the <c>GetDetailedSales</c> lines the
+    /// collector grouped under this primary app. Replaces everything stored for the
+    /// game on that date, so restated dates update and lines that share a
+    /// date/country/package/platform are all kept.
+    /// </summary>
     public async Task<ItemIngestResult> IngestFinancialDataItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default)
     {
-        var game = await FindOrStubGameAsync(appId, null, ct);
-
-        int processed = 0, inserted = 0, failed = 0;
-
-        if (!data.TryGetProperty("transactions", out var transactions))
+        if (!data.TryGetProperty("transactions", out var transactions) || transactions.ValueKind != JsonValueKind.Array)
             return new ItemIngestResult(0, 0, 0, 0);
 
+        var game = await FindOrStubGameAsync(appId, null, ct);
+        DateOnly? salesDate = data.TryGetProperty("sales_date", out var sdEl)
+            && sdEl.ValueKind == JsonValueKind.String
+            && TryParseSaleDate(sdEl.GetString(), out var sd) ? sd : null;
+
+        var (processed, inserted, failed) = await ReplaceFinancialSalesAsync(game.Id, transactions, salesDate, ct);
+        if (failed > 0)
+            _logger.LogWarning("Financial item for AppId {AppId}: {Failed} of {Processed} lines malformed", appId, failed, processed);
+
+        return new ItemIngestResult(processed, inserted, 0, failed);
+    }
+
+    /// <summary>
+    /// Parses sale lines and replaces the game's stored lines for every date they
+    /// cover (plus <paramref name="salesDate"/>, the date the payload was fetched
+    /// for). Runs inside the batch transaction: the delete is immediate, the
+    /// inserts are staged, and a failure rolls both back.
+    /// </summary>
+    private async Task<(int Processed, int Inserted, int Failed)> ReplaceFinancialSalesAsync(
+        Guid gameId, JsonElement transactions, DateOnly? salesDate, CancellationToken ct)
+    {
+        int processed = 0, failed = 0;
+        var rows = new List<SteamSaleFinancial>();
         foreach (var txn in transactions.EnumerateArray())
         {
             processed++;
-            try
-            {
-                var dateStr = txn.GetProperty("date").GetString() ?? string.Empty;
-                var saleDate = DateOnly.ParseExact(
-                    dateStr.Replace("/", "-"),
-                    ["yyyy-MM-dd", "yyyyMMdd"],
-                    CultureInfo.InvariantCulture);
-
-                var countryCode = txn.TryGetProperty("country_code", out var ccEl) ? ccEl.GetString() ?? "XX" : "XX";
-                var platform    = txn.TryGetProperty("platform",     out var plEl) && plEl.GetString() is { Length: > 0 } pl ? pl : "Steam";
-                var packageId   = txn.TryGetProperty("packageid",    out var pkEl) && pkEl.ValueKind != JsonValueKind.Null ? pkEl.GetInt32() : (int?)null;
-
-                var exists = await _db.SteamSaleFinancials.AnyAsync(
-                    s => s.GameId == game.Id
-                      && s.SaleDate == saleDate
-                      && s.CountryCode == countryCode
-                      && s.PackageId == packageId
-                      && s.Platform == platform, ct);
-
-                if (exists) continue;
-
-                static decimal ParseMoney(JsonElement el) =>
-                    el.ValueKind == JsonValueKind.Null ? 0m
-                    : el.ValueKind == JsonValueKind.String ? decimal.TryParse(el.GetString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : 0m
-                    : el.GetDecimal();
-
-                _db.SteamSaleFinancials.Add(new SteamSaleFinancial
-                {
-                    Id              = Guid.NewGuid(),
-                    GameId          = game.Id,
-                    SaleDate        = saleDate,
-                    CountryCode     = countryCode,
-                    Platform        = platform,
-                    PackageId       = packageId,
-                    SalesUnits      = txn.TryGetProperty("gross_units_sold",      out var guEl)  && guEl.ValueKind  != JsonValueKind.Null ? guEl.GetInt32()
-                                    : txn.TryGetProperty("gross_units_activated", out var gaEl) && gaEl.ValueKind != JsonValueKind.Null ? gaEl.GetInt32() : 0,
-                    ReturnsUnits    = txn.TryGetProperty("gross_units_returned",  out var grEl) && grEl.ValueKind != JsonValueKind.Null ? grEl.GetInt32() : 0,
-                    GrossRevenueUsd = txn.TryGetProperty("gross_sales_usd",       out var gsEl)   ? ParseMoney(gsEl)   : 0m,
-                    GrossReturnsUsd = txn.TryGetProperty("gross_returns_usd",     out var gRetEl) ? ParseMoney(gRetEl) : 0m,
-                    TaxUsd          = txn.TryGetProperty("net_tax_usd",           out var taxEl)  ? ParseMoney(taxEl)  : 0m,
-                    NetRevenueUsd   = txn.TryGetProperty("net_sales_usd",         out var nsEl)   ? ParseMoney(nsEl)   : 0m,
-                    Currency        = txn.TryGetProperty("currency",              out var curEl)  ? curEl.GetString()  : null,
-                    BasePrice       = txn.TryGetProperty("base_price",            out var bpEl)   ? bpEl.GetString()   : null,
-                    SalePrice       = txn.TryGetProperty("sale_price",            out var spEl)   ? spEl.GetString()   : null,
-                    SaleType        = txn.TryGetProperty("package_sale_type",     out var stEl)   ? stEl.GetString()   : null,
-                    CombinedDiscountId    = txn.TryGetProperty("combined_discount_id",         out var cdEl) && cdEl.ValueKind != JsonValueKind.Null ? cdEl.GetInt32() : (int?)null,
-                    RevenueShareTier      = txn.TryGetProperty("additional_revenue_share_tier", out var rsEl) && rsEl.ValueKind != JsonValueKind.Null ? rsEl.GetInt32() : (int?)null,
-                });
-                inserted++;
-            }
-            catch (Exception ex)
-            {
-                failed++;
-                _logger.LogWarning(ex, "Failed to process financial transaction (appId={AppId})", appId);
-            }
+            if (TryReadSaleLine(txn, gameId, out var row)) rows.Add(row);
+            else failed++;
         }
 
-        return new ItemIngestResult(processed, inserted, 0, failed);
+        var dates = rows.Select(r => r.SaleDate).ToHashSet();
+        if (salesDate is { } fetched) dates.Add(fetched);
+        if (dates.Count == 0) return (processed, 0, failed);
+
+        // Steam's changed-dates list repeats dates, so one batch can carry the same
+        // game and date twice. The first copy's lines are staged but not saved, so
+        // the delete below cannot see them; drop them here or both copies land.
+        foreach (var entry in _db.ChangeTracker.Entries<SteamSaleFinancial>()
+                     .Where(e => e.State == EntityState.Added
+                              && e.Entity.GameId == gameId
+                              && dates.Contains(e.Entity.SaleDate))
+                     .ToList())
+            entry.State = EntityState.Detached;
+
+        var dateList = dates.ToList();
+        await _db.SteamSaleFinancials
+            .Where(f => f.GameId == gameId && dateList.Contains(f.SaleDate))
+            .ExecuteDeleteAsync(ct);
+
+        _db.SteamSaleFinancials.AddRange(rows);
+        return (processed, rows.Count, failed);
+    }
+
+    private static bool TryParseSaleDate(string? value, out DateOnly date) =>
+        DateOnly.TryParseExact(
+            (value ?? string.Empty).Replace("/", "-"),
+            ["yyyy-MM-dd", "yyyyMMdd"],
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out date);
+
+    private static bool TryReadSaleLine(JsonElement txn, Guid gameId, out SteamSaleFinancial row)
+    {
+        row = null!;
+        if (txn.ValueKind != JsonValueKind.Object
+            || !txn.TryGetProperty("date", out var dateEl)
+            || dateEl.ValueKind != JsonValueKind.String
+            || !TryParseSaleDate(dateEl.GetString(), out var saleDate))
+            return false;
+
+        row = new SteamSaleFinancial
+        {
+            Id                 = Guid.NewGuid(),
+            GameId             = gameId,
+            SaleDate           = saleDate,
+            CountryCode        = SaleText(txn, "country_code", 10) ?? "XX",
+            Platform           = SaleText(txn, "platform", 50) ?? "Steam",
+            PackageId          = SaleInt(txn, "packageid"),
+            SalesUnits         = SaleInt(txn, "gross_units_sold") ?? SaleInt(txn, "gross_units_activated") ?? 0,
+            ReturnsUnits       = SaleInt(txn, "gross_units_returned") ?? 0,
+            GrossRevenueUsd    = SaleMoney(txn, "gross_sales_usd"),
+            GrossReturnsUsd    = SaleMoney(txn, "gross_returns_usd"),
+            TaxUsd             = SaleMoney(txn, "net_tax_usd"),
+            NetRevenueUsd      = SaleMoney(txn, "net_sales_usd"),
+            Currency           = SaleText(txn, "currency", 10),
+            BasePrice          = SaleText(txn, "base_price", 20),
+            SalePrice          = SaleText(txn, "sale_price", 20),
+            SaleType           = SaleText(txn, "package_sale_type", 50),
+            CombinedDiscountId = SaleInt(txn, "combined_discount_id"),
+            RevenueShareTier   = SaleInt(txn, "additional_revenue_share_tier"),
+            AppId              = SaleInt(txn, "appid"),
+            PrimaryAppId       = SaleInt(txn, "primary_appid"),
+            BundleId           = SaleInt(txn, "bundleid"),
+            PartnerId          = SaleInt(txn, "partnerid"),
+            LineItemType       = SaleText(txn, "line_item_type", 50),
+            KeyRequestId       = SaleInt(txn, "key_request_id"),
+        };
+        return true;
+    }
+
+    private static int? SaleInt(JsonElement txn, string name)
+    {
+        if (!txn.TryGetProperty(name, out var el)) return null;
+        if (el.ValueKind == JsonValueKind.Number) return el.TryGetInt32(out var n) ? n : null;
+        if (el.ValueKind == JsonValueKind.String
+            && int.TryParse(el.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var s))
+            return s;
+        return null;
+    }
+
+    private static decimal SaleMoney(JsonElement txn, string name)
+    {
+        if (!txn.TryGetProperty(name, out var el)) return 0m;
+        if (el.ValueKind == JsonValueKind.Number) return el.TryGetDecimal(out var n) ? n : 0m;
+        if (el.ValueKind == JsonValueKind.String
+            && decimal.TryParse(el.GetString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var s))
+            return s;
+        return 0m;
+    }
+
+    // Over-long values are cut rather than failing the whole batch on the column limit.
+    private static string? SaleText(JsonElement txn, string name, int maxLength)
+    {
+        if (!txn.TryGetProperty(name, out var el)) return null;
+        var text = el.ValueKind switch
+        {
+            JsonValueKind.String => el.GetString(),
+            JsonValueKind.Number => el.GetRawText(),
+            _ => null,
+        };
+        if (string.IsNullOrEmpty(text)) return null;
+        return text.Length > maxLength ? text[..maxLength] : text;
     }
 
     /// <summary>

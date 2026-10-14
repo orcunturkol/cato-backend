@@ -134,6 +134,19 @@ Three traps worth knowing:
   `ReleaseDateRaw` keeps the store's literal string, and `IsReleased` carries
   `coming_soon`. Query those two before concluding a release date is missing.
 
+### Steam sales (`steam_sale_financial`)
+
+`run_daily_financial` sends one batch item per app per changed date (`GetDetailedSales`
+lines grouped by primary app, plus `sales_date`). Steam sends **several lines per
+(date, country, package, platform)** — standalone vs bundle, two prices, a discount
+change — about a third of all lines. So the table has no business key:
+`IngestFinancialDataItemAsync` deletes the game's rows for that date (`ExecuteDeleteAsync`,
+inside the batch transaction) and inserts the new set. Restated dates update; a date sent
+twice is idempotent (staged rows of the first copy are detached). The manual upload uses
+the same replace. Until 2026-10 a unique index on those five columns sent every batch to
+the DLQ; the collector's highwatermark had advanced anyway, so recovering needs a resync
+from the collector side.
+
 ### Steamworks wishlist reports (owned games)
 
 `steamworks_wishlist_daily` (unique `GameId, DateLocal`) and `steamworks_wishlist_cohort`
