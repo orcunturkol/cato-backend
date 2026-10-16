@@ -51,6 +51,9 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
 builder.Services.AddSingleton<IRedisAppIdSyncService, RedisAppIdSyncService>();
 builder.Services.AddSingleton<ISteamIdRotationService, RedisSteamIdRotationService>();
 builder.Services.AddHostedService<RedisBackfillHostedService>();
+builder.Services.AddSingleton<IFollowerHistoryQueueService, FollowerHistoryQueueService>();
+builder.Services.Configure<FollowerHistorySweepSettings>(builder.Configuration.GetSection(FollowerHistorySweepSettings.SectionName));
+builder.Services.AddHostedService<FollowerHistorySweepService>();
 
 // ── RabbitMQ ──
 builder.Services.Configure<Cato.Infrastructure.Messaging.RabbitMqSettings>(

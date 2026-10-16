@@ -3,6 +3,7 @@ using Cato.API.Models.JobRuns;
 using Cato.Domain.Entities;
 using Cato.Infrastructure.Database;
 using Cato.Infrastructure.Jobs;
+using Cato.Infrastructure.Redis;
 using Cato.Infrastructure.Steam;
 using Cato.Infrastructure.Steam.SteamKit;
 using Microsoft.EntityFrameworkCore;
@@ -40,6 +41,7 @@ public sealed class JobCatalog : IJobCatalog
     private readonly AchievementSettings _achievements;
     private readonly PlayerProfileSettings _profiles;
     private readonly SteamWebApiSettings _webApi;
+    private readonly FollowerHistorySweepSettings _followerSweep;
 
     public JobCatalog(
         CatoDbContext db,
@@ -47,7 +49,8 @@ public sealed class JobCatalog : IJobCatalog
         IOptions<GameEnrichmentSettings> enrichment,
         IOptions<AchievementSettings> achievements,
         IOptions<PlayerProfileSettings> profiles,
-        IOptions<SteamWebApiSettings> webApi)
+        IOptions<SteamWebApiSettings> webApi,
+        IOptions<FollowerHistorySweepSettings> followerSweep)
     {
         _db = db;
         _steam = steam.Value;
@@ -55,6 +58,7 @@ public sealed class JobCatalog : IJobCatalog
         _achievements = achievements.Value;
         _profiles = profiles.Value;
         _webApi = webApi.Value;
+        _followerSweep = followerSweep.Value;
     }
 
     public async Task<JobCatalogSnapshot> LoadAsync(CancellationToken ct)
@@ -106,6 +110,9 @@ public sealed class JobCatalog : IJobCatalog
             _profiles.IntervalMinutes, TimeSpan.FromSeconds(10),
             _profiles.Enabled && hasWebApiKey,
             !_profiles.Enabled ? "PlayerProfile:Enabled is false" : hasWebApiKey ? null : noKey);
+        yield return Interval(BackendJobNames.FollowerHistorySweep, "Follower history queue sweep",
+            _followerSweep.IntervalMinutes, TimeSpan.FromMinutes(1),
+            _followerSweep.Enabled, _followerSweep.Enabled ? null : "FollowerHistorySweep:Enabled is false");
     }
 
     private static JobDefinition Interval(

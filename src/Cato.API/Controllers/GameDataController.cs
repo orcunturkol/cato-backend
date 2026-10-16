@@ -1,5 +1,6 @@
 using Cato.API.DTOs;
 using Cato.API.Models.Ingestion;
+using Cato.Infrastructure.Redis;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -157,6 +158,34 @@ public class GameDataController : ControllerBase
     {
         var result = await _mediator.Send(new GetGroupMemberCountQuery(appId, limit ?? 100));
         return Results.Ok(result);
+    }
+
+    /// <summary>Get the game's whole daily follower series: SteamDB graph, then list values, then the group scrape.</summary>
+    [HttpGet("followers")]
+    [ProducesResponseType(typeof(List<FollowerPointDto>), StatusCodes.Status200OK)]
+    public async Task<IResult> GetFollowerSeries(int appId)
+    {
+        var result = await _mediator.Send(new GetFollowerSeriesQuery(appId));
+        return Results.Ok(result);
+    }
+
+    /// <summary>Where the game stands in the follower-history fetch queue.</summary>
+    [HttpGet("follower-history/status")]
+    [ProducesResponseType(typeof(FollowerHistoryState), StatusCodes.Status200OK)]
+    public async Task<IResult> GetFollowerHistoryStatus(int appId)
+    {
+        var result = await _mediator.Send(new GetFollowerHistoryStatusQuery(appId));
+        return Results.Ok(result);
+    }
+
+    /// <summary>Fetch the game's follower history from SteamDB now, ahead of every queued game.
+    /// Works for any app id; an unknown game is created when its data arrives.</summary>
+    [HttpPost("follower-history/fetch")]
+    [ProducesResponseType(typeof(FollowerHistoryState), StatusCodes.Status202Accepted)]
+    public async Task<IResult> RequestFollowerHistory(int appId)
+    {
+        var result = await _mediator.Send(new RequestFollowerHistoryCommand(appId));
+        return Results.Accepted(null, result);
     }
 
     /// <summary>Get SteamDB snapshot data for a game.</summary>

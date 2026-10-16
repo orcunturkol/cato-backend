@@ -434,6 +434,43 @@ public class GameDataService : IGameDataService
             .ToListAsync(ct);
     }
 
+    public async Task<List<FollowerPointDto>> GetFollowerSeriesAsync(GetFollowerSeriesQuery request, CancellationToken ct = default)
+    {
+        var gameId = await _db.Games.AsNoTracking()
+            .Where(g => g.AppId == request.AppId)
+            .Select(g => (Guid?)g.Id)
+            .FirstOrDefaultAsync(ct);
+        if (gameId is null) return [];
+
+        var members = await _db.GroupMemberCountSnapshots.AsNoTracking()
+            .Where(s => s.GameId == gameId && s.Error == null)
+            .Select(s => new { s.SnapshotDate, s.MemberCount, s.Source })
+            .ToListAsync(ct);
+        var listed = await _db.SteamDbSnapshots.AsNoTracking()
+            .Where(s => s.GameId == gameId && s.Follows > 0)
+            .GroupBy(s => s.SnapshotDate)
+            .Select(g => new { Date = g.Key, Follows = g.Max(s => s.Follows) })
+            .ToListAsync(ct);
+
+        // The graph is the authority up to its last day. A list value trails the graph
+        // by 0-1 days (measured), so it cannot be matched to a graph date: list values
+        // and the group scrape only fill the days after the graph ends.
+        var graph = members.Where(m => m.Source == GroupMemberCountSnapshot.SteamDbFollowerSource).ToList();
+        var graphEnd = graph.Count > 0 ? graph.Max(m => m.SnapshotDate) : DateOnly.MinValue;
+
+        var after = new Dictionary<DateOnly, FollowerPointDto>();
+        foreach (var l in listed.Where(l => l.Date > graphEnd))
+            after[l.Date] = new FollowerPointDto(l.Date, l.Follows, "steamdb_list");
+        foreach (var m in members.Where(m => m.Source == GroupMemberCountSnapshot.SteamCommunitySource && m.SnapshotDate > graphEnd))
+            after.TryAdd(m.SnapshotDate, new FollowerPointDto(m.SnapshotDate, m.MemberCount, m.Source));
+
+        return graph
+            .Select(m => new FollowerPointDto(m.SnapshotDate, m.MemberCount, m.Source))
+            .Concat(after.Values)
+            .OrderBy(p => p.Date)
+            .ToList();
+    }
+
     public async Task<List<SteamDbSnapshotDto>> GetSteamDbSnapshotsAsync(GetSteamDbSnapshotQuery request, CancellationToken ct = default)
     {
         var query = _db.SteamDbSnapshots
