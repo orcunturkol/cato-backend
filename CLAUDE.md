@@ -197,6 +197,34 @@ synchronous so the wishlist batch never stubs a new game as `Other`.
 `GroupMemberCountSnapshot` holds **two series in one table**, discriminated by `Source` and keyed `(GameId, SnapshotDate, Source)`:
 `steam_community_group` (the live daily scrape) and `steamdb_follower_history` (the SteamDB backfill of the same metric, reaching years further back). Any query or upsert against this table must filter on `Source`, or the daily scrape will silently overwrite backfilled history.
 
+### Follower history queue
+
+The collector's `run_steamdb_followers` fetches a game's whole SteamDB follower graph
+from `steam:appids:steamdb_follower_history`, lowest score first. The backend owns the
+bands (`FollowerHistoryQueue`); the collector mirrors `RequestBandMax`:
+
+| Score | Meaning | Written by |
+|---|---|---|
+| < -1e9 (`-epoch`) | requested, newest first | `POST /api/games/{appId}/follower-history/fetch`, old `game.analyzed` path |
+| -2e6 | Owned game, refreshed after 20 h | `FollowerHistorySweepService` |
+| -1e6 + rank | SteamDB list game, best rank first, refreshed after 30 days | `FollowerHistorySweepService` |
+| 0 | seeded Sourcing/Owned, never fetched | `RedisAppIdSyncService` |
+| > 0 | last successful fetch | collector `mark_success` |
+
+The collector fetches every score <= 0 and fetches a negative score fresh from SteamDB;
+it never revisits the positive band on its own. The hourly sweep reads Owned games and
+every game with a `steamdb_snapshot` row in the last 7 days (the list scrape misses
+days), skips requested and quarantined games, and writes only changed scores. A request
+always writes, and clears quarantine and the failure count: someone asked for that game.
+The endpoints are open like the rest of the API.
+
+A list value (`steamdb_snapshot.Follows`) is the graph's number 0-1 days later
+(measured: 99.7% of 5,235 pairs), so a list game needs one graph fetch and the daily
+list carries it after that. `GET /api/games/{appId}/followers` merges the series: graph
+rows up to the graph's last day, then list values, then the group scrape. List values
+are never written into `group_member_count_snapshot`: the 0-1 day offset would put
+them on the wrong date.
+
 ## Configuration
 
 Settings are in `src/Cato.API/appsettings.json`. Key sections: `ConnectionStrings:DefaultConnection`, `RabbitMQ`, `SteamKit`, `Ingestion:DataPath`.

@@ -1,5 +1,6 @@
 using Cato.API.Services.JobRuns;
 using Cato.Infrastructure.Database;
+using Cato.Infrastructure.Redis;
 using Cato.Infrastructure.Steam;
 using Cato.Infrastructure.Steam.SteamKit;
 using Microsoft.Data.Sqlite;
@@ -45,7 +46,8 @@ public abstract class JobRunsDbTestBase : IDisposable
         Options.Create(new GameEnrichmentSettings()),
         Options.Create(new AchievementSettings()),
         Options.Create(new PlayerProfileSettings()),
-        Options.Create(new SteamWebApiSettings { ApiKey = webApiKey }));
+        Options.Create(new SteamWebApiSettings { ApiKey = webApiKey }),
+        Options.Create(new FollowerHistorySweepSettings()));
 
     private sealed class FixedTimeProvider(DateTime utcNow) : TimeProvider
     {
