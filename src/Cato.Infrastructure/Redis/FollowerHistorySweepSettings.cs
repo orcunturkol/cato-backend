@@ -22,6 +22,10 @@ public class FollowerHistorySweepSettings
     /// </summary>
     public int ListRefreshAfterDays { get; set; } = 30;
 
-    /// <summary>Owned games are fetched again once their last fetch is this old.</summary>
+    /// <summary>
+    /// An Owned game in no SteamDB list is fetched again once its last fetch is this
+    /// old: no list value carries it between fetches (56 of 68 Owned games on
+    /// 2026-10-16). A listed Owned game follows <see cref="ListRefreshAfterDays"/>.
+    /// </summary>
     public int OwnedRefreshAfterHours { get; set; } = 20;
 }

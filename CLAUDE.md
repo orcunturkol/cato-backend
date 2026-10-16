@@ -206,7 +206,7 @@ bands (`FollowerHistoryQueue`); the collector mirrors `RequestBandMax`:
 | Score | Meaning | Written by |
 |---|---|---|
 | < -1e9 (`-epoch`) | requested, newest first | `POST /api/games/{appId}/follower-history/fetch`, old `game.analyzed` path |
-| -2e6 | Owned game, refreshed after 20 h | `FollowerHistorySweepService` |
+| -2e6 | Owned game: refreshed after 20 h when it is in no SteamDB list, else after 30 days | `FollowerHistorySweepService` |
 | -1e6 + rank | SteamDB list game, best rank first, refreshed after 30 days | `FollowerHistorySweepService` |
 | 0 | seeded Sourcing/Owned, never fetched | `RedisAppIdSyncService` |
 | > 0 | last successful fetch | collector `mark_success` |
@@ -216,6 +216,9 @@ it never revisits the positive band on its own. The hourly sweep reads Owned gam
 every game with a `steamdb_snapshot` row in the last 7 days (the list scrape misses
 days), skips requested and quarantined games, and writes only changed scores. A request
 always writes, and clears quarantine and the failure count: someone asked for that game.
+Each sweep also writes the backfill state as counters of its own `job_run` row
+(`owned_done`, `owned_waiting`, `listed_done`, `listed_waiting`, `requests_waiting`);
+the Jobs page reads the newest one.
 The endpoints are open like the rest of the API.
 
 A list value (`steamdb_snapshot.Follows`) is the graph's number 0-1 days later
