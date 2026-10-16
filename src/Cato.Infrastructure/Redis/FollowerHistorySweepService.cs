@@ -9,8 +9,8 @@ namespace Cato.Infrastructure.Redis;
 
 /// <summary>
 /// Queues follower-history fetches for the games CATO follows automatically: every
-/// Owned game (refreshed daily) and every game in a SteamDB list — most wished or
-/// wishlist activity — in rank order. The collector's follower job does the fetching;
+/// Owned game (refreshed daily when it is in no list) and every game in a SteamDB
+/// list — most wished or wishlist activity — in rank order. The collector's follower job does the fetching;
 /// this only writes scores. See <see cref="FollowerHistoryQueue"/> for the bands.
 /// </summary>
 public sealed class FollowerHistorySweepService : BackgroundService
@@ -82,12 +82,22 @@ public sealed class FollowerHistorySweepService : BackgroundService
             var writes = FollowerHistoryQueue.Plan(candidates, scores, quarantined, now, _settings);
             await _queue.SetScoresAsync(writes, ct);
 
+            foreach (var (appId, score) in writes)
+                scores[appId] = score;
+            var progress = FollowerHistoryQueue.Progress(candidates, scores, quarantined);
+
             var ownedQueued = writes.Count(w => w.Value == FollowerHistoryQueue.OwnedScore);
             job.Set("owned", candidates.Owned.Count);
             job.Set("listed", candidates.ListRanks.Count);
             job.Set("quarantined", quarantined.Count);
             job.Set("owned_queued", ownedQueued);
             job.Set("listed_queued", writes.Count - ownedQueued);
+            // Backfill state for the Jobs page.
+            job.Set("owned_done", progress.OwnedDone);
+            job.Set("owned_waiting", progress.OwnedWaiting);
+            job.Set("listed_done", progress.ListedDone);
+            job.Set("listed_waiting", progress.ListedWaiting);
+            job.Set("requests_waiting", await _queue.CountRequestsAsync(ct));
 
             _logger.LogInformation(
                 "FollowerHistorySweep: queued {Owned} owned and {Listed} listed games ({Candidates} candidates, {Quarantined} quarantined)",

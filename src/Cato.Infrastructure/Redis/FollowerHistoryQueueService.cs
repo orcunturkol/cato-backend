@@ -20,6 +20,9 @@ public interface IFollowerHistoryQueueService
     Task<HashSet<int>> GetQuarantinedAsync(IReadOnlyList<int> appIds, CancellationToken ct);
 
     Task SetScoresAsync(IReadOnlyList<KeyValuePair<int, double>> scores, CancellationToken ct);
+
+    /// <summary>Requests not yet fetched, for any app id.</summary>
+    Task<long> CountRequestsAsync(CancellationToken ct);
 }
 
 public sealed class FollowerHistoryQueueService : IFollowerHistoryQueueService
@@ -79,6 +82,10 @@ public sealed class FollowerHistoryQueueService : IFollowerHistoryQueueService
             await db.SortedSetAddAsync(FollowerHistoryQueue.Key, entries);
         }
     }
+
+    public Task<long> CountRequestsAsync(CancellationToken ct) =>
+        _redis.GetDatabase().SortedSetLengthAsync(
+            FollowerHistoryQueue.Key, double.NegativeInfinity, FollowerHistoryQueue.RequestBandMax, Exclude.Stop);
 
     private async IAsyncEnumerable<(int AppId, double Score)> ScoresAsync(
         string key, IReadOnlyList<int> appIds, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)

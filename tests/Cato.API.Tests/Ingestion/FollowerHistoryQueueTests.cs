@@ -103,11 +103,22 @@ public class FollowerHistoryQueueTests : IDisposable
     }
 
     [Fact]
-    public void An_owned_game_is_refreshed_only_after_its_refresh_age()
+    public void An_owned_game_in_no_list_is_refreshed_daily()
     {
         var writes = Plan(
             Candidates(owned: [1, 2]),
             scores: new() { [1] = FetchedAgo(TimeSpan.FromHours(10)), [2] = FetchedAgo(TimeSpan.FromHours(21)) });
+
+        Assert.False(writes.ContainsKey(1));
+        Assert.Equal(FollowerHistoryQueue.OwnedScore, writes[2]);
+    }
+
+    [Fact]
+    public void A_listed_owned_game_waits_for_the_list_refresh_age_and_keeps_the_owned_band()
+    {
+        var writes = Plan(
+            Candidates(owned: [1, 2], ranks: new() { [1] = 5, [2] = 6 }),
+            scores: new() { [1] = FetchedAgo(TimeSpan.FromHours(21)), [2] = FetchedAgo(TimeSpan.FromDays(31)) });
 
         Assert.False(writes.ContainsKey(1));
         Assert.Equal(FollowerHistoryQueue.OwnedScore, writes[2]);
@@ -142,6 +153,28 @@ public class FollowerHistoryQueueTests : IDisposable
             scores: new() { [2] = FollowerHistoryQueue.ListScore(40) });
 
         Assert.Equal(FollowerHistoryQueue.ListScore(1), writes[2]);
+    }
+
+    // ── Progress ──
+
+    [Fact]
+    public void Progress_counts_done_and_waiting_games()
+    {
+        var progress = FollowerHistoryQueue.Progress(
+            Candidates(owned: [1, 2, 3, 4], ranks: new() { [1] = 1, [10] = 1, [11] = 2, [12] = 3, [13] = 4 }),
+            scores: new Dictionary<int, double>
+            {
+                [1] = FetchedAgo(TimeSpan.FromHours(2)),        // owned, done (also listed: counts as owned)
+                [2] = FollowerHistoryQueue.OwnedScore,          // owned, waiting
+                [3] = FetchedAgo(TimeSpan.FromHours(30)),       // owned, done until the sweep queues it
+                [10] = FetchedAgo(TimeSpan.FromDays(3)),        // listed, done
+                [11] = FollowerHistoryQueue.ListScore(2),       // listed, waiting
+                [12] = FollowerHistoryQueue.RequestScore(Now),  // listed, requested: waiting
+                [13] = FetchedAgo(TimeSpan.FromDays(1)),        // quarantined below
+            },
+            quarantined: new HashSet<int> { 4, 13 });
+
+        Assert.Equal(new FollowerHistoryProgress(OwnedDone: 2, OwnedWaiting: 1, ListedDone: 1, ListedWaiting: 2), progress);
     }
 
     // ── Describe ──

@@ -11,6 +11,17 @@ public sealed record FollowerHistoryState(
     DateTimeOffset? LastFetchedAt,
     DateTimeOffset? QuarantinedAt);
 
+/// <summary>
+/// Backfill state after a sweep, for the Jobs page. Done = fetched and not due again;
+/// waiting = never fetched or queued. An Owned game counts once, as Owned, also when
+/// it is in a list. Quarantined games are in neither count.
+/// </summary>
+public sealed record FollowerHistoryProgress(
+    int OwnedDone,
+    int OwnedWaiting,
+    int ListedDone,
+    int ListedWaiting);
+
 /// <summary>Owned games and the best recent SteamDB list rank of every listed game.</summary>
 public sealed record FollowerHistoryCandidates(
     IReadOnlySet<int> Owned,
@@ -25,7 +36,7 @@ public sealed record FollowerHistoryCandidates(
 ///
 /// <code>
 ///   &lt; -1e9        requested (button or API), at -epoch: newest request first
-///   -2e6          Owned game due for its daily refresh
+///   -2e6          Owned game due (daily when in no list, else every 30 days)
 ///   -1e6 + rank   SteamDB list game, best rank first
 ///   0             seeded by RedisAppIdSyncService, never fetched
 ///   &gt; 0           last successful fetch, epoch seconds (written by the collector)
@@ -89,8 +100,11 @@ public static class FollowerHistoryQueue
                 continue;
 
             var owned = candidates.Owned.Contains(appId);
-            var target = owned ? OwnedScore : ListScore(candidates.ListRanks[appId]);
-            var refreshAfter = owned
+            var listed = candidates.ListRanks.TryGetValue(appId, out var rank);
+            var target = owned ? OwnedScore : ListScore(rank);
+            // A listed game gets its daily value from the list; only an Owned game in
+            // no list needs the daily fetch.
+            var refreshAfter = owned && !listed
                 ? TimeSpan.FromHours(settings.OwnedRefreshAfterHours)
                 : TimeSpan.FromDays(settings.ListRefreshAfterDays);
 
@@ -108,6 +122,32 @@ public static class FollowerHistoryQueue
         }
 
         return writes;
+    }
+
+    /// <param name="scores">Scores after the sweep's writes.</param>
+    public static FollowerHistoryProgress Progress(
+        FollowerHistoryCandidates candidates,
+        IReadOnlyDictionary<int, double> scores,
+        IReadOnlySet<int> quarantined)
+    {
+        int ownedDone = 0, ownedWaiting = 0, listedDone = 0, listedWaiting = 0;
+
+        foreach (var appId in candidates.AppIds)
+        {
+            if (quarantined.Contains(appId))
+                continue;
+
+            var done = scores.TryGetValue(appId, out var score) && score > 0;
+            if (candidates.Owned.Contains(appId))
+            {
+                if (done) ownedDone++;
+                else ownedWaiting++;
+            }
+            else if (done) listedDone++;
+            else listedWaiting++;
+        }
+
+        return new FollowerHistoryProgress(ownedDone, ownedWaiting, listedDone, listedWaiting);
     }
 
     public static async Task<FollowerHistoryCandidates> LoadCandidatesAsync(
