@@ -22,6 +22,8 @@ public interface IGameDataService
     Task<NavStatsDto> GetNavStatsAsync(GetNavStatsQuery query, CancellationToken ct = default);
     Task<PlayersDto> GetPlayersAsync(GetPlayersQuery query, CancellationToken ct = default);
     Task<DemoDownloadsDto> GetDemoDownloadsAsync(GetDemoDownloadsQuery query, CancellationToken ct = default);
+    Task<BundlesDto> GetBundlesAsync(GetBundlesQuery query, CancellationToken ct = default);
+    Task<BundleDetailDto> GetBundleAsync(GetBundleQuery query, CancellationToken ct = default);
     Task<List<GroupMemberCountDto>> GetGroupMemberCountAsync(GetGroupMemberCountQuery query, CancellationToken ct = default);
     Task<List<FollowerPointDto>> GetFollowerSeriesAsync(GetFollowerSeriesQuery query, CancellationToken ct = default);
     Task<List<SteamDbSnapshotDto>> GetSteamDbSnapshotsAsync(GetSteamDbSnapshotQuery query, CancellationToken ct = default);

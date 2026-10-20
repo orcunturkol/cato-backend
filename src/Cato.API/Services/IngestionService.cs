@@ -2822,6 +2822,126 @@ public class IngestionService : IIngestionService
         return new ItemIngestResult(processed, inserted, updated, failed);
     }
 
+    private readonly record struct BundleDay(int Key, DateOnly Date, int Sold, int Returned, decimal Sales, decimal Returns, decimal Discount, decimal DiscountReturns);
+
+    // A money cell of a bundle export: a JSON number (returns come negative).
+    private static bool TryGetMoney(JsonElement row, string name, out decimal value)
+    {
+        value = default;
+        return row.ValueKind == JsonValueKind.Object
+            && row.TryGetProperty(name, out var el)
+            && el.ValueKind == JsonValueKind.Number
+            && el.TryGetDecimal(out value);
+    }
+
+    private static List<BundleDay> ReadBundleDays(JsonElement rows, string keyName, ref int processed, ref int failed)
+    {
+        var days = new Dictionary<(int, DateOnly), BundleDay>();
+        foreach (var row in rows.EnumerateArray())
+        {
+            processed++;
+            if (TryGetDate(row, "date_local", out var date) && TryGetInt(row, keyName, out var key) && key > 0
+                && TryGetInt(row, "units_sold", out var sold) && TryGetInt(row, "units_returned", out var returned)
+                && TryGetMoney(row, "gross_sales_usd", out var sales) && TryGetMoney(row, "gross_returns_usd", out var returns)
+                && TryGetMoney(row, "discount_usd", out var discount) && TryGetMoney(row, "discount_returns_usd", out var discountReturns))
+            {
+                // Steam sends returns negative; a repeated day replaces the earlier copy.
+                days[(key, date)] = new BundleDay(key, date, sold, Math.Abs(returned), sales, Math.Abs(returns), discount, Math.Abs(discountReturns));
+            }
+            else failed++;
+        }
+        return days.Values.ToList();
+    }
+
+    /// <summary>
+    /// One bundle's two Steamworks exports over the item's window: day rows of the
+    /// bundle (per partner) and of each package in it, upserted with one untracked
+    /// load each. A day missing from a later export keeps its row. The bundle's name
+    /// goes to <c>steamworks_bundle</c>.
+    /// </summary>
+    public async Task<ItemIngestResult> IngestSteamworksBundleSalesItemAsync(int bundleId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default)
+    {
+        if (TryGetInt(data, "bundle_id", out var payloadId) && payloadId > 0)
+            bundleId = payloadId;
+        if (!TryGetDate(data, "date_start", out var start) || !TryGetDate(data, "date_end", out var end) || end < start)
+        {
+            _logger.LogWarning("Bundle sales item for {BundleId} has no valid window", bundleId);
+            return new ItemIngestResult(0, 0, 0, 0);
+        }
+
+        int processed = 0, inserted = 0, updated = 0, failed = 0;
+        if (TryGetText(data, "bundle_name", 300, out var name))
+        {
+            var bundle = await _db.SteamworksBundles.FirstOrDefaultAsync(b => b.BundleId == bundleId, ct);
+            if (bundle is null)
+                _db.SteamworksBundles.Add(new SteamworksBundle { BundleId = bundleId, Name = name });
+            else if (bundle.Name != name)
+                bundle.Name = name;
+        }
+
+        if (data.TryGetProperty("sales", out var salesEl) && salesEl.ValueKind == JsonValueKind.Array)
+        {
+            var days = ReadBundleDays(salesEl, "partner_id", ref processed, ref failed);
+            var existing = await _db.SteamworksBundleSales.AsNoTracking()
+                .Where(s => s.BundleId == bundleId && s.DateLocal >= start && s.DateLocal <= end)
+                .ToDictionaryAsync(s => (s.PartnerId, s.DateLocal), ct);
+            foreach (var d in days)
+            {
+                if (existing.TryGetValue((d.Key, d.Date), out var row))
+                {
+                    if (row.UnitsSold == d.Sold && row.UnitsReturned == d.Returned && row.GrossSalesUsd == d.Sales
+                        && row.GrossReturnsUsd == d.Returns && row.DiscountUsd == d.Discount && row.DiscountReturnsUsd == d.DiscountReturns)
+                        continue;
+                    (row.UnitsSold, row.UnitsReturned, row.GrossSalesUsd, row.GrossReturnsUsd, row.DiscountUsd, row.DiscountReturnsUsd)
+                        = (d.Sold, d.Returned, d.Sales, d.Returns, d.Discount, d.DiscountReturns);
+                    _db.SteamworksBundleSales.Update(row);
+                    updated++;
+                    continue;
+                }
+                _db.SteamworksBundleSales.Add(new SteamworksBundleSale
+                {
+                    Id = Guid.NewGuid(), BundleId = bundleId, PartnerId = d.Key, DateLocal = d.Date,
+                    UnitsSold = d.Sold, UnitsReturned = d.Returned, GrossSalesUsd = d.Sales, GrossReturnsUsd = d.Returns,
+                    DiscountUsd = d.Discount, DiscountReturnsUsd = d.DiscountReturns,
+                });
+                inserted++;
+            }
+        }
+
+        if (data.TryGetProperty("packages", out var packagesEl) && packagesEl.ValueKind == JsonValueKind.Array)
+        {
+            var days = ReadBundleDays(packagesEl, "package_id", ref processed, ref failed);
+            var existing = await _db.SteamworksBundlePackageSales.AsNoTracking()
+                .Where(s => s.BundleId == bundleId && s.DateLocal >= start && s.DateLocal <= end)
+                .ToDictionaryAsync(s => (s.PackageId, s.DateLocal), ct);
+            foreach (var d in days)
+            {
+                if (existing.TryGetValue((d.Key, d.Date), out var row))
+                {
+                    if (row.UnitsSold == d.Sold && row.UnitsReturned == d.Returned && row.GrossSalesUsd == d.Sales
+                        && row.GrossReturnsUsd == d.Returns && row.DiscountUsd == d.Discount && row.DiscountReturnsUsd == d.DiscountReturns)
+                        continue;
+                    (row.UnitsSold, row.UnitsReturned, row.GrossSalesUsd, row.GrossReturnsUsd, row.DiscountUsd, row.DiscountReturnsUsd)
+                        = (d.Sold, d.Returned, d.Sales, d.Returns, d.Discount, d.DiscountReturns);
+                    _db.SteamworksBundlePackageSales.Update(row);
+                    updated++;
+                    continue;
+                }
+                _db.SteamworksBundlePackageSales.Add(new SteamworksBundlePackageSale
+                {
+                    Id = Guid.NewGuid(), BundleId = bundleId, PackageId = d.Key, DateLocal = d.Date,
+                    UnitsSold = d.Sold, UnitsReturned = d.Returned, GrossSalesUsd = d.Sales, GrossReturnsUsd = d.Returns,
+                    DiscountUsd = d.Discount, DiscountReturnsUsd = d.DiscountReturns,
+                });
+                inserted++;
+            }
+        }
+
+        if (failed > 0)
+            _logger.LogWarning("Bundle sales for {BundleId}: {Failed} of {Processed} rows malformed", bundleId, failed, processed);
+        return new ItemIngestResult(processed, inserted, updated, failed);
+    }
+
     /// <summary>
     /// Returns the game for this app id, creating a bare row if CATO has never seen
     /// it. Ingestion needs the row to hang a foreign key on; it never reads the

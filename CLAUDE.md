@@ -205,6 +205,17 @@ overlapping), and filed under the **main game** with `DemoAppId`. Batch source
 The manual upload (`POST /api/ingestion/demo-downloads`) files its rows under the upload
 day (`PeriodEnd = SnapshotDate`). Read side: `GET /api/games/{appId}/demo-downloads`.
 
+### Steamworks bundle sales (`steamworks_bundle_sales_daily`, `steamworks_bundle_package_sales_daily`)
+
+Two partner-site exports per bundle (`QueryBundleSalesForCSV`, `QueryBundlePackageSalesForCSV`)
+with a `DateLocal` column: day rows keyed by (`BundleId`, `PartnerId`, `DateLocal`) and
+(`BundleId`, `PackageId`, `DateLocal`), money `decimal(18,4)`. Steam sends returns negative;
+they are stored positive, as in `steam_sale_financial`. Batch source `steamworks_bundle_sales`
+(one item per bundle and window; the envelope's `app_id` is the bundle id); the bundle name
+goes to `steamworks_bundle`. A day missing from a later export keeps its row. Read side:
+`GET /api/bundles?from&to` and `GET /api/bundles/{bundleId}`; a package's game comes from
+its lines in `steam_sale_financial`.
+
 ### Steamworks wishlist reports (owned games)
 
 `steamworks_wishlist_daily` (unique `GameId, DateLocal`) and `steamworks_wishlist_cohort`

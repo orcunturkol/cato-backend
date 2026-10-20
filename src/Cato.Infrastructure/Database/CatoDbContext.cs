@@ -36,6 +36,8 @@ public class CatoDbContext : DbContext
     public DbSet<SteamworksWishlistCountry> SteamworksWishlistCountries => Set<SteamworksWishlistCountry>();
     public DbSet<SteamCountry> SteamCountries => Set<SteamCountry>();
     public DbSet<SteamworksBundle> SteamworksBundles => Set<SteamworksBundle>();
+    public DbSet<SteamworksBundleSale> SteamworksBundleSales => Set<SteamworksBundleSale>();
+    public DbSet<SteamworksBundlePackageSale> SteamworksBundlePackageSales => Set<SteamworksBundlePackageSale>();
     public DbSet<SteamTrafficBreakdown> SteamTrafficBreakdowns => Set<SteamTrafficBreakdown>();
     public DbSet<SteamworksNavStat> SteamworksNavStats => Set<SteamworksNavStat>();
     public DbSet<SteamworksPlayerCountry> SteamworksPlayerCountries => Set<SteamworksPlayerCountry>();
@@ -527,6 +529,37 @@ public class CatoDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(e => e.GameId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── SteamworksBundleSale ──
+        modelBuilder.Entity<SteamworksBundleSale>(entity =>
+        {
+            entity.ToTable("steamworks_bundle_sales_daily");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.GrossSalesUsd).HasColumnType("decimal(18,4)");
+            entity.Property(e => e.GrossReturnsUsd).HasColumnType("decimal(18,4)");
+            entity.Property(e => e.DiscountUsd).HasColumnType("decimal(18,4)");
+            entity.Property(e => e.DiscountReturnsUsd).HasColumnType("decimal(18,4)");
+
+            entity.HasIndex(e => new { e.BundleId, e.PartnerId, e.DateLocal })
+                .IsUnique()
+                .HasDatabaseName("unique_steamworks_bundle_sales_daily");
+            entity.HasIndex(e => e.DateLocal).HasDatabaseName("idx_steamworks_bundle_sales_daily_date");
+        });
+
+        // ── SteamworksBundlePackageSale ──
+        modelBuilder.Entity<SteamworksBundlePackageSale>(entity =>
+        {
+            entity.ToTable("steamworks_bundle_package_sales_daily");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.GrossSalesUsd).HasColumnType("decimal(18,4)");
+            entity.Property(e => e.GrossReturnsUsd).HasColumnType("decimal(18,4)");
+            entity.Property(e => e.DiscountUsd).HasColumnType("decimal(18,4)");
+            entity.Property(e => e.DiscountReturnsUsd).HasColumnType("decimal(18,4)");
+
+            entity.HasIndex(e => new { e.BundleId, e.PackageId, e.DateLocal })
+                .IsUnique()
+                .HasDatabaseName("unique_steamworks_bundle_package_sales_daily");
         });
 
         // ── AppKeyValueSnapshot ──
@@ -1201,6 +1234,32 @@ public class CatoDbContext : DbContext
         }
 
         foreach (var entry in ChangeTracker.Entries<SteamCountry>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<SteamworksBundleSale>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<SteamworksBundlePackageSale>())
         {
             if (entry.State == EntityState.Added)
             {

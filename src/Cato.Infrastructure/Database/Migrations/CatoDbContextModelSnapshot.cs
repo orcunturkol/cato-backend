@@ -2112,6 +2112,105 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.ToTable("steamworks_bundle", (string)null);
                 });
 
+            modelBuilder.Entity("Cato.Domain.Entities.SteamworksBundlePackageSale", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("BundleId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("DateLocal")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("DiscountReturnsUsd")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("DiscountUsd")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("GrossReturnsUsd")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("GrossSalesUsd")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int>("PackageId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UnitsReturned")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UnitsSold")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BundleId", "PackageId", "DateLocal")
+                        .IsUnique()
+                        .HasDatabaseName("unique_steamworks_bundle_package_sales_daily");
+
+                    b.ToTable("steamworks_bundle_package_sales_daily", (string)null);
+                });
+
+            modelBuilder.Entity("Cato.Domain.Entities.SteamworksBundleSale", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("BundleId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("DateLocal")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("DiscountReturnsUsd")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("DiscountUsd")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("GrossReturnsUsd")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("GrossSalesUsd")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int>("PartnerId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UnitsReturned")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UnitsSold")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DateLocal")
+                        .HasDatabaseName("idx_steamworks_bundle_sales_daily_date");
+
+                    b.HasIndex("BundleId", "PartnerId", "DateLocal")
+                        .IsUnique()
+                        .HasDatabaseName("unique_steamworks_bundle_sales_daily");
+
+                    b.ToTable("steamworks_bundle_sales_daily", (string)null);
+                });
+
             modelBuilder.Entity("Cato.Domain.Entities.SteamworksNavStat", b =>
                 {
                     b.Property<Guid>("Id")

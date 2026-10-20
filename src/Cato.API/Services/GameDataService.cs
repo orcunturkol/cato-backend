@@ -582,6 +582,104 @@ public class GameDataService : IGameDataService
         return new DemoDownloadsDto(demoAppId, firstDate, lastDate, firstDailyDate, regions.Sum(r => r.Downloads), regions, Of("Country"));
     }
 
+    public async Task<BundlesDto> GetBundlesAsync(GetBundlesQuery request, CancellationToken ct = default)
+    {
+        var rows = _db.SteamworksBundleSales.AsNoTracking();
+        var latest = await rows.MaxAsync(s => (DateOnly?)s.DateLocal, ct);
+        if (request.From is { } f) rows = rows.Where(s => s.DateLocal >= f);
+        if (request.To is { } e) rows = rows.Where(s => s.DateLocal <= e);
+
+        var sums = await rows
+            .GroupBy(s => s.BundleId)
+            .Select(g => new
+            {
+                BundleId = g.Key,
+                UnitsSold = g.Sum(s => s.UnitsSold),
+                UnitsReturned = g.Sum(s => s.UnitsReturned),
+                GrossSalesUsd = g.Sum(s => s.GrossSalesUsd),
+                GrossReturnsUsd = g.Sum(s => s.GrossReturnsUsd),
+                DiscountUsd = g.Sum(s => s.DiscountUsd),
+                FirstDate = g.Min(s => s.DateLocal),
+                LastDate = g.Max(s => s.DateLocal),
+            })
+            .ToListAsync(ct);
+        var ids = sums.Select(s => s.BundleId).ToList();
+        var names = await _db.SteamworksBundles.AsNoTracking()
+            .Where(b => ids.Contains(b.BundleId))
+            .ToDictionaryAsync(b => b.BundleId, b => b.Name, ct);
+
+        var bundles = sums
+            .Where(s => s.UnitsSold != 0 || s.UnitsReturned != 0 || s.GrossSalesUsd != 0)
+            .Select(s => new BundleSummaryDto(s.BundleId, names.GetValueOrDefault(s.BundleId), s.UnitsSold, s.UnitsReturned,
+                s.GrossSalesUsd, s.GrossReturnsUsd, s.DiscountUsd, s.FirstDate, s.LastDate))
+            .OrderByDescending(b => b.GrossSalesUsd)
+            .ThenBy(b => b.BundleId)
+            .ToList();
+        return new BundlesDto(latest, bundles);
+    }
+
+    public async Task<BundleDetailDto> GetBundleAsync(GetBundleQuery request, CancellationToken ct = default)
+    {
+        var name = await _db.SteamworksBundles.AsNoTracking()
+            .Where(b => b.BundleId == request.BundleId)
+            .Select(b => b.Name)
+            .FirstOrDefaultAsync(ct);
+
+        var sales = _db.SteamworksBundleSales.AsNoTracking().Where(s => s.BundleId == request.BundleId);
+        var packages = _db.SteamworksBundlePackageSales.AsNoTracking().Where(s => s.BundleId == request.BundleId);
+        if (request.From is { } f)
+        {
+            sales = sales.Where(s => s.DateLocal >= f);
+            packages = packages.Where(s => s.DateLocal >= f);
+        }
+        if (request.To is { } e)
+        {
+            sales = sales.Where(s => s.DateLocal <= e);
+            packages = packages.Where(s => s.DateLocal <= e);
+        }
+
+        // Several partners can share a bundle day; the day row is their sum.
+        var days = (await sales
+            .GroupBy(s => s.DateLocal)
+            .Select(g => new BundleDayDto(g.Key, g.Sum(s => s.UnitsSold), g.Sum(s => s.UnitsReturned),
+                g.Sum(s => s.GrossSalesUsd), g.Sum(s => s.GrossReturnsUsd), g.Sum(s => s.DiscountUsd)))
+            .ToListAsync(ct))
+            .OrderBy(d => d.Date)
+            .ToList();
+
+        var packageSums = await packages
+            .GroupBy(s => s.PackageId)
+            .Select(g => new
+            {
+                PackageId = g.Key,
+                UnitsSold = g.Sum(s => s.UnitsSold),
+                UnitsReturned = g.Sum(s => s.UnitsReturned),
+                GrossSalesUsd = g.Sum(s => s.GrossSalesUsd),
+                GrossReturnsUsd = g.Sum(s => s.GrossReturnsUsd),
+            })
+            .ToListAsync(ct);
+        var packageIds = packageSums.Select(p => (int?)p.PackageId).ToList();
+        var games = (await _db.SteamSaleFinancials.AsNoTracking()
+            .Where(s => packageIds.Contains(s.PackageId))
+            .Select(s => new { s.PackageId, s.GameId, s.Game.AppId, s.Game.Name })
+            .Distinct()
+            .ToListAsync(ct))
+            .GroupBy(s => s.PackageId!.Value)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var packageRows = packageSums
+            .Select(p =>
+            {
+                games.TryGetValue(p.PackageId, out var game);
+                return new BundlePackageDto(p.PackageId, game?.AppId, game?.Name, game?.GameId,
+                    p.UnitsSold, p.UnitsReturned, p.GrossSalesUsd, p.GrossReturnsUsd);
+            })
+            .OrderByDescending(p => p.GrossSalesUsd)
+            .ThenBy(p => p.PackageId)
+            .ToList();
+        return new BundleDetailDto(request.BundleId, name, days, packageRows);
+    }
+
     public async Task<List<GroupMemberCountDto>> GetGroupMemberCountAsync(GetGroupMemberCountQuery request, CancellationToken ct = default)
     {
         return await _db.GroupMemberCountSnapshots
