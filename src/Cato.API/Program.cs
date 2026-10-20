@@ -1,3 +1,4 @@
+using Cato.API.Health;
 using Cato.Infrastructure.Database;
 using Cato.Infrastructure.Redis;
 using Cato.Infrastructure.Steam;
@@ -6,6 +7,7 @@ using Cato.Infrastructure.Steam.SteamKit;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
+using Serilog.Events;
 using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -33,6 +35,9 @@ builder.Services.AddValidatorsFromAssembly(typeof(Program).Assembly);
 
 // ── Controllers ──
 builder.Services.AddControllers();
+
+// ── Health checks (/health/live, /health/ready) ──
+builder.Services.AddCatoHealthChecks();
 
 // ── Steam API HttpClient ──
 builder.Services.AddHttpClient<ISteamApiService, SteamApiService>(client =>
@@ -169,9 +174,14 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseSerilogRequestLogging();
+// Health probes arrive every few seconds; keep them out of the request log.
+app.UseSerilogRequestLogging(options => options.GetLevel = (context, _, exception) =>
+    exception is not null || context.Response.StatusCode >= 500 ? LogEventLevel.Error
+    : context.Request.Path.StartsWithSegments("/health") ? LogEventLevel.Verbose
+    : LogEventLevel.Information);
 app.UseCors("AllowFrontend");
 app.UseOutputCache();
+app.MapCatoHealthChecks();
 app.MapControllers();
 
 app.Run();
