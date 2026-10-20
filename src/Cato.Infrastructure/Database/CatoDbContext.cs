@@ -40,6 +40,7 @@ public class CatoDbContext : DbContext
     public DbSet<SteamworksBundlePackageSale> SteamworksBundlePackageSales => Set<SteamworksBundlePackageSale>();
     public DbSet<SteamTrafficBreakdown> SteamTrafficBreakdowns => Set<SteamTrafficBreakdown>();
     public DbSet<SteamworksNavStat> SteamworksNavStats => Set<SteamworksNavStat>();
+    public DbSet<SteamworksNextFestStat> SteamworksNextFestStats => Set<SteamworksNextFestStat>();
     public DbSet<SteamworksPlayerCountry> SteamworksPlayerCountries => Set<SteamworksPlayerCountry>();
     public DbSet<SteamworksAppDetails> SteamworksAppDetails => Set<SteamworksAppDetails>();
     public DbSet<GameNews> GameNews => Set<GameNews>();
@@ -575,6 +576,23 @@ public class CatoDbContext : DbContext
                 .IsUnique()
                 .HasDatabaseName("unique_game_achievement_percent");
             entity.HasIndex(e => new { e.GameId, e.SnapshotDate }).HasDatabaseName("idx_game_achievement_percent_game_date");
+
+            entity.HasOne(e => e.Game)
+                .WithMany()
+                .HasForeignKey(e => e.GameId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── SteamworksNextFestStat ──
+        modelBuilder.Entity<SteamworksNextFestStat>(entity =>
+        {
+            entity.ToTable("steamworks_nextfest_stat");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.FestKey).HasMaxLength(100).IsRequired();
+
+            entity.HasIndex(e => new { e.AppId, e.FestKey, e.SnapshotEnd })
+                .IsUnique()
+                .HasDatabaseName("unique_steamworks_nextfest_stat");
 
             entity.HasOne(e => e.Game)
                 .WithMany()
@@ -1332,6 +1350,19 @@ public class CatoDbContext : DbContext
         }
 
         foreach (var entry in ChangeTracker.Entries<GameAchievementPercent>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<SteamworksNextFestStat>())
         {
             if (entry.State == EntityState.Added)
             {

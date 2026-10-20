@@ -2943,6 +2943,70 @@ public class IngestionService : IIngestionService
     }
 
     /// <summary>
+    /// One game's Next Fest recap for one fest: cumulative snapshots keyed by their end
+    /// time, upserted with one untracked load. Re-reading a past fest changes nothing.
+    /// </summary>
+    public async Task<ItemIngestResult> IngestSteamworksNextFestItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default)
+    {
+        if (!data.TryGetProperty("rows", out var rowsEl) || rowsEl.ValueKind != JsonValueKind.Array
+            || !TryGetText(data, "fest_key", 100, out var festKey))
+            return new ItemIngestResult(0, 0, 0, 0);
+        static DateTime? Unix(JsonElement e, string name) =>
+            e.ValueKind == JsonValueKind.Object && e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number
+                && v.TryGetInt64(out var s) && s > 0 ? DateTimeOffset.FromUnixTimeSeconds(s).UtcDateTime : null;
+        static long? OptionalLong(JsonElement e, string name) =>
+            e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt64(out var n) ? n : null;
+        int? demoAppId = TryGetInt(data, "demo_app_id", out var d) && d > 0 ? d : null;
+        var eventStart = Unix(data, "event_start");
+        var eventEnd = Unix(data, "event_end");
+        var game = await FindOrStubGameAsync(appId, null, ct);
+
+        int processed = 0, failed = 0;
+        var rows = new Dictionary<DateTime, (int Players, int Wishlists, int PlayerWishlists, long? Views, long? PeriodViews)>();
+        foreach (var row in rowsEl.EnumerateArray())
+        {
+            processed++;
+            if (Unix(row, "rt_end_time") is { } end
+                && TryGetInt(row, "demo_player_count", out var players) && TryGetInt(row, "wishlist_count", out var wishlists)
+                && TryGetInt(row, "player_wishlist_count", out var playerWishlists))
+                rows[end] = (players, wishlists, playerWishlists, OptionalLong(row, "fest_page_views"), OptionalLong(row, "fest_period_page_views"));
+            else failed++;
+        }
+
+        var existing = await _db.SteamworksNextFestStats.AsNoTracking()
+            .Where(s => s.AppId == appId && s.FestKey == festKey)
+            .ToDictionaryAsync(s => s.SnapshotEnd, ct);
+        int inserted = 0, updated = 0;
+        foreach (var (end, r) in rows)
+        {
+            if (existing.TryGetValue(end, out var current))
+            {
+                if (current.DemoPlayerCount == r.Players && current.WishlistCount == r.Wishlists && current.PlayerWishlistCount == r.PlayerWishlists
+                    && current.FestPageViews == r.Views && current.FestPeriodPageViews == r.PeriodViews
+                    && current.DemoAppId == demoAppId && current.EventStart == eventStart && current.EventEnd == eventEnd)
+                    continue;
+                (current.DemoPlayerCount, current.WishlistCount, current.PlayerWishlistCount, current.FestPageViews, current.FestPeriodPageViews)
+                    = (r.Players, r.Wishlists, r.PlayerWishlists, r.Views, r.PeriodViews);
+                (current.DemoAppId, current.EventStart, current.EventEnd) = (demoAppId, eventStart, eventEnd);
+                _db.SteamworksNextFestStats.Update(current);
+                updated++;
+                continue;
+            }
+            _db.SteamworksNextFestStats.Add(new SteamworksNextFestStat
+            {
+                Id = Guid.NewGuid(), GameId = game.Id, AppId = appId, DemoAppId = demoAppId, FestKey = festKey,
+                EventStart = eventStart, EventEnd = eventEnd, SnapshotEnd = end,
+                DemoPlayerCount = r.Players, WishlistCount = r.Wishlists, PlayerWishlistCount = r.PlayerWishlists,
+                FestPageViews = r.Views, FestPeriodPageViews = r.PeriodViews,
+            });
+            inserted++;
+        }
+        if (failed > 0)
+            _logger.LogWarning("Next Fest {FestKey} for AppId {AppId}: {Failed} of {Processed} rows malformed", festKey, appId, failed, processed);
+        return new ItemIngestResult(processed, inserted, updated, failed);
+    }
+
+    /// <summary>
     /// Returns the game for this app id, creating a bare row if CATO has never seen
     /// it. Ingestion needs the row to hang a foreign key on; it never reads the
     /// store fields.

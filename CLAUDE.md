@@ -228,6 +228,16 @@ the manual upload's mapping (`Source = "news"`). Both writes live in `SteamPubli
 Read side: `GET /api/games/{appId}/achievements` (schema joined with the latest percentages) and
 `GET /api/games/{appId}/news` (newest first, plain-text excerpt). Spreadsheet rows #20 and #21.
 
+### Steam Next Fest recaps (`steamworks_nextfest_stat`)
+
+The publisher's `/recap/nextfest/<slug>/<publisher>` pages (partner.steamgames.com) embed
+`demo_stats`: per game, cumulative snapshots during the fest (demo players, wishlists,
+wishlists from demo players), about one per day. Batch source `steamworks_nextfest`, one item
+per fest and game (`app_id` = the game); rows keyed (`AppId`, `FestKey`, `SnapshotEnd`), so
+re-reading a past fest changes nothing. `FestKey` is Steam's sale page id
+(`sale_nextfest_june_2025`). Read side: `GET /api/next-fest` (fests newest first, each game's
+last snapshot and its daily rows). Spreadsheet row #11.
+
 ### Steamworks wishlist reports (owned games)
 
 `steamworks_wishlist_daily` (unique `GameId, DateLocal`) and `steamworks_wishlist_cohort`

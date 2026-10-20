@@ -20,6 +20,7 @@ public interface IGameDataService
     Task<List<StoreTrafficPeriodDto>> GetStoreTrafficPeriodsAsync(GetStoreTrafficPeriodsQuery query, CancellationToken ct = default);
     Task<StoreTrafficBreakdownDto> GetStoreTrafficBreakdownAsync(GetStoreTrafficBreakdownQuery query, CancellationToken ct = default);
     Task<NavStatsDto> GetNavStatsAsync(GetNavStatsQuery query, CancellationToken ct = default);
+    Task<NextFestDto> GetNextFestAsync(CancellationToken ct = default);
     Task<PlayersDto> GetPlayersAsync(GetPlayersQuery query, CancellationToken ct = default);
     Task<DemoDownloadsDto> GetDemoDownloadsAsync(GetDemoDownloadsQuery query, CancellationToken ct = default);
     Task<BundlesDto> GetBundlesAsync(GetBundlesQuery query, CancellationToken ct = default);

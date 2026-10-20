@@ -2305,6 +2305,67 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.ToTable("steamworks_nav_stat", (string)null);
                 });
 
+            modelBuilder.Entity("Cato.Domain.Entities.SteamworksNextFestStat", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AppId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("DemoAppId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DemoPlayerCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("EventEnd")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("EventStart")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FestKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<long?>("FestPageViews")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("FestPeriodPageViews")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("GameId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("PlayerWishlistCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("SnapshotEnd")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("WishlistCount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GameId");
+
+                    b.HasIndex("AppId", "FestKey", "SnapshotEnd")
+                        .IsUnique()
+                        .HasDatabaseName("unique_steamworks_nextfest_stat");
+
+                    b.ToTable("steamworks_nextfest_stat", (string)null);
+                });
+
             modelBuilder.Entity("Cato.Domain.Entities.SteamworksPlayerCountry", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2891,6 +2952,17 @@ namespace Cato.Infrastructure.Database.Migrations
                 });
 
             modelBuilder.Entity("Cato.Domain.Entities.SteamworksAppDetails", b =>
+                {
+                    b.HasOne("Cato.Domain.Entities.Game", "Game")
+                        .WithMany()
+                        .HasForeignKey("GameId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Game");
+                });
+
+            modelBuilder.Entity("Cato.Domain.Entities.SteamworksNextFestStat", b =>
                 {
                     b.HasOne("Cato.Domain.Entities.Game", "Game")
                         .WithMany()
