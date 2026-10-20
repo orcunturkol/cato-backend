@@ -1,0 +1,3 @@
+.terraform/
+*.plan
+webhook.txt
