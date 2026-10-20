@@ -3031,7 +3031,21 @@ public class IngestionService : IIngestionService
             GameType = "Other"
         };
         _db.Games.Add(game);
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            // The queues run concurrently, so another one may have stubbed this app a moment
+            // earlier and the unique AppId index refused ours. EF rolls back to its savepoint,
+            // so the batch transaction stays usable: drop our copy and use theirs.
+            _db.Entry(game).State = EntityState.Detached;
+            var existing = await _db.Games.FirstOrDefaultAsync(g => g.AppId == appId, ct);
+            if (existing is null) throw;
+            _logger.LogInformation("AppId {AppId} was stubbed by another queue first; using that row", appId);
+            return existing;
+        }
 
         _logger.LogInformation(
             "Stubbed AppId {AppId} — queued for Steam enrichment", appId);
