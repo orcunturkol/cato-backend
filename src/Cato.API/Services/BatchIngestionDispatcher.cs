@@ -126,6 +126,7 @@ public class BatchIngestionDispatcher : IBatchIngestionDispatcher
             "steam_financial"           => _ingestionService.IngestFinancialDataItemAsync(item.AppId, item.ScrapedAt, item.Data, ct),
             "steamworks_wishlist_report" => _ingestionService.IngestSteamworksWishlistReportItemAsync(item.AppId, item.ScrapedAt, item.Data, ct),
             "steamworks_store_traffic"  => _ingestionService.IngestSteamworksStoreTrafficItemAsync(item.AppId, item.ScrapedAt, item.Data, ct),
+            "steamworks_nav_stats"      => _ingestionService.IngestSteamworksNavStatsItemAsync(item.AppId, item.ScrapedAt, item.Data, ct),
             _ => throw new InvalidOperationException($"Unknown batch source: '{source}'"),
         };
 }

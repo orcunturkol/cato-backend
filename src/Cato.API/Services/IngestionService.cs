@@ -2488,6 +2488,91 @@ public class IngestionService : IIngestionService
         return (inserted, updated);
     }
 
+    // Values of the Nav Stats page's "Source" filter.
+    private static readonly HashSet<string> NavStatsAttributions = new(StringComparer.Ordinal)
+        { "all", "store", "steamworks", "external" };
+
+    /// <summary>
+    /// One Nav Stats CSV (every product of a publisher, one period, one source and
+    /// region filter). The batch envelope's app id carries the publisher id. Rows are
+    /// keyed by app id; a product missing from a later export keeps its row.
+    /// </summary>
+    public async Task<ItemIngestResult> IngestSteamworksNavStatsItemAsync(int publisherId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default)
+    {
+        if (!data.TryGetProperty("rows", out var rowsEl) || rowsEl.ValueKind != JsonValueKind.Array)
+            return new ItemIngestResult(0, 0, 0, 0);
+        if (TryGetInt(data, "publisher_id", out var payloadPublisher) && payloadPublisher > 0)
+            publisherId = payloadPublisher;
+        if (!TryGetDate(data, "period_start", out var start) || !TryGetDate(data, "period_end", out var end) || end < start
+            || !TryGetText(data, "attribution", 20, out var attribution) || !NavStatsAttributions.Contains(attribution)
+            || !TryGetText(data, "region", 50, out var region))
+        {
+            var count = rowsEl.GetArrayLength();
+            _logger.LogWarning("Nav stats item for publisher {PublisherId} has no valid period or filter; {Count} rows skipped", publisherId, count);
+            return new ItemIngestResult(count, 0, 0, count);
+        }
+
+        int processed = 0, failed = 0;
+        var rows = new Dictionary<int, (string? Name, long Impressions, long Visits)>();
+        foreach (var row in rowsEl.EnumerateArray())
+        {
+            processed++;
+            if (TryGetInt(row, "app_id", out var appId) && appId > 0
+                && TryGetLong(row, "impressions", out var impressions)
+                && TryGetLong(row, "visits", out var visits))
+            {
+                var name = TryGetText(row, "name", 300, out var text) ? text : null;
+                rows[appId] = (name, impressions, visits);
+            }
+            else failed++;
+        }
+        if (failed > 0)
+            _logger.LogWarning("Nav stats for publisher {PublisherId}: {Failed} of {Processed} rows malformed", publisherId, failed, processed);
+        if (rows.Count == 0)
+            return new ItemIngestResult(processed, 0, 0, failed);
+
+        var existing = await _db.SteamworksNavStats
+            .AsNoTracking()
+            .Where(n => n.PublisherId == publisherId && n.PeriodStart == start && n.PeriodEnd == end
+                && n.Attribution == attribution && n.Region == region)
+            .ToDictionaryAsync(n => n.AppId, ct);
+
+        int inserted = 0, updated = 0;
+        foreach (var (appId, row) in rows)
+        {
+            if (existing.TryGetValue(appId, out var current))
+            {
+                if (current.Impressions == row.Impressions && current.Visits == row.Visits
+                    && (row.Name is null || current.AppName == row.Name))
+                    continue;
+
+                current.Impressions = row.Impressions;
+                current.Visits = row.Visits;
+                current.AppName = row.Name ?? current.AppName;
+                _db.SteamworksNavStats.Update(current);
+                updated++;
+                continue;
+            }
+
+            _db.SteamworksNavStats.Add(new SteamworksNavStat
+            {
+                Id = Guid.NewGuid(),
+                PublisherId = publisherId,
+                AppId = appId,
+                AppName = row.Name,
+                PeriodStart = start,
+                PeriodEnd = end,
+                Attribution = attribution,
+                Region = region,
+                Impressions = row.Impressions,
+                Visits = row.Visits,
+            });
+            inserted++;
+        }
+
+        return new ItemIngestResult(processed, inserted, updated, failed);
+    }
+
     /// <summary>
     /// Returns the game for this app id, creating a bare row if CATO has never seen
     /// it. Ingestion needs the row to hang a foreign key on; it never reads the

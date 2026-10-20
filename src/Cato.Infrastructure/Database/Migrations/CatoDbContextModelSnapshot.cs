@@ -2054,6 +2054,59 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.ToTable("steamworks_bundle", (string)null);
                 });
 
+            modelBuilder.Entity("Cato.Domain.Entities.SteamworksNavStat", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AppId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("AppName")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Attribution")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("Impressions")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateOnly>("PeriodEnd")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("PeriodStart")
+                        .HasColumnType("date");
+
+                    b.Property<int>("PublisherId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Region")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("Visits")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PublisherId", "PeriodStart", "PeriodEnd", "Attribution", "Region", "AppId")
+                        .IsUnique()
+                        .HasDatabaseName("unique_steamworks_nav_stat");
+
+                    b.ToTable("steamworks_nav_stat", (string)null);
+                });
+
             modelBuilder.Entity("Cato.Domain.Entities.SteamworksWishlistCohort", b =>
                 {
                     b.Property<Guid>("Id")

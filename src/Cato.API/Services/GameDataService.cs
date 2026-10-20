@@ -421,6 +421,87 @@ public class GameDataService : IGameDataService
         return new StoreTrafficBreakdownDto(firstDate, lastDate, firstDailyDate, sources, countries);
     }
 
+    // Nav Stats filter values (see SteamworksNavStat).
+    private const string NavStatsAllRegions = "All Regions";
+    private const string NavStatsAll = "all";
+    private static readonly string[] NavStatsAttributionOrder = ["all", "store", "steamworks", "external"];
+
+    public async Task<NavStatsDto> GetNavStatsAsync(GetNavStatsQuery request, CancellationToken ct = default)
+    {
+        var publisherId = request.PublisherId ?? await _db.SteamworksNavStats
+            .AsNoTracking()
+            .OrderByDescending(n => n.PeriodEnd)
+            .Select(n => (int?)n.PublisherId)
+            .FirstOrDefaultAsync(ct);
+        if (publisherId is null)
+            return new NavStatsDto(null, null, null, null, [], [], []);
+
+        var all = _db.SteamworksNavStats.AsNoTracking()
+            .Where(n => n.PublisherId == publisherId && n.Region == NavStatsAllRegions);
+        var firstDate = await all.MinAsync(n => (DateOnly?)n.PeriodStart, ct);
+        var lastDate = await all.MaxAsync(n => (DateOnly?)n.PeriodEnd, ct);
+        var firstDailyDate = await all.Where(n => n.PeriodStart == n.PeriodEnd).MinAsync(n => (DateOnly?)n.PeriodStart, ct);
+
+        var inRange = all;
+        if (request.From is { } f) inRange = inRange.Where(n => n.PeriodStart >= f);
+        if (request.To is { } e) inRange = inRange.Where(n => n.PeriodEnd <= e);
+
+        var byApp = await inRange
+            .GroupBy(n => new { n.AppId, n.Attribution })
+            .Select(g => new { g.Key.AppId, g.Key.Attribution, Impressions = g.Sum(n => n.Impressions), Visits = g.Sum(n => n.Visits) })
+            .ToListAsync(ct);
+
+        var periods = (await inRange
+            .Where(n => n.Attribution == NavStatsAll)
+            .GroupBy(n => new { n.PeriodStart, n.PeriodEnd })
+            .Select(g => new NavStatsPeriodDto(g.Key.PeriodStart, g.Key.PeriodEnd, g.Sum(n => n.Impressions), g.Sum(n => n.Visits)))
+            .ToListAsync(ct))
+            .OrderBy(p => p.PeriodStart)
+            .ToList();
+
+        // The name the latest export gave each product.
+        var names = (await inRange
+            .Where(n => n.Attribution == NavStatsAll && n.AppName != null)
+            .Select(n => new { n.AppId, n.AppName, n.PeriodEnd })
+            .ToListAsync(ct))
+            .GroupBy(n => n.AppId)
+            .ToDictionary(g => g.Key, g => g.MaxBy(n => n.PeriodEnd)!.AppName);
+
+        var appIds = byApp.Select(a => a.AppId).Distinct().ToList();
+        var gameIds = await _db.Games.AsNoTracking()
+            .Where(g => appIds.Contains(g.AppId))
+            .ToDictionaryAsync(g => g.AppId, g => g.Id, ct);
+
+        var cells = byApp.ToDictionary(a => (a.AppId, a.Attribution), a => (a.Impressions, a.Visits));
+        (long Impressions, long Visits) Cell(int appId, string attribution)
+            => cells.TryGetValue((appId, attribution), out var c) ? c : (0, 0);
+
+        var products = appIds
+            .Select(id =>
+            {
+                var a = Cell(id, NavStatsAll);
+                var s = Cell(id, "store");
+                var p = Cell(id, "steamworks");
+                var x = Cell(id, "external");
+                return new NavStatsProductDto(
+                    id, names.GetValueOrDefault(id), gameIds.TryGetValue(id, out var gameId) ? gameId : null,
+                    a.Impressions, a.Visits, s.Impressions, s.Visits, p.Impressions, p.Visits, x.Impressions, x.Visits);
+            })
+            .OrderByDescending(p => p.Visits)
+            .ThenByDescending(p => p.Impressions)
+            .ThenBy(p => p.AppId)
+            .ToList();
+
+        var totals = NavStatsAttributionOrder
+            .Select(attr => new NavStatsTotalDto(
+                attr,
+                byApp.Where(a => a.Attribution == attr).Sum(a => a.Impressions),
+                byApp.Where(a => a.Attribution == attr).Sum(a => a.Visits)))
+            .ToList();
+
+        return new NavStatsDto(publisherId, firstDate, lastDate, firstDailyDate, totals, periods, products);
+    }
+
     public async Task<List<GroupMemberCountDto>> GetGroupMemberCountAsync(GetGroupMemberCountQuery request, CancellationToken ct = default)
     {
         return await _db.GroupMemberCountSnapshots
