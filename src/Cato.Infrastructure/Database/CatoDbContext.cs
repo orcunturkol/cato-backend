@@ -55,6 +55,8 @@ public class CatoDbContext : DbContext
     public DbSet<SteamPlayerAchievementFetch> SteamPlayerAchievementFetches => Set<SteamPlayerAchievementFetch>();
     public DbSet<JobRun> JobRuns => Set<JobRun>();
     public DbSet<JobScheduleSnapshot> JobScheduleSnapshots => Set<JobScheduleSnapshot>();
+    public DbSet<ScheduledJob> ScheduledJobs => Set<ScheduledJob>();
+    public DbSet<ScheduledJobChange> ScheduledJobChanges => Set<ScheduledJobChange>();
     public DbSet<SteamSpecialEvent> SteamSpecialEvents => Set<SteamSpecialEvent>();
     public DbSet<SteamSpecialEventGame> SteamSpecialEventGames => Set<SteamSpecialEventGame>();
 
@@ -690,6 +692,43 @@ public class CatoDbContext : DbContext
             entity.Property(e => e.Source).HasMaxLength(50).IsRequired();
             entity.Property(e => e.SourceHost).HasMaxLength(255);
             entity.Property(e => e.EntriesJson).HasColumnType("jsonb").IsRequired();
+        });
+
+        // ── ScheduledJob ──
+        modelBuilder.Entity<ScheduledJob>(entity =>
+        {
+            entity.ToTable("scheduled_job");
+            entity.HasKey(e => e.Name);
+
+            entity.Property(e => e.Name).HasMaxLength(150);
+            entity.Property(e => e.Label).HasMaxLength(200);
+            entity.Property(e => e.AgentGroup).HasMaxLength(30).IsRequired();
+            entity.Property(e => e.Module).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Args).HasMaxLength(500).IsRequired();
+            entity.Property(e => e.Cron).HasMaxLength(500);
+            entity.Property(e => e.AlertFailedRatio).HasPrecision(5, 4);
+            entity.Property(e => e.ManagedBy).HasMaxLength(20).IsRequired()
+                .HasDefaultValue(ScheduledJobManagedBy.Cron);
+            entity.Property(e => e.UpdatedBy).HasMaxLength(100);
+
+            entity.HasIndex(e => e.AgentGroup).HasDatabaseName("idx_scheduled_job_agent_group");
+        });
+
+        // ── ScheduledJobChange ──
+        modelBuilder.Entity<ScheduledJobChange>(entity =>
+        {
+            entity.ToTable("scheduled_job_change");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.JobName).HasMaxLength(150).IsRequired();
+            entity.Property(e => e.ChangedBy).HasMaxLength(100);
+            entity.Property(e => e.Reason).HasMaxLength(500);
+            entity.Property(e => e.OldJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(e => e.NewJson).HasColumnType("jsonb").IsRequired();
+
+            entity.HasIndex(e => new { e.JobName, e.ChangedAt })
+                .IsDescending(false, true)
+                .HasDatabaseName("idx_scheduled_job_change_job_changed");
         });
 
         // ── MarketingTarget ──

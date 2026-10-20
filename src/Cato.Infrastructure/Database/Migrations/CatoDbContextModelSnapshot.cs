@@ -1348,6 +1348,109 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.ToTable("review_summary_snapshot", (string)null);
                 });
 
+            modelBuilder.Entity("Cato.Domain.Entities.ScheduledJob", b =>
+                {
+                    b.Property<string>("Name")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("AgentGroup")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<decimal>("AlertFailedRatio")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)");
+
+                    b.Property<int>("AlertMinItems")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Args")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Cron")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Label")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ManagedBy")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("cron");
+
+                    b.Property<string>("Module")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("TimeoutSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Name");
+
+                    b.HasIndex("AgentGroup")
+                        .HasDatabaseName("idx_scheduled_job_agent_group");
+
+                    b.ToTable("scheduled_job", (string)null);
+                });
+
+            modelBuilder.Entity("Cato.Domain.Entities.ScheduledJobChange", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ChangedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("JobName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("NewJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("OldJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("JobName", "ChangedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("idx_scheduled_job_change_job_changed");
+
+                    b.ToTable("scheduled_job_change", (string)null);
+                });
+
             modelBuilder.Entity("Cato.Domain.Entities.SteamCountry", b =>
                 {
                     b.Property<string>("CountryCode")
