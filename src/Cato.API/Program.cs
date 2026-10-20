@@ -67,6 +67,9 @@ builder.Services.Configure<FollowerHistorySweepSettings>(builder.Configuration.G
 // ── RabbitMQ ──
 builder.Services.Configure<Cato.Infrastructure.Messaging.RabbitMqSettings>(
     builder.Configuration.GetSection("RabbitMQ"));
+// The broker's connection list names the process: cato-worker, cato-all, ...
+builder.Services.PostConfigure<Cato.Infrastructure.Messaging.RabbitMqSettings>(s =>
+    s.ClientProvidedName = $"cato-{role.ToString().ToLowerInvariant()}");
 builder.Services.AddScoped<Cato.Infrastructure.Messaging.IIngestionDispatcher, Cato.API.Services.IngestionDispatcher>();
 builder.Services.AddScoped<Cato.Infrastructure.Messaging.IBatchIngestionDispatcher, Cato.API.Services.BatchIngestionDispatcher>();
 builder.Services.AddScoped<Cato.Infrastructure.Messaging.IGameAnalyzedDispatcher, Cato.API.Services.GameAnalyzedDispatcher>();
