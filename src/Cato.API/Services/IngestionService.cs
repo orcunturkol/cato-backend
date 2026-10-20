@@ -1538,7 +1538,7 @@ public class IngestionService : IIngestionService
                     }
 
                     var existing = await _db.DemoDownloads.FirstOrDefaultAsync(
-                        d => d.GameId == game.Id && d.SnapshotDate == snapshotDate
+                        d => d.GameId == game.Id && d.SnapshotDate == snapshotDate && d.PeriodEnd == snapshotDate
                              && d.GeoType == geoType && d.GeoName == geoName, ct);
 
                     if (existing is null)
@@ -1549,6 +1549,7 @@ public class IngestionService : IIngestionService
                             GameId = game.Id,
                             DemoAppId = request.DemoAppId,
                             SnapshotDate = snapshotDate,
+                            PeriodEnd = snapshotDate,
                             GeoType = geoType,
                             GeoName = geoName,
                             TotalDownloads = totalDownloads,
@@ -2741,6 +2742,84 @@ public class IngestionService : IIngestionService
         current.LifetimeUniqueUsers = uniqueUsers;
         _db.SteamworksAppDetails.Update(current);
         return (1, 0, 1, 0);
+    }
+
+    private static readonly HashSet<string> DemoGeoTypes = new(StringComparer.Ordinal) { "Region", "Country" };
+
+    /// <summary>
+    /// One demo's "Downloads by Region" CSV for one period, filed under the main game
+    /// (<c>app_id</c>). Rows are keyed by (geo type, name) within the period; a row
+    /// missing from a later export is kept. One untracked load of the period's rows.
+    /// </summary>
+    public async Task<ItemIngestResult> IngestSteamworksDemoDownloadsItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default)
+    {
+        if (!data.TryGetProperty("rows", out var rowsEl) || rowsEl.ValueKind != JsonValueKind.Array)
+            return new ItemIngestResult(0, 0, 0, 0);
+        if (!TryGetDate(data, "period_start", out var start) || !TryGetDate(data, "period_end", out var end) || end < start)
+        {
+            var count = rowsEl.GetArrayLength();
+            _logger.LogWarning("Demo downloads item for AppId {AppId} has no valid period; {Count} rows skipped", appId, count);
+            return new ItemIngestResult(count, 0, 0, count);
+        }
+        int? demoAppId = TryGetInt(data, "demo_app_id", out var d) && d > 0 ? d : null;
+        string? stubName = data.TryGetProperty("game_name", out var nameEl) && nameEl.ValueKind == JsonValueKind.String
+            ? nameEl.GetString() : null;
+        var game = await FindOrStubGameAsync(appId, stubName, ct);
+
+        int processed = 0, failed = 0;
+        var rows = new Dictionary<(string GeoType, string Name), (long Downloads, decimal? Share)>();
+        foreach (var row in rowsEl.EnumerateArray())
+        {
+            processed++;
+            if (TryGetText(row, "geo_type", 50, out var geoType) && DemoGeoTypes.Contains(geoType)
+                && TryGetText(row, "name", 200, out var name)
+                && TryGetLong(row, "downloads", out var downloads) && downloads >= 0)
+            {
+                decimal? share = row.TryGetProperty("share_percent", out var shareEl) && shareEl.ValueKind == JsonValueKind.Number
+                    && shareEl.TryGetDecimal(out var s) && s is >= 0 and <= 100 ? s : null;
+                rows[(geoType, name)] = (downloads, share);
+            }
+            else failed++;
+        }
+        if (failed > 0)
+            _logger.LogWarning("Demo downloads for AppId {AppId}: {Failed} of {Processed} rows malformed", appId, failed, processed);
+        if (rows.Count == 0)
+            return new ItemIngestResult(processed, 0, 0, failed);
+
+        var existing = await _db.DemoDownloads
+            .AsNoTracking()
+            .Where(x => x.GameId == game.Id && x.SnapshotDate == start && x.PeriodEnd == end)
+            .ToDictionaryAsync(x => (x.GeoType, x.GeoName), ct);
+
+        int inserted = 0, updated = 0;
+        foreach (var (key, row) in rows)
+        {
+            if (existing.TryGetValue(key, out var current))
+            {
+                if (current.TotalDownloads == row.Downloads && current.SharePercent == row.Share && current.DemoAppId == demoAppId)
+                    continue;
+                current.TotalDownloads = row.Downloads;
+                current.SharePercent = row.Share;
+                current.DemoAppId = demoAppId ?? current.DemoAppId;
+                _db.DemoDownloads.Update(current);
+                updated++;
+                continue;
+            }
+            _db.DemoDownloads.Add(new DemoDownload
+            {
+                Id = Guid.NewGuid(),
+                GameId = game.Id,
+                DemoAppId = demoAppId,
+                SnapshotDate = start,
+                PeriodEnd = end,
+                GeoType = key.GeoType,
+                GeoName = key.Name,
+                TotalDownloads = row.Downloads,
+                SharePercent = row.Share,
+            });
+            inserted++;
+        }
+        return new ItemIngestResult(processed, inserted, updated, failed);
     }
 
     /// <summary>

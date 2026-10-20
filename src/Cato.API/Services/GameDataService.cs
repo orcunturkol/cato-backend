@@ -552,6 +552,36 @@ public class GameDataService : IGameDataService
         return new PlayersDto(days, countriesDate, countries, details);
     }
 
+    public async Task<DemoDownloadsDto> GetDemoDownloadsAsync(GetDemoDownloadsQuery request, CancellationToken ct = default)
+    {
+        var all = _db.DemoDownloads.AsNoTracking().Where(d => d.Game.AppId == request.AppId);
+        var demoAppId = await all.Where(d => d.DemoAppId != null)
+            .OrderByDescending(d => d.PeriodEnd)
+            .Select(d => d.DemoAppId)
+            .FirstOrDefaultAsync(ct);
+        var firstDate = await all.MinAsync(d => (DateOnly?)d.SnapshotDate, ct);
+        var lastDate = await all.MaxAsync(d => (DateOnly?)d.PeriodEnd, ct);
+        var firstDailyDate = await all.Where(d => d.SnapshotDate == d.PeriodEnd).MinAsync(d => (DateOnly?)d.SnapshotDate, ct);
+
+        var inRange = all;
+        if (request.From is { } f) inRange = inRange.Where(d => d.SnapshotDate >= f);
+        if (request.To is { } e) inRange = inRange.Where(d => d.PeriodEnd <= e);
+        var grouped = await inRange
+            .GroupBy(d => new { d.GeoType, d.GeoName })
+            .Select(g => new { g.Key.GeoType, g.Key.GeoName, Downloads = g.Sum(d => d.TotalDownloads) })
+            .ToListAsync(ct);
+
+        List<DemoDownloadGeoDto> Of(string geoType) => grouped
+            .Where(g => g.GeoType == geoType && g.Downloads > 0)
+            .OrderByDescending(g => g.Downloads)
+            .ThenBy(g => g.GeoName, StringComparer.Ordinal)
+            .Select(g => new DemoDownloadGeoDto(g.GeoName, g.Downloads))
+            .ToList();
+
+        var regions = Of("Region");
+        return new DemoDownloadsDto(demoAppId, firstDate, lastDate, firstDailyDate, regions.Sum(r => r.Downloads), regions, Of("Country"));
+    }
+
     public async Task<List<GroupMemberCountDto>> GetGroupMemberCountAsync(GetGroupMemberCountQuery request, CancellationToken ct = default)
     {
         return await _db.GroupMemberCountSnapshots
