@@ -15,12 +15,13 @@ public static class HealthEndpoints
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
 
-    public static IServiceCollection AddCatoHealthChecks(this IServiceCollection services)
+    public static IServiceCollection AddCatoHealthChecks(this IServiceCollection services, bool includeSteamKit)
     {
-        services.AddHealthChecks()
+        var checks = services.AddHealthChecks()
             .AddCheck<DatabaseHealthCheck>("database", tags: [ReadyTag], timeout: TimeSpan.FromSeconds(5))
-            .AddCheck<RedisHealthCheck>("redis", tags: [ReadyTag], timeout: TimeSpan.FromSeconds(5))
-            .AddCheck<SteamKitHealthCheck>("steamkit", HealthStatus.Degraded, [ReadyTag]);
+            .AddCheck<RedisHealthCheck>("redis", tags: [ReadyTag], timeout: TimeSpan.FromSeconds(5));
+        if (includeSteamKit)
+            checks.AddCheck<SteamKitHealthCheck>("steamkit", HealthStatus.Degraded, [ReadyTag]);
         return services;
     }
 

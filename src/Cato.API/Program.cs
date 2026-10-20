@@ -1,4 +1,5 @@
 using Cato.API.Health;
+using Cato.API.Hosting;
 using Cato.Infrastructure.Database;
 using Cato.Infrastructure.Redis;
 using Cato.Infrastructure.Steam;
@@ -12,12 +13,16 @@ using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ── Process role (CATO_ROLE: all | api | worker | migrate; see Hosting/CatoRole.cs) ──
+var role = CatoRoles.Parse(builder.Configuration[CatoRoles.ConfigurationKey]);
+
 // ── Serilog ──
 // Sinks + minimum levels are configured entirely via the "Serilog" section in
 // appsettings.json (ReadFrom.Configuration), so log hygiene and the Seq sink can
 // be tuned without code changes. Enrichers/console are declared there too.
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
+    .Enrich.WithProperty("Role", role.ToString().ToLowerInvariant())
     .CreateLogger();
 
 builder.Host.UseSerilog();
@@ -34,10 +39,11 @@ builder.Services.AddMediatR(cfg =>
 builder.Services.AddValidatorsFromAssembly(typeof(Program).Assembly);
 
 // ── Controllers ──
-builder.Services.AddControllers();
+builder.Services.AddControllers().ForRole(role);
 
 // ── Health checks (/health/live, /health/ready) ──
-builder.Services.AddCatoHealthChecks();
+// The SteamKit check only belongs where SteamKit runs; the api role never logs in.
+builder.Services.AddCatoHealthChecks(includeSteamKit: role.RunsHostedServices());
 
 // ── Steam API HttpClient ──
 builder.Services.AddHttpClient<ISteamApiService, SteamApiService>(client =>
@@ -55,10 +61,8 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
 });
 builder.Services.AddSingleton<IRedisAppIdSyncService, RedisAppIdSyncService>();
 builder.Services.AddSingleton<ISteamIdRotationService, RedisSteamIdRotationService>();
-builder.Services.AddHostedService<RedisBackfillHostedService>();
 builder.Services.AddSingleton<IFollowerHistoryQueueService, FollowerHistoryQueueService>();
 builder.Services.Configure<FollowerHistorySweepSettings>(builder.Configuration.GetSection(FollowerHistorySweepSettings.SectionName));
-builder.Services.AddHostedService<FollowerHistorySweepService>();
 
 // ── RabbitMQ ──
 builder.Services.Configure<Cato.Infrastructure.Messaging.RabbitMqSettings>(
@@ -66,7 +70,6 @@ builder.Services.Configure<Cato.Infrastructure.Messaging.RabbitMqSettings>(
 builder.Services.AddScoped<Cato.Infrastructure.Messaging.IIngestionDispatcher, Cato.API.Services.IngestionDispatcher>();
 builder.Services.AddScoped<Cato.Infrastructure.Messaging.IBatchIngestionDispatcher, Cato.API.Services.BatchIngestionDispatcher>();
 builder.Services.AddScoped<Cato.Infrastructure.Messaging.IGameAnalyzedDispatcher, Cato.API.Services.GameAnalyzedDispatcher>();
-builder.Services.AddHostedService<Cato.Infrastructure.Messaging.RabbitMqConsumerService>();
 
 // ── Game quality filter ──
 builder.Services.Configure<GameFilterOptions>(builder.Configuration.GetSection(GameFilterOptions.SectionName));
@@ -75,28 +78,24 @@ builder.Services.AddSingleton<IGameQualityFilter, GameQualityFilterService>();
 // ── Steam Web API + player profile watcher ──
 builder.Services.Configure<SteamWebApiSettings>(builder.Configuration.GetSection(SteamWebApiSettings.SectionName));
 builder.Services.Configure<PlayerProfileSettings>(builder.Configuration.GetSection(PlayerProfileSettings.SectionName));
-builder.Services.AddHostedService<SteamPlayerProfileWatcherService>();
 
 // ── Steam store enrichment backfill ──
 builder.Services.Configure<GameEnrichmentSettings>(builder.Configuration.GetSection(GameEnrichmentSettings.SectionName));
-builder.Services.AddHostedService<GameEnrichmentWatcherService>();
 
 // ── Steam achievements (schema + per-reviewer player achievements) ──
 builder.Services.Configure<AchievementSettings>(builder.Configuration.GetSection(AchievementSettings.SectionName));
-builder.Services.AddHostedService<GameAchievementSchemaWatcherService>();
-builder.Services.AddHostedService<PlayerAchievementWatcherService>();
 builder.Services.Configure<NewsSettings>(builder.Configuration.GetSection(NewsSettings.SectionName));
-builder.Services.AddHostedService<GameNewsWatcherService>();
 
 // ── SteamKit2 ──
+// Registered in every role: an unstarted SteamKitService answers "not logged in" and
+// does nothing, so the api role can still construct services that depend on it.
 builder.Services.Configure<SteamSettings>(builder.Configuration.GetSection("SteamKit"));
 builder.Services.AddSingleton<SteamKitService>();
 builder.Services.AddSingleton<ISteamKitService>(sp => sp.GetRequiredService<SteamKitService>());
-builder.Services.AddHostedService(sp => sp.GetRequiredService<SteamKitService>());
-builder.Services.AddHostedService<SteamPicsWatcherService>();
-builder.Services.AddHostedService<SteamPriceWatcherService>();
-builder.Services.AddHostedService<SteamPicsChangeHistoryService>();
-builder.Services.AddHostedService<SteamReviewWatcherService>();
+
+// ── Background services: the worker role (and today's single container) only ──
+if (role.RunsHostedServices())
+    builder.Services.AddWorkerHostedServices();
 
 // ── Job-run tracking ──
 builder.Services.AddSingleton<Cato.Infrastructure.Jobs.IJobRunTracker, Cato.Infrastructure.Jobs.JobRunTracker>();
@@ -160,11 +159,30 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
-// ── Auto-migrate database on startup ──
-using (var scope = app.Services.CreateScope())
+// ── Database migrations ──
+// The migrate role applies them and exits before any hosted service starts; the deploy
+// waits for its exit code. api and worker never migrate, so two tasks cannot race.
+if (role == CatoRole.Migrate || role.MigratesOnStartup())
 {
+    using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<CatoDbContext>();
-    db.Database.Migrate();
+    try
+    {
+        db.Database.Migrate();
+    }
+    catch (Exception ex) when (role == CatoRole.Migrate)
+    {
+        Log.Fatal(ex, "migrate_failed");
+        await Log.CloseAndFlushAsync();
+        return 1;
+    }
+
+    if (role == CatoRole.Migrate)
+    {
+        Log.Information("migrate_complete");
+        await Log.CloseAndFlushAsync();
+        return 0;
+    }
 }
 
 // ── Middleware ──
@@ -184,4 +202,6 @@ app.UseOutputCache();
 app.MapCatoHealthChecks();
 app.MapControllers();
 
-app.Run();
+Log.Information("cato_started role={Role}", role);
+await app.RunAsync();
+return 0;
