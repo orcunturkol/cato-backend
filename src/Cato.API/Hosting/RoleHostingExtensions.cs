@@ -28,6 +28,8 @@ public static class RoleHostingExtensions
         services.AddHostedService<SteamPriceWatcherService>();
         services.AddHostedService<SteamPicsChangeHistoryService>();
         services.AddHostedService<SteamReviewWatcherService>();
+        // Exactly one dispatcher: the worker is a single task.
+        services.AddHostedService<Services.Dispatch.JobDispatcherService>();
         return services;
     }
 
