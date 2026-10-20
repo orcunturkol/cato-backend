@@ -182,6 +182,19 @@ bot visits; the rows add up to slightly less than the page headline, which count
 the CSV leaves out. Batch source `steamworks_nav_stats`; the envelope's `app_id` carries the
 publisher id. Rows missing from a later export are kept. Read side: `GET /api/nav-stats`.
 
+### Steamworks players and app details (`steamworks_players`)
+
+One item per owned game from partner.steampowered.com HTML pages (no CSV). `days` is the
+whole daily peak concurrent / daily active users history from the players page; it goes
+into `active_users_history` (key `GameId, RecordedAt` = the day at 00:00 UTC, new column
+`PeakConcurrentUsers`; `Mau` stays 0, rows of the manual upload keep their values).
+`countries` is yesterday's "Players by region" table, shares not counts, stored in
+`steamworks_player_country` and replaced per date; Steam shows only yesterday, so there is
+no history before the job. `details` / `demo_details` are daily snapshots of the app
+details page (median time played, lifetime unique users) in `steamworks_app_details`,
+keyed by `AppId, SnapshotDate`; a demo row carries the main game's `GameId`. A part sent
+as null leaves its table alone. Read side: `GET /api/games/{appId}/players`.
+
 ### Steamworks wishlist reports (owned games)
 
 `steamworks_wishlist_daily` (unique `GameId, DateLocal`) and `steamworks_wishlist_cohort`

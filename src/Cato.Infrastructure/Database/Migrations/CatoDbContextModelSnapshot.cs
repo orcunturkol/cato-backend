@@ -212,7 +212,13 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.Property<int>("Mau")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("PeakConcurrentUsers")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("RecordedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
@@ -2033,6 +2039,52 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.ToTable("steam_traffic_breakdown", (string)null);
                 });
 
+            modelBuilder.Entity("Cato.Domain.Entities.SteamworksAppDetails", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AppId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("GameId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsDemo")
+                        .HasColumnType("boolean");
+
+                    b.Property<long?>("LifetimeUniqueUsers")
+                        .HasColumnType("bigint");
+
+                    b.Property<int?>("MedianPlaytimeMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MedianPlaytimeText")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateOnly>("SnapshotDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GameId")
+                        .HasDatabaseName("idx_steamworks_app_details_game");
+
+                    b.HasIndex("AppId", "SnapshotDate")
+                        .IsUnique()
+                        .HasDatabaseName("unique_steamworks_app_details");
+
+                    b.ToTable("steamworks_app_details", (string)null);
+                });
+
             modelBuilder.Entity("Cato.Domain.Entities.SteamworksBundle", b =>
                 {
                     b.Property<int>("BundleId")
@@ -2105,6 +2157,46 @@ namespace Cato.Infrastructure.Database.Migrations
                         .HasDatabaseName("unique_steamworks_nav_stat");
 
                     b.ToTable("steamworks_nav_stat", (string)null);
+                });
+
+            modelBuilder.Entity("Cato.Domain.Entities.SteamworksPlayerCountry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CountryCode")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<string>("CountryName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("GameId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("SharePercent")
+                        .HasColumnType("decimal(6,3)");
+
+                    b.Property<DateOnly>("SnapshotDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GameId", "SnapshotDate", "CountryCode")
+                        .IsUnique()
+                        .HasDatabaseName("unique_steamworks_player_country");
+
+                    b.ToTable("steamworks_player_country", (string)null);
                 });
 
             modelBuilder.Entity("Cato.Domain.Entities.SteamworksWishlistCohort", b =>
@@ -2634,6 +2726,28 @@ namespace Cato.Infrastructure.Database.Migrations
                 {
                     b.HasOne("Cato.Domain.Entities.Game", "Game")
                         .WithMany("TrafficBreakdowns")
+                        .HasForeignKey("GameId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Game");
+                });
+
+            modelBuilder.Entity("Cato.Domain.Entities.SteamworksAppDetails", b =>
+                {
+                    b.HasOne("Cato.Domain.Entities.Game", "Game")
+                        .WithMany()
+                        .HasForeignKey("GameId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Game");
+                });
+
+            modelBuilder.Entity("Cato.Domain.Entities.SteamworksPlayerCountry", b =>
+                {
+                    b.HasOne("Cato.Domain.Entities.Game", "Game")
+                        .WithMany()
                         .HasForeignKey("GameId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();

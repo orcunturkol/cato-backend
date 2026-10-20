@@ -2574,6 +2574,176 @@ public class IngestionService : IIngestionService
     }
 
     /// <summary>
+    /// One game's Steamworks players item: the daily peak concurrent / daily active
+    /// users history (into <c>active_users_history</c>, keyed by day), yesterday's
+    /// players by country, and today's app details of the game and its demo. A part
+    /// sent as null leaves its table alone; days missing from a later export keep
+    /// their rows.
+    /// </summary>
+    public async Task<ItemIngestResult> IngestSteamworksPlayersItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default)
+    {
+        string? stubName = data.TryGetProperty("game_name", out var nameEl) && nameEl.ValueKind == JsonValueKind.String
+            ? nameEl.GetString() : null;
+        var game = await FindOrStubGameAsync(appId, stubName, ct);
+
+        int processed = 0, inserted = 0, updated = 0, failed = 0;
+        void Add((int Processed, int Inserted, int Updated, int Failed) r)
+        {
+            processed += r.Processed; inserted += r.Inserted; updated += r.Updated; failed += r.Failed;
+        }
+
+        if (data.TryGetProperty("days", out var daysEl) && daysEl.ValueKind == JsonValueKind.Array)
+            Add(await UpsertPlayerDaysAsync(game.Id, daysEl, ct));
+        if (data.TryGetProperty("countries", out var countriesEl) && countriesEl.ValueKind == JsonValueKind.Array
+            && TryGetDate(data, "countries_date", out var countriesDate))
+            Add(await UpsertPlayerCountriesAsync(game.Id, countriesDate, countriesEl, ct));
+
+        var snapshotDate = TryGetDate(data, "snapshot_date", out var sd) ? sd : DateOnly.FromDateTime(scrapedAt.UtcDateTime);
+        foreach (var (key, isDemo) in new[] { ("details", false), ("demo_details", true) })
+        {
+            if (data.TryGetProperty(key, out var detailsEl) && detailsEl.ValueKind == JsonValueKind.Object)
+                Add(await UpsertAppDetailsAsync(game.Id, isDemo, snapshotDate, detailsEl, ct));
+        }
+
+        if (failed > 0)
+            _logger.LogWarning("Steamworks players for AppId {AppId}: {Failed} of {Processed} rows malformed", appId, failed, processed);
+        return new ItemIngestResult(processed, inserted, updated, failed);
+    }
+
+    private async Task<(int, int, int, int)> UpsertPlayerDaysAsync(Guid gameId, JsonElement days, CancellationToken ct)
+    {
+        int processed = 0, failed = 0;
+        var rows = new Dictionary<DateTime, (int Dau, int Pcu)>();
+        foreach (var day in days.EnumerateArray())
+        {
+            processed++;
+            if (TryGetDate(day, "date", out var date) && TryGetInt(day, "dau", out var dau) && TryGetInt(day, "pcu", out var pcu)
+                && dau >= 0 && pcu >= 0)
+                rows[date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc)] = (dau, pcu);
+            else failed++;
+        }
+        if (rows.Count == 0) return (processed, 0, 0, failed);
+
+        var existing = await _db.ActiveUsersHistories
+            .AsNoTracking()
+            .Where(a => a.GameId == gameId)
+            .ToDictionaryAsync(a => a.RecordedAt, ct);
+
+        int inserted = 0, updated = 0;
+        foreach (var (recordedAt, row) in rows)
+        {
+            if (existing.TryGetValue(recordedAt, out var current))
+            {
+                if (current.Dau == row.Dau && current.PeakConcurrentUsers == row.Pcu) continue;
+                current.Dau = row.Dau;
+                current.PeakConcurrentUsers = row.Pcu;
+                _db.ActiveUsersHistories.Update(current);
+                updated++;
+                continue;
+            }
+            _db.ActiveUsersHistories.Add(new ActiveUsersHistory
+            {
+                Id = Guid.NewGuid(),
+                GameId = gameId,
+                RecordedAt = recordedAt,
+                Dau = row.Dau,
+                PeakConcurrentUsers = row.Pcu,
+            });
+            inserted++;
+        }
+        return (processed, inserted, updated, failed);
+    }
+
+    /// <summary>
+    /// Yesterday's country shares of one game: the set for that date is replaced, so a
+    /// country that dropped out of a re-fetch is removed.
+    /// </summary>
+    private async Task<(int, int, int, int)> UpsertPlayerCountriesAsync(Guid gameId, DateOnly date, JsonElement countries, CancellationToken ct)
+    {
+        int processed = 0, failed = 0;
+        var rows = new Dictionary<string, (string Name, decimal Share)>(StringComparer.Ordinal);
+        foreach (var c in countries.EnumerateArray())
+        {
+            processed++;
+            if (TryGetText(c, "country_code", 8, out var code) && TryGetText(c, "country", 100, out var name)
+                && c.TryGetProperty("share_percent", out var shareEl) && shareEl.ValueKind == JsonValueKind.Number
+                && shareEl.TryGetDecimal(out var share) && share is >= 0 and <= 100)
+                rows[code] = (name, share);
+            else failed++;
+        }
+
+        var existing = await _db.SteamworksPlayerCountries
+            .AsNoTracking()
+            .Where(c => c.GameId == gameId && c.SnapshotDate == date)
+            .ToDictionaryAsync(c => c.CountryCode, ct);
+
+        int inserted = 0, updated = 0;
+        foreach (var (code, row) in rows)
+        {
+            if (existing.Remove(code, out var current))
+            {
+                if (current.SharePercent == row.Share && current.CountryName == row.Name) continue;
+                current.SharePercent = row.Share;
+                current.CountryName = row.Name;
+                _db.SteamworksPlayerCountries.Update(current);
+                updated++;
+                continue;
+            }
+            _db.SteamworksPlayerCountries.Add(new SteamworksPlayerCountry
+            {
+                Id = Guid.NewGuid(),
+                GameId = gameId,
+                SnapshotDate = date,
+                CountryCode = code,
+                CountryName = row.Name,
+                SharePercent = row.Share,
+            });
+            inserted++;
+        }
+        if (rows.Count > 0)
+            _db.SteamworksPlayerCountries.RemoveRange(existing.Values);
+        return (processed, inserted, updated, failed);
+    }
+
+    private async Task<(int, int, int, int)> UpsertAppDetailsAsync(Guid gameId, bool isDemo, DateOnly date, JsonElement details, CancellationToken ct)
+    {
+        if (!TryGetInt(details, "app_id", out var appId) || appId <= 0)
+            return (1, 0, 0, 1);
+        int? median = TryGetInt(details, "median_playtime_minutes", out var m) ? m : null;
+        string? medianText = TryGetText(details, "median_playtime_text", 100, out var t) ? t : null;
+        long? uniqueUsers = TryGetLong(details, "lifetime_unique_users", out var u) ? u : null;
+
+        var current = await _db.SteamworksAppDetails
+            .AsNoTracking()
+            .FirstOrDefaultAsync(d => d.AppId == appId && d.SnapshotDate == date, ct);
+        if (current is null)
+        {
+            _db.SteamworksAppDetails.Add(new SteamworksAppDetails
+            {
+                Id = Guid.NewGuid(),
+                GameId = gameId,
+                AppId = appId,
+                IsDemo = isDemo,
+                SnapshotDate = date,
+                MedianPlaytimeMinutes = median,
+                MedianPlaytimeText = medianText,
+                LifetimeUniqueUsers = uniqueUsers,
+            });
+            return (1, 1, 0, 0);
+        }
+        if (current.MedianPlaytimeMinutes == median && current.MedianPlaytimeText == medianText
+            && current.LifetimeUniqueUsers == uniqueUsers && current.GameId == gameId && current.IsDemo == isDemo)
+            return (1, 0, 0, 0);
+        current.GameId = gameId;
+        current.IsDemo = isDemo;
+        current.MedianPlaytimeMinutes = median;
+        current.MedianPlaytimeText = medianText;
+        current.LifetimeUniqueUsers = uniqueUsers;
+        _db.SteamworksAppDetails.Update(current);
+        return (1, 0, 1, 0);
+    }
+
+    /// <summary>
     /// Returns the game for this app id, creating a bare row if CATO has never seen
     /// it. Ingestion needs the row to hang a foreign key on; it never reads the
     /// store fields.

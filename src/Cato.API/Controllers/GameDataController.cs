@@ -149,6 +149,15 @@ public class GameDataController : ControllerBase
         return Results.Ok(result);
     }
 
+    /// <summary>Get Steamworks daily active / peak concurrent users, players by country and app details (median playtime).</summary>
+    [HttpGet("players")]
+    [ProducesResponseType(typeof(PlayersDto), StatusCodes.Status200OK)]
+    public async Task<IResult> GetPlayers(int appId)
+    {
+        var result = await _mediator.Send(new GetPlayersQuery(appId));
+        return Results.Ok(result);
+    }
+
     /// <summary>Get group member count history for a game.</summary>
     [HttpGet("group-members")]
     [ProducesResponseType(typeof(List<GroupMemberCountDto>), StatusCodes.Status200OK)]
