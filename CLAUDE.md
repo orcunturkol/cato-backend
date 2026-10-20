@@ -56,15 +56,18 @@ Some older services (`GameService`, `GameDataService`, `IngestionService`, `Stea
   - `cato-ingestion-v2` — batch path, routing key `ingestion.batch.#` → `IBatchIngestionDispatcher`. New collector sources need only a case in its `source` switch; the binding is a wildcard.
   - `cato-game-analyzed` — routing key `game.analyzed.#` → `IGameAnalyzedDispatcher`. Published by the **reddit_metrics** pipeline when Gemini extracts metrics for a game. Stubs the game if unknown, stamps `AnalyzedAt`, then moves its app ID to the front of the follower-history queue. Database and Redis work only — see the enrichment section for why nothing slow may go in here.
 
-  **All three consumers share one channel, and RabbitMQ.Client dispatches its
-  callbacks with a concurrency of 1** (`ConsumerDispatchConcurrency` is never set, so
-  it takes the client default). One slow handler therefore blocks *every* queue, not
-  just its own. This is not theoretical: an inline Steam call in `IngestionService`
-  froze `cato-game-analyzed` at 1829 messages and 0/min while `cato-ingestion-v2`
-  crawled at one app per 15s, and every queue showed exactly 1 unacked message. The
-  symptom looks nothing like the cause — the API is healthy, the logs are busy, and
-  the stalled queue is silent. Keep every handler fast; anything slow belongs in a
-  background service.
+  **Each queue has its own channel** on one connection, with a dispatch concurrency of
+  1 and a prefetch of 1, so a slow handler blocks only its own queue. Until 2026-10 the
+  three shared one channel, and an inline Steam call in `IngestionService` froze
+  `cato-game-analyzed` at 1829 messages and 0/min while `cato-ingestion-v2` crawled at
+  one app per 15s. Keep every handler fast anyway; anything slow belongs in a
+  background service. The queues now run concurrently, so two queues can stub the same
+  unknown game at once.
+
+  On shutdown a cancelled handler is neither acked nor nacked: the broker redelivers
+  the message. The connection recovers its queues and consumers after a broker
+  restart. `RabbitMQ:Uri` (`amqps://user:pass@host:5671/`, URL-encoded) overrides the
+  host settings and turns TLS on; the connection is named `cato-{role}`.
 
   **Redis writes belong after `SaveChangesAsync`, never inside a transaction** (`GameService.cs`, `SteamGameEnrichmentService.cs`). This is why `game.analyzed` has its own queue rather than riding the batch path — `BatchIngestionDispatcher` runs every item handler inside one transaction, and a Redis write there would not roll back with it.
 - **Steam Integration**: `SteamApiService` (HTTP client for Steam Web API) and `SteamKitService` (SteamKit2 for PICS change monitoring via `SteamPicsWatcherService` background service).

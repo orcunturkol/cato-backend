@@ -1,3 +1,4 @@
+using System.Net.Security;
 using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -16,12 +17,16 @@ namespace Cato.Infrastructure.Messaging;
 /// <c>ingestion.batch.{source}</c>) goes to <see cref="IBatchIngestionDispatcher"/>;
 /// <see cref="RabbitMqSettings.GameAnalyzedQueue"/> (routing key
 /// <c>game.analyzed.{source}</c>) goes to <see cref="IGameAnalyzedDispatcher"/>.
-/// Nacks from any path are dead-lettered to the DLX.
+/// Each queue has its own channel (dispatch concurrency 1, prefetch 1) on one shared
+/// connection, so a slow handler holds up only its own queue. The connection recovers
+/// its topology and consumers after a broker restart.
+/// Nacks from any path are dead-lettered to the DLX; a message cut short by shutdown
+/// is left unacked, and the broker redelivers it.
 /// </summary>
 public class RabbitMqConsumerService : BackgroundService
 {
     /// <summary>Which dispatcher a delivery belongs to.</summary>
-    private enum DispatchTarget
+    internal enum DispatchTarget
     {
         Legacy,
         Batch,
@@ -42,23 +47,46 @@ public class RabbitMqConsumerService : BackgroundService
         _logger = logger;
     }
 
+    /// <summary>
+    /// Maps the settings to a connection factory. A non-empty <see cref="RabbitMqSettings.Uri"/>
+    /// overrides host, port, user and password; <c>amqps</c> turns TLS on.
+    /// </summary>
+    internal static ConnectionFactory CreateConnectionFactory(RabbitMqSettings settings)
+    {
+        var factory = new ConnectionFactory
+        {
+            HostName = settings.HostName,
+            Port = settings.Port,
+            UserName = settings.UserName,
+            Password = settings.Password,
+            ClientProvidedName = settings.ClientProvidedName,
+            AutomaticRecoveryEnabled = true,
+            TopologyRecoveryEnabled = true
+        };
+
+        if (!string.IsNullOrWhiteSpace(settings.Uri))
+        {
+            factory.Uri = new Uri(settings.Uri);
+            // The client's amqps parsing accepts a certificate for another host name; verify it.
+            factory.Ssl.AcceptablePolicyErrors = SslPolicyErrors.None;
+        }
+
+        return factory;
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Outside the retry loop: a malformed Uri fails the start instead of retrying forever.
+        var factory = CreateConnectionFactory(_settings);
+
         IConnection? connection = null;
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                var factory = new ConnectionFactory
-                {
-                    HostName = _settings.HostName,
-                    Port = _settings.Port,
-                    UserName = _settings.UserName,
-                    Password = _settings.Password
-                };
-
                 connection = await factory.CreateConnectionAsync(stoppingToken);
-                _logger.LogInformation("Connected to RabbitMQ at {Host}:{Port}", _settings.HostName, _settings.Port);
+                _logger.LogInformation("Connected to RabbitMQ at {Host}:{Port} as {ClientName}",
+                    factory.HostName, factory.Port, factory.ClientProvidedName);
                 break;
             }
             catch (Exception ex)
@@ -70,8 +98,50 @@ public class RabbitMqConsumerService : BackgroundService
 
         if (connection is null) return;
 
-        var channel = await connection.CreateChannelAsync(cancellationToken: stoppingToken);
+        var channels = new List<IChannel>();
+        try
+        {
+            await using (var setup = await connection.CreateChannelAsync(cancellationToken: stoppingToken))
+            {
+                await DeclareTopologyAsync(setup, stoppingToken);
+                await setup.CloseAsync(stoppingToken);
+            }
 
+            channels.Add(await ConsumeAsync(connection, _settings.QueueName, DispatchTarget.Legacy, stoppingToken));
+            channels.Add(await ConsumeAsync(connection, _settings.QueueNameV2, DispatchTarget.Batch, stoppingToken));
+            channels.Add(await ConsumeAsync(connection, _settings.GameAnalyzedQueue, DispatchTarget.GameAnalyzed, stoppingToken));
+
+            _logger.LogInformation(
+                "Listening on queues '{Legacy}' (single), '{V2}' (batch) and '{Analyzed}' (game.analyzed), one channel each; DLX='{DLX}'",
+                _settings.QueueName, _settings.QueueNameV2, _settings.GameAnalyzedQueue,
+                _settings.DeadLetterExchange);
+
+            await Task.Delay(Timeout.Infinite, stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            _logger.LogInformation("RabbitMQ consumer stopping...");
+        }
+        finally
+        {
+            // Not the stopping token: it is already cancelled, and the close must still run.
+            try
+            {
+                await connection.CloseAsync(TimeSpan.FromSeconds(10));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "RabbitMQ connection did not close cleanly");
+            }
+
+            foreach (var channel in channels)
+                await channel.DisposeAsync();
+            await connection.DisposeAsync();
+        }
+    }
+
+    private async Task DeclareTopologyAsync(IChannel channel, CancellationToken stoppingToken)
+    {
         // ── Primary exchange ───────────────────────────────────────────────
         await channel.ExchangeDeclareAsync(
             exchange: _settings.ExchangeName,
@@ -150,63 +220,37 @@ public class RabbitMqConsumerService : BackgroundService
             exchange: _settings.ExchangeName,
             routingKey: "game.analyzed.#",
             cancellationToken: stoppingToken);
+    }
+
+    /// <summary>
+    /// Opens a channel for one queue and starts its consumer. The client runs a channel's
+    /// handlers one at a time, so on one shared channel a slow handler stalled every queue.
+    /// </summary>
+    private async Task<IChannel> ConsumeAsync(
+        IConnection connection, string queue, DispatchTarget target, CancellationToken stoppingToken)
+    {
+        var channel = await connection.CreateChannelAsync(
+            new CreateChannelOptions(
+                publisherConfirmationsEnabled: false,
+                publisherConfirmationTrackingEnabled: false,
+                consumerDispatchConcurrency: 1),
+            stoppingToken);
 
         await channel.BasicQosAsync(prefetchSize: 0, prefetchCount: 1, global: false, cancellationToken: stoppingToken);
 
-        // ── Legacy consumer ────────────────────────────────────────────────
-        var legacyConsumer = new AsyncEventingBasicConsumer(channel);
-        legacyConsumer.ReceivedAsync += (_, ea) =>
-            HandleAsync(channel, ea, DispatchTarget.Legacy, stoppingToken);
+        var consumer = new AsyncEventingBasicConsumer(channel);
+        consumer.ReceivedAsync += (_, ea) => HandleAsync(channel, ea, target, stoppingToken);
 
         await channel.BasicConsumeAsync(
-            queue: _settings.QueueName,
+            queue: queue,
             autoAck: false,
-            consumer: legacyConsumer,
+            consumer: consumer,
             cancellationToken: stoppingToken);
 
-        // ── V2 (batch) consumer ────────────────────────────────────────────
-        var batchConsumer = new AsyncEventingBasicConsumer(channel);
-        batchConsumer.ReceivedAsync += (_, ea) =>
-            HandleAsync(channel, ea, DispatchTarget.Batch, stoppingToken);
-
-        await channel.BasicConsumeAsync(
-            queue: _settings.QueueNameV2,
-            autoAck: false,
-            consumer: batchConsumer,
-            cancellationToken: stoppingToken);
-
-        // ── game.analyzed consumer ─────────────────────────────────────────
-        var gameAnalyzedConsumer = new AsyncEventingBasicConsumer(channel);
-        gameAnalyzedConsumer.ReceivedAsync += (_, ea) =>
-            HandleAsync(channel, ea, DispatchTarget.GameAnalyzed, stoppingToken);
-
-        await channel.BasicConsumeAsync(
-            queue: _settings.GameAnalyzedQueue,
-            autoAck: false,
-            consumer: gameAnalyzedConsumer,
-            cancellationToken: stoppingToken);
-
-        _logger.LogInformation(
-            "Listening on queues '{Legacy}' (single), '{V2}' (batch) and '{Analyzed}' (game.analyzed); DLX='{DLX}'",
-            _settings.QueueName, _settings.QueueNameV2, _settings.GameAnalyzedQueue,
-            _settings.DeadLetterExchange);
-
-        try
-        {
-            await Task.Delay(Timeout.Infinite, stoppingToken);
-        }
-        catch (OperationCanceledException)
-        {
-            _logger.LogInformation("RabbitMQ consumer stopping...");
-        }
-        finally
-        {
-            await channel.CloseAsync(stoppingToken);
-            await connection.CloseAsync(stoppingToken);
-        }
+        return channel;
     }
 
-    private async Task HandleAsync(
+    internal async Task HandleAsync(
         IChannel channel,
         BasicDeliverEventArgs ea,
         DispatchTarget target,
@@ -219,6 +263,7 @@ public class RabbitMqConsumerService : BackgroundService
             "Received message on routingKey={RoutingKey} (target={Target}) size={Size}",
             ea.RoutingKey, target, body.Length);
 
+        // Ack and nack take CancellationToken.None: the stopping token must not skip them.
         try
         {
             using var scope = _serviceProvider.CreateScope();
@@ -238,14 +283,21 @@ public class RabbitMqConsumerService : BackgroundService
                     break;
             }
 
-            await channel.BasicAckAsync(ea.DeliveryTag, multiple: false, cancellationToken: stoppingToken);
+            await channel.BasicAckAsync(ea.DeliveryTag, multiple: false, cancellationToken: CancellationToken.None);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Shutdown, not a bad message: a nack would dead-letter it. Unacked, the broker
+            // redelivers it when the connection closes.
+            _logger.LogInformation(
+                "Shutdown interrupted message on {RoutingKey}; leaving it for redelivery", ea.RoutingKey);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to process message on {RoutingKey}; nacking to DLX", ea.RoutingKey);
             await channel.BasicNackAsync(
                 ea.DeliveryTag, multiple: false, requeue: false,
-                cancellationToken: stoppingToken);
+                cancellationToken: CancellationToken.None);
         }
     }
 }
