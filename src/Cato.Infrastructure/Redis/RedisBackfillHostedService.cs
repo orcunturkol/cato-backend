@@ -13,8 +13,10 @@ namespace Cato.Infrastructure.Redis;
 /// existing scores are preserved (so orchestrator progress is not reset on
 /// restart). Also self-heals after a Redis wipe or snapshot restore.
 /// Failures are logged but don't block startup — Redis is best-effort infra.
+/// A BackgroundService, so the full scans run after the host has started: as an
+/// IHostedService StartAsync they held Kestrel back and /health/live unanswered.
 /// </summary>
-public class RedisBackfillHostedService : IHostedService
+public class RedisBackfillHostedService : BackgroundService
 {
     private readonly IServiceProvider _services;
     private readonly IConnectionMultiplexer _redis;
@@ -30,10 +32,10 @@ public class RedisBackfillHostedService : IHostedService
         _logger = logger;
     }
 
-    public async Task StartAsync(CancellationToken ct)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await BackfillAppIdsAsync(ct);
-        await BackfillSteamIdRotationAsync(ct);
+        await BackfillAppIdsAsync(stoppingToken);
+        await BackfillSteamIdRotationAsync(stoppingToken);
     }
 
     private async Task BackfillAppIdsAsync(CancellationToken ct)
@@ -139,6 +141,4 @@ public class RedisBackfillHostedService : IHostedService
             _logger.LogWarning(ex, "redis_steamid_backfill_failed; profile watcher may see an empty rotation until next restart");
         }
     }
-
-    public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
 }
