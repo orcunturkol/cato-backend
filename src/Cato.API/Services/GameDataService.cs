@@ -727,6 +727,37 @@ public class GameDataService : IGameDataService
         }).ToList();
     }
 
+    public async Task<NextFestDto> GetNextFestAsync(CancellationToken ct = default)
+    {
+        var rows = await _db.SteamworksNextFestStats.AsNoTracking()
+            .Select(s => new { s.FestKey, s.EventStart, s.EventEnd, s.AppId, s.GameId, Name = s.Game.Name, s.DemoAppId,
+                s.SnapshotEnd, s.DemoPlayerCount, s.WishlistCount, s.PlayerWishlistCount })
+            .ToListAsync(ct);
+
+        var fests = rows
+            .GroupBy(r => r.FestKey)
+            .Select(fest =>
+            {
+                var games = fest.GroupBy(r => r.AppId)
+                    .Select(g =>
+                    {
+                        var days = g.OrderBy(r => r.SnapshotEnd).ToList();
+                        var last = days[^1];
+                        return new NextFestDto.Game(g.Key, last.GameId, last.Name, last.DemoAppId,
+                            last.DemoPlayerCount, last.WishlistCount, last.PlayerWishlistCount, last.SnapshotEnd,
+                            days.Select(d => new NextFestDto.Day(d.SnapshotEnd, d.DemoPlayerCount, d.WishlistCount, d.PlayerWishlistCount)).ToList());
+                    })
+                    .OrderByDescending(g => g.Wishlists)
+                    .ThenBy(g => g.AppId)
+                    .ToList();
+                var slug = fest.Key.StartsWith("sale_nextfest_", StringComparison.Ordinal) ? fest.Key["sale_nextfest_".Length..] : fest.Key;
+                return new NextFestDto.Fest(fest.Key, slug, fest.Min(r => r.EventStart), fest.Max(r => r.EventEnd), games);
+            })
+            .OrderByDescending(f => f.EventStart ?? f.Games.Max(g => g.LastSnapshot))
+            .ToList();
+        return new NextFestDto(fests);
+    }
+
     public async Task<List<GroupMemberCountDto>> GetGroupMemberCountAsync(GetGroupMemberCountQuery request, CancellationToken ct = default)
     {
         return await _db.GroupMemberCountSnapshots

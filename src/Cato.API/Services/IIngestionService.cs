@@ -38,6 +38,7 @@ public interface IIngestionService
     Task<ItemIngestResult> IngestSteamworksPlayersItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default);
     Task<ItemIngestResult> IngestSteamworksDemoDownloadsItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default);
     Task<ItemIngestResult> IngestSteamworksBundleSalesItemAsync(int bundleId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default);
+    Task<ItemIngestResult> IngestSteamworksNextFestItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default);
 }
 
 public readonly record struct ItemIngestResult(int Processed, int Inserted, int Updated, int Failed);
