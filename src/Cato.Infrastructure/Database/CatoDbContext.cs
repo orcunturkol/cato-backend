@@ -37,6 +37,7 @@ public class CatoDbContext : DbContext
     public DbSet<SteamCountry> SteamCountries => Set<SteamCountry>();
     public DbSet<SteamworksBundle> SteamworksBundles => Set<SteamworksBundle>();
     public DbSet<SteamTrafficBreakdown> SteamTrafficBreakdowns => Set<SteamTrafficBreakdown>();
+    public DbSet<SteamworksNavStat> SteamworksNavStats => Set<SteamworksNavStat>();
     public DbSet<GameNews> GameNews => Set<GameNews>();
     public DbSet<ActiveUsersHistory> ActiveUsersHistories => Set<ActiveUsersHistory>();
     public DbSet<DemoDownload> DemoDownloads => Set<DemoDownload>();
@@ -473,6 +474,20 @@ public class CatoDbContext : DbContext
                 .WithMany(g => g.TrafficBreakdowns)
                 .HasForeignKey(e => e.GameId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── SteamworksNavStat ──
+        modelBuilder.Entity<SteamworksNavStat>(entity =>
+        {
+            entity.ToTable("steamworks_nav_stat");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.AppName).HasMaxLength(300);
+            entity.Property(e => e.Attribution).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.Region).HasMaxLength(50).IsRequired();
+
+            entity.HasIndex(e => new { e.PublisherId, e.PeriodStart, e.PeriodEnd, e.Attribution, e.Region, e.AppId })
+                .IsUnique()
+                .HasDatabaseName("unique_steamworks_nav_stat");
         });
 
         // ── AppKeyValueSnapshot ──
@@ -1173,6 +1188,19 @@ public class CatoDbContext : DbContext
         }
 
         foreach (var entry in ChangeTracker.Entries<SteamworksWishlistCountry>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<SteamworksNavStat>())
         {
             if (entry.State == EntityState.Added)
             {

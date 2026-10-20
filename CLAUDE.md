@@ -170,6 +170,18 @@ only periods that lie entirely inside it. Batch source `steamworks_store_traffic
 upload (`POST /api/ingestion/store-traffic`) shares the upsert and files rows under the
 upload day.
 
+### Steamworks Nav Stats (`steamworks_nav_stat`)
+
+The publisher page `/pub/navstats/{publisher}` (partner.steamgames.com) gives one CSV row
+per product (demos and playtests too) for a range and a filter set. Rows are keyed by
+publisher, period, `Attribution` (`all`, then its parts `store`, `steamworks`, `external`),
+`Region` (only `All Regions` so far) and **app id, not game**: CATO has no game row for most
+demos, so nothing is stubbed. Periods follow the store traffic rules (daily rows, monthly
+history, never overlapping). A product's `all` visits equal its store traffic visits plus
+bot visits; the rows add up to slightly less than the page headline, which counts products
+the CSV leaves out. Batch source `steamworks_nav_stats`; the envelope's `app_id` carries the
+publisher id. Rows missing from a later export are kept. Read side: `GET /api/nav-stats`.
+
 ### Steamworks wishlist reports (owned games)
 
 `steamworks_wishlist_daily` (unique `GameId, DateLocal`) and `steamworks_wishlist_cohort`
