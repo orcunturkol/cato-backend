@@ -212,6 +212,14 @@ public sealed class JobDispatchService
     {
         await TouchAgentAsync(group, agentId, host, null, nowUtc, setDispatch: false, ct);
 
+        // An agent claims only when it is idle. A run it still holds died with its process
+        // (out of memory, kill -9): close it now, or the group waits for the time limit.
+        await _db.JobDispatches
+            .Where(d => d.ClaimedBy == agentId && d.Status == JobDispatchStatus.Claimed)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(d => d.Status, JobDispatchStatus.Lost)
+                .SetProperty(d => d.Note, "the agent claimed again, so this run had stopped without a finish"), ct);
+
         var busy = await _db.JobDispatches.AnyAsync(
             d => d.AgentGroup == group && d.Status == JobDispatchStatus.Claimed, ct);
         if (busy) return null;
@@ -249,8 +257,15 @@ public sealed class JobDispatchService
         return null;
     }
 
-    public Task HeartbeatAsync(string group, string agentId, string? host, Guid? dispatchId, DateTime nowUtc, CancellationToken ct) =>
-        TouchAgentAsync(group, agentId, host, dispatchId, nowUtc, setDispatch: true, ct);
+    public async Task HeartbeatAsync(string group, string agentId, string? host, Guid? dispatchId, DateTime nowUtc, CancellationToken ct)
+    {
+        // A heartbeat sent just before the finish can name a run that already ended: ignore that run.
+        var current = dispatchId is { } id && await _db.JobDispatches.AnyAsync(
+            d => d.Id == id && d.ClaimedBy == agentId && d.Status == JobDispatchStatus.Claimed, ct)
+            ? dispatchId
+            : null;
+        await TouchAgentAsync(group, agentId, host, current, nowUtc, setDispatch: true, ct);
+    }
 
     public async Task<FinishOutcome> FinishAsync(
         Guid dispatchId, string agentId, int exitCode, string? note, DateTime nowUtc, CancellationToken ct)
