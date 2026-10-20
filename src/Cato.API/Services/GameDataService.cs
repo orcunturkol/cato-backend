@@ -468,11 +468,9 @@ public class GameDataService : IGameDataService
             .ToDictionary(g => g.Key, g => g.MaxBy(n => n.PeriodEnd)!.AppName);
 
         var appIds = byApp.Select(a => a.AppId).Distinct().ToList();
-        var inCato = (await _db.Games.AsNoTracking()
+        var gameIds = await _db.Games.AsNoTracking()
             .Where(g => appIds.Contains(g.AppId))
-            .Select(g => g.AppId)
-            .ToListAsync(ct))
-            .ToHashSet();
+            .ToDictionaryAsync(g => g.AppId, g => g.Id, ct);
 
         var cells = byApp.ToDictionary(a => (a.AppId, a.Attribution), a => (a.Impressions, a.Visits));
         (long Impressions, long Visits) Cell(int appId, string attribution)
@@ -486,7 +484,7 @@ public class GameDataService : IGameDataService
                 var p = Cell(id, "steamworks");
                 var x = Cell(id, "external");
                 return new NavStatsProductDto(
-                    id, names.GetValueOrDefault(id), inCato.Contains(id),
+                    id, names.GetValueOrDefault(id), gameIds.TryGetValue(id, out var gameId) ? gameId : null,
                     a.Impressions, a.Visits, s.Impressions, s.Visits, p.Impressions, p.Visits, x.Impressions, x.Visits);
             })
             .OrderByDescending(p => p.Visits)

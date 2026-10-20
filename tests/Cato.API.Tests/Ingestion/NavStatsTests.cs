@@ -34,6 +34,7 @@ public class NavStatsTests : IDisposable
     private CatoDbContext NewContext() => new(_options);
 
     private const int Publisher = 216530;
+    private static readonly Guid ChefGameId = Guid.NewGuid();
 
     private static object Row(int appId, string? name, long impressions, long visits) =>
         new { app_id = appId, name, impressions, visits };
@@ -117,7 +118,7 @@ public class NavStatsTests : IDisposable
     {
         await using (var seed = NewContext())
         {
-            seed.Games.Add(new Game { Id = Guid.NewGuid(), AppId = 2390230, Name = "The Chef's Shift", GameType = "Owned" });
+            seed.Games.Add(new Game { Id = ChefGameId, AppId = 2390230, Name = "The Chef's Shift", GameType = "Owned" });
             await seed.SaveChangesAsync();
         }
         await IngestAsync(Item("2026-09-01", "2026-09-30", "all", Row(2390230, "The Chef's Shift", 9_000_000, 150_000)));
@@ -143,10 +144,10 @@ public class NavStatsTests : IDisposable
 
         Assert.Equal([2390230, 2361460, 3028820], dto.Products.Select(p => p.AppId).ToList());
         var chef = dto.Products[0];
-        Assert.True(chef.InCato);
+        Assert.Equal(ChefGameId, chef.GameId);
         Assert.Equal((1_429_526L, 22_202L, 695_533L, 7_170L, 30_000L, 2_500L),
             (chef.Impressions, chef.Visits, chef.StoreImpressions, chef.StoreVisits, chef.ExternalImpressions, chef.ExternalVisits));
-        Assert.False(dto.Products[2].InCato);
+        Assert.Null(dto.Products[2].GameId);
         Assert.Equal("Ominous Stew Playtest", dto.Products[2].Name);
     }
 

@@ -32,8 +32,8 @@ public record NavStatsPeriodDto(DateOnly PeriodStart, DateOnly PeriodEnd, long I
 public record NavStatsProductDto(
     int AppId,
     string? Name,
-    // CATO has a game row for this app (demos and playtests usually not).
-    bool InCato,
+    // The CATO game for this app; null for most demos and playtests.
+    Guid? GameId,
     long Impressions,
     long Visits,
     long StoreImpressions,
