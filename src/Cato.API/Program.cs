@@ -107,6 +107,11 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<Cato.API.Services.JobRuns.IJobCatalog, Cato.API.Services.JobRuns.JobCatalog>();
 builder.Services.AddScoped<Cato.API.Services.JobRuns.JobRunStatusResolver>();
 
+// ── Job dispatch (scheduled_job → job_dispatch → agents; the dispatcher loop runs in the worker) ──
+builder.Services.Configure<Cato.API.Services.Dispatch.JobDispatcherSettings>(
+    builder.Configuration.GetSection(Cato.API.Services.Dispatch.JobDispatcherSettings.SectionName));
+builder.Services.AddScoped<Cato.API.Services.Dispatch.JobDispatchService>();
+
 // ── Application Services ──
 builder.Services.AddScoped<ISteamGameEnrichmentService, SteamGameEnrichmentService>();
 builder.Services.AddScoped<Cato.API.Services.IGameService, Cato.API.Services.GameService>();

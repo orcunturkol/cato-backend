@@ -57,6 +57,8 @@ public class CatoDbContext : DbContext
     public DbSet<JobScheduleSnapshot> JobScheduleSnapshots => Set<JobScheduleSnapshot>();
     public DbSet<ScheduledJob> ScheduledJobs => Set<ScheduledJob>();
     public DbSet<ScheduledJobChange> ScheduledJobChanges => Set<ScheduledJobChange>();
+    public DbSet<JobDispatch> JobDispatches => Set<JobDispatch>();
+    public DbSet<JobAgent> JobAgents => Set<JobAgent>();
     public DbSet<SteamSpecialEvent> SteamSpecialEvents => Set<SteamSpecialEvent>();
     public DbSet<SteamSpecialEventGame> SteamSpecialEventGames => Set<SteamSpecialEventGame>();
 
@@ -729,6 +731,38 @@ public class CatoDbContext : DbContext
             entity.HasIndex(e => new { e.JobName, e.ChangedAt })
                 .IsDescending(false, true)
                 .HasDatabaseName("idx_scheduled_job_change_job_changed");
+        });
+
+        // ── JobDispatch ──
+        modelBuilder.Entity<JobDispatch>(entity =>
+        {
+            entity.ToTable("job_dispatch");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.JobName).HasMaxLength(150).IsRequired();
+            entity.Property(e => e.AgentGroup).HasMaxLength(30).IsRequired();
+            entity.Property(e => e.Kind).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.RequestedBy).HasMaxLength(100);
+            entity.Property(e => e.Status).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.ClaimedBy).HasMaxLength(150);
+            entity.Property(e => e.Note).HasMaxLength(500);
+
+            // One row per slot: a dispatcher restart cannot dispatch the same slot twice.
+            entity.HasIndex(e => new { e.JobName, e.ScheduledAt }).IsUnique()
+                .HasDatabaseName("ux_job_dispatch_job_slot");
+            entity.HasIndex(e => new { e.AgentGroup, e.Status, e.ScheduledAt })
+                .HasDatabaseName("idx_job_dispatch_group_status");
+        });
+
+        // ── JobAgent ──
+        modelBuilder.Entity<JobAgent>(entity =>
+        {
+            entity.ToTable("job_agent");
+            entity.HasKey(e => e.AgentId);
+
+            entity.Property(e => e.AgentId).HasMaxLength(150);
+            entity.Property(e => e.AgentGroup).HasMaxLength(30).IsRequired();
+            entity.Property(e => e.Host).HasMaxLength(255);
         });
 
         // ── MarketingTarget ──
