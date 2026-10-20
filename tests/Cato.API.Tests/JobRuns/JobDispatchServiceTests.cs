@@ -200,6 +200,44 @@ public class JobDispatchServiceTests : JobRunsDbTestBase
     }
 
     [Fact]
+    public async Task An_agent_that_claims_again_closes_the_run_it_lost()
+    {
+        Seed(Job("ccu", "*/10 * * * *"), Job("financial", "15 15 * * *"));
+        await using var db = NewContext();
+        var service = Service(db);
+        await service.DispatchDueAsync(Now, default);
+
+        var first = await service.ClaimAsync(JobAgentGroups.Light, "light@a", "a", Now, default);
+        // The agent was killed during the run and restarted: no finish came.
+        var second = await service.ClaimAsync(JobAgentGroups.Light, "light@a", "a", Now.AddMinutes(1), default);
+
+        Assert.NotNull(second);
+        Assert.NotEqual(first!.DispatchId, second.DispatchId);
+        await using var check = NewContext();
+        var lost = check.JobDispatches.Single(d => d.Id == first.DispatchId);
+        Assert.Equal(JobDispatchStatus.Lost, lost.Status);
+        Assert.Contains("claimed again", lost.Note);
+    }
+
+    [Fact]
+    public async Task A_late_heartbeat_for_a_finished_run_does_not_show_it_as_current()
+    {
+        Seed(Job("ccu", "*/10 * * * *"));
+        await using var db = NewContext();
+        var service = Service(db);
+        await service.DispatchDueAsync(Now, default);
+        var run = await service.ClaimAsync(JobAgentGroups.Light, "light@a", "a", Now, default);
+        await service.HeartbeatAsync(JobAgentGroups.Light, "light@a", "a", run!.DispatchId, Now, default);
+        Assert.Equal(run.DispatchId, db.JobAgents.Single().CurrentDispatchId);
+
+        await service.FinishAsync(run.DispatchId, "light@a", 0, null, Now.AddMinutes(1), default);
+        await service.HeartbeatAsync(JobAgentGroups.Light, "light@a", "a", run.DispatchId, Now.AddMinutes(1), default);
+
+        await using var check = NewContext();
+        Assert.Null(check.JobAgents.Single().CurrentDispatchId);
+    }
+
+    [Fact]
     public void Newest_slot_reads_several_expressions()
     {
         var slot = JobDispatchService.NewestSlot("0 10 * * * | 0 15 * * *", Now.AddDays(-1), Now);
