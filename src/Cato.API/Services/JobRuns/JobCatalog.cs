@@ -81,7 +81,39 @@ public sealed class JobCatalog : IJobCatalog
             jobs.AddRange(FromEntries(snapshot.Producer, entries));
         }
 
+        // A job the dispatcher starts takes its schedule from scheduled_job, not the crontab.
+        var dispatched = await _db.ScheduledJobs.AsNoTracking()
+            .Where(j => j.ManagedBy == ScheduledJobManagedBy.Dispatcher)
+            .OrderBy(j => j.Name)
+            .ToListAsync(ct);
+        if (dispatched.Count > 0)
+        {
+            var names = dispatched.Select(j => j.Name).ToHashSet();
+            jobs.RemoveAll(j => j.Producer == JobRunProducer.ExternalCollector && names.Contains(j.JobName));
+            jobs.AddRange(dispatched.Select(FromScheduledJob));
+            sources.Add(new JobScheduleSourceDto(
+                JobRunProducer.ExternalCollector, "dispatcher", null,
+                DateTime.SpecifyKind(dispatched.Max(j => j.UpdatedAt), DateTimeKind.Utc), dispatched.Count));
+        }
+
         return new JobCatalogSnapshot(jobs, sources);
+    }
+
+    public static JobDefinition FromScheduledJob(ScheduledJob job)
+    {
+        var expressions = ScheduledJobRules.SplitCron(job.Cron);
+        return new JobDefinition(
+            job.Name,
+            JobRunProducer.ExternalCollector,
+            job.Label,
+            expressions.Count > 0 ? JobScheduleKind.Cron : JobScheduleKind.None,
+            expressions,
+            IntervalMinutes: null,
+            job.Enabled,
+            job.Enabled ? null : "paused on the Jobs page",
+            job.TimeoutSeconds,
+            JobRunRules.ForTimeout(job.TimeoutSeconds),
+            TimeSpan.Zero);
     }
 
     /// <summary>Backend watchers. Intervals and switches mirror each watcher's ExecuteAsync.</summary>
