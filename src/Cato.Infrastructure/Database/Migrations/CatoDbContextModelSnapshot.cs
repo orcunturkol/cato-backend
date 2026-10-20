@@ -398,6 +398,9 @@ namespace Cato.Infrastructure.Database.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<DateOnly>("PeriodEnd")
+                        .HasColumnType("date");
+
                     b.Property<decimal?>("SharePercent")
                         .HasColumnType("decimal(6,3)");
 
@@ -407,12 +410,15 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.Property<long>("TotalDownloads")
                         .HasColumnType("bigint");
 
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("Id");
 
                     b.HasIndex("SnapshotDate")
                         .HasDatabaseName("idx_demo_download_snapshot_date");
 
-                    b.HasIndex("GameId", "SnapshotDate", "GeoType", "GeoName")
+                    b.HasIndex("GameId", "SnapshotDate", "PeriodEnd", "GeoType", "GeoName")
                         .IsUnique()
                         .HasDatabaseName("unique_demo_download");
 

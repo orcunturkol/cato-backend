@@ -195,6 +195,16 @@ details page (median time played, lifetime unique users) in `steamworks_app_deta
 keyed by `AppId, SnapshotDate`; a demo row carries the main game's `GameId`. A part sent
 as null leaves its table alone. Read side: `GET /api/games/{appId}/players`.
 
+### Steamworks demo downloads (`demo_download`)
+
+The demo's `nav_regions.php?csv=1&downloads=1` CSV (partner.steampowered.com) has no date
+column: region and country totals for the requested range. Rows are keyed by period,
+`SnapshotDate`..`PeriodEnd`, like store traffic (daily rows, monthly history, never
+overlapping), and filed under the **main game** with `DemoAppId`. Batch source
+`steamworks_demo_downloads`; the collector finds the demos in `steamworks_app_details`.
+The manual upload (`POST /api/ingestion/demo-downloads`) files its rows under the upload
+day (`PeriodEnd = SnapshotDate`). Read side: `GET /api/games/{appId}/demo-downloads`.
+
 ### Steamworks wishlist reports (owned games)
 
 `steamworks_wishlist_daily` (unique `GameId, DateLocal`) and `steamworks_wishlist_cohort`

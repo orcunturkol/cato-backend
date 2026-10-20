@@ -801,7 +801,7 @@ public class CatoDbContext : DbContext
             entity.Property(e => e.GeoName).HasMaxLength(200).IsRequired();
             entity.Property(e => e.SharePercent).HasColumnType("decimal(6,3)");
 
-            entity.HasIndex(e => new { e.GameId, e.SnapshotDate, e.GeoType, e.GeoName })
+            entity.HasIndex(e => new { e.GameId, e.SnapshotDate, e.PeriodEnd, e.GeoType, e.GeoName })
                 .IsUnique()
                 .HasDatabaseName("unique_demo_download");
             entity.HasIndex(e => e.SnapshotDate).HasDatabaseName("idx_demo_download_snapshot_date");
@@ -1320,7 +1320,14 @@ public class CatoDbContext : DbContext
         foreach (var entry in ChangeTracker.Entries<DemoDownload>())
         {
             if (entry.State == EntityState.Added)
+            {
                 entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
         }
 
         foreach (var entry in ChangeTracker.Entries<AppKeyValueSnapshot>())

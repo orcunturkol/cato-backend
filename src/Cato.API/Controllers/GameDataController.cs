@@ -158,6 +158,18 @@ public class GameDataController : ControllerBase
         return Results.Ok(result);
     }
 
+    /// <summary>Get the game's demo downloads by region and country over a date range.</summary>
+    [HttpGet("demo-downloads")]
+    [ProducesResponseType(typeof(DemoDownloadsDto), StatusCodes.Status200OK)]
+    public async Task<IResult> GetDemoDownloads(
+        int appId,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to)
+    {
+        var result = await _mediator.Send(new GetDemoDownloadsQuery(appId, from, to));
+        return Results.Ok(result);
+    }
+
     /// <summary>Get group member count history for a game.</summary>
     [HttpGet("group-members")]
     [ProducesResponseType(typeof(List<GroupMemberCountDto>), StatusCodes.Status200OK)]
