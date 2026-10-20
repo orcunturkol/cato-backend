@@ -38,6 +38,8 @@ public class CatoDbContext : DbContext
     public DbSet<SteamworksBundle> SteamworksBundles => Set<SteamworksBundle>();
     public DbSet<SteamTrafficBreakdown> SteamTrafficBreakdowns => Set<SteamTrafficBreakdown>();
     public DbSet<SteamworksNavStat> SteamworksNavStats => Set<SteamworksNavStat>();
+    public DbSet<SteamworksPlayerCountry> SteamworksPlayerCountries => Set<SteamworksPlayerCountry>();
+    public DbSet<SteamworksAppDetails> SteamworksAppDetails => Set<SteamworksAppDetails>();
     public DbSet<GameNews> GameNews => Set<GameNews>();
     public DbSet<ActiveUsersHistory> ActiveUsersHistories => Set<ActiveUsersHistory>();
     public DbSet<DemoDownload> DemoDownloads => Set<DemoDownload>();
@@ -488,6 +490,43 @@ public class CatoDbContext : DbContext
             entity.HasIndex(e => new { e.PublisherId, e.PeriodStart, e.PeriodEnd, e.Attribution, e.Region, e.AppId })
                 .IsUnique()
                 .HasDatabaseName("unique_steamworks_nav_stat");
+        });
+
+        // ── SteamworksPlayerCountry ──
+        modelBuilder.Entity<SteamworksPlayerCountry>(entity =>
+        {
+            entity.ToTable("steamworks_player_country");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.CountryCode).HasMaxLength(8).IsRequired();
+            entity.Property(e => e.CountryName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.SharePercent).HasColumnType("decimal(6,3)");
+
+            entity.HasIndex(e => new { e.GameId, e.SnapshotDate, e.CountryCode })
+                .IsUnique()
+                .HasDatabaseName("unique_steamworks_player_country");
+
+            entity.HasOne(e => e.Game)
+                .WithMany()
+                .HasForeignKey(e => e.GameId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── SteamworksAppDetails ──
+        modelBuilder.Entity<SteamworksAppDetails>(entity =>
+        {
+            entity.ToTable("steamworks_app_details");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.MedianPlaytimeText).HasMaxLength(100);
+
+            entity.HasIndex(e => new { e.AppId, e.SnapshotDate })
+                .IsUnique()
+                .HasDatabaseName("unique_steamworks_app_details");
+            entity.HasIndex(e => e.GameId).HasDatabaseName("idx_steamworks_app_details_game");
+
+            entity.HasOne(e => e.Game)
+                .WithMany()
+                .HasForeignKey(e => e.GameId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // ── AppKeyValueSnapshot ──
@@ -1242,7 +1281,40 @@ public class CatoDbContext : DbContext
         foreach (var entry in ChangeTracker.Entries<ActiveUsersHistory>())
         {
             if (entry.State == EntityState.Added)
+            {
                 entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<SteamworksPlayerCountry>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<SteamworksAppDetails>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
         }
 
         foreach (var entry in ChangeTracker.Entries<DemoDownload>())

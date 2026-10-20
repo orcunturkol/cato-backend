@@ -502,6 +502,56 @@ public class GameDataService : IGameDataService
         return new NavStatsDto(publisherId, firstDate, lastDate, firstDailyDate, totals, periods, products);
     }
 
+    public async Task<PlayersDto> GetPlayersAsync(GetPlayersQuery request, CancellationToken ct = default)
+    {
+        var gameId = await _db.Games.AsNoTracking()
+            .Where(g => g.AppId == request.AppId)
+            .Select(g => (Guid?)g.Id)
+            .FirstOrDefaultAsync(ct);
+        if (gameId is null)
+            return new PlayersDto([], null, [], []);
+
+        var days = (await _db.ActiveUsersHistories.AsNoTracking()
+            .Where(a => a.GameId == gameId)
+            .Select(a => new { a.RecordedAt, a.Dau, a.PeakConcurrentUsers })
+            .ToListAsync(ct))
+            .OrderBy(a => a.RecordedAt)
+            .Select(a => new PlayerDayDto(DateOnly.FromDateTime(a.RecordedAt), a.Dau, a.PeakConcurrentUsers))
+            .ToList();
+
+        var countriesDate = await _db.SteamworksPlayerCountries.AsNoTracking()
+            .Where(c => c.GameId == gameId)
+            .MaxAsync(c => (DateOnly?)c.SnapshotDate, ct);
+        var countries = new List<PlayerCountryDto>();
+        if (countriesDate is { } date)
+        {
+            var rows = await _db.SteamworksPlayerCountries.AsNoTracking()
+                .Where(c => c.GameId == gameId && c.SnapshotDate == date)
+                .ToListAsync(ct);
+            var codes = rows.Select(r => r.CountryCode).ToList();
+            var regions = await _db.SteamCountries.AsNoTracking()
+                .Where(c => codes.Contains(c.CountryCode))
+                .ToDictionaryAsync(c => c.CountryCode, c => c.Region, ct);
+            countries = rows
+                .Select(r => new PlayerCountryDto(r.CountryCode, r.CountryName, regions.GetValueOrDefault(r.CountryCode) ?? string.Empty, r.SharePercent))
+                .OrderByDescending(c => c.SharePercent)
+                .ThenBy(c => c.CountryCode, StringComparer.Ordinal)
+                .ToList();
+        }
+
+        // The latest snapshot of each app (the game and its demo).
+        var details = (await _db.SteamworksAppDetails.AsNoTracking()
+            .Where(d => d.GameId == gameId)
+            .ToListAsync(ct))
+            .GroupBy(d => d.AppId)
+            .Select(g => g.MaxBy(d => d.SnapshotDate)!)
+            .OrderBy(d => d.IsDemo)
+            .Select(d => new AppDetailsDto(d.AppId, d.IsDemo, d.SnapshotDate, d.MedianPlaytimeMinutes, d.MedianPlaytimeText, d.LifetimeUniqueUsers))
+            .ToList();
+
+        return new PlayersDto(days, countriesDate, countries, details);
+    }
+
     public async Task<List<GroupMemberCountDto>> GetGroupMemberCountAsync(GetGroupMemberCountQuery request, CancellationToken ct = default)
     {
         return await _db.GroupMemberCountSnapshots
