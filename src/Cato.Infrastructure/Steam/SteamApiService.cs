@@ -460,4 +460,97 @@ public class SteamApiService : ISteamApiService
         !string.IsNullOrEmpty(body)
         && (body.Contains("Access is denied", StringComparison.OrdinalIgnoreCase)
             || body.Contains("verify your", StringComparison.OrdinalIgnoreCase));
+
+    public async Task<List<SteamAchievementPercent>?> GetGlobalAchievementPercentagesAsync(int appId, CancellationToken ct = default)
+    {
+        var url = $"https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/?gameid={appId}";
+        var (status, content) = await GetPublicAsync(url, "GetGlobalAchievementPercentagesForApp", appId, ct);
+        // An app without stats answers 403/404 ("Requested app has no stats").
+        if (status is System.Net.HttpStatusCode.Forbidden or System.Net.HttpStatusCode.NotFound) return [];
+        if (content is null) return null;
+
+        var result = new List<SteamAchievementPercent>();
+        using var doc = JsonDocument.Parse(content);
+        if (!doc.RootElement.TryGetProperty("achievementpercentages", out var root)
+            || !root.TryGetProperty("achievements", out var list) || list.ValueKind != JsonValueKind.Array)
+            return result;
+        foreach (var a in list.EnumerateArray())
+        {
+            if (!a.TryGetProperty("name", out var nameEl) || nameEl.ValueKind != JsonValueKind.String) continue;
+            if (!a.TryGetProperty("percent", out var pctEl)) continue;
+            // v2 sends a number; older versions sent a string ("95.0").
+            decimal pct;
+            if (pctEl.ValueKind == JsonValueKind.Number && pctEl.TryGetDecimal(out pct)) { }
+            else if (pctEl.ValueKind == JsonValueKind.String
+                     && decimal.TryParse(pctEl.GetString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out pct)) { }
+            else continue;
+            result.Add(new SteamAchievementPercent(nameEl.GetString()!, pct));
+        }
+        return result;
+    }
+
+    public async Task<List<SteamNewsItem>?> GetNewsForAppAsync(int appId, int count, CancellationToken ct = default)
+    {
+        var url = $"https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid={appId}&count={count}&maxlength=0";
+        var (_, content) = await GetPublicAsync(url, "GetNewsForApp", appId, ct);
+        if (content is null) return null;
+
+        var result = new List<SteamNewsItem>();
+        using var doc = JsonDocument.Parse(content);
+        if (!doc.RootElement.TryGetProperty("appnews", out var root)
+            || !root.TryGetProperty("newsitems", out var items) || items.ValueKind != JsonValueKind.Array)
+            return result;
+        static string? Text(JsonElement e, string name) =>
+            e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+        foreach (var item in items.EnumerateArray())
+        {
+            var gid = Text(item, "gid");
+            if (string.IsNullOrEmpty(gid) || !item.TryGetProperty("date", out var dateEl) || !dateEl.TryGetInt64(out var date)) continue;
+            result.Add(new SteamNewsItem(gid, Text(item, "title") ?? string.Empty, Text(item, "url"), Text(item, "author"),
+                Text(item, "contents"), Text(item, "feedlabel"), date));
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// A keyless Web API GET through the shared limiter, retrying 429s and network
+    /// errors. Returns the final status and the body of a 2xx (null otherwise).
+    /// </summary>
+    private async Task<(System.Net.HttpStatusCode? Status, string? Content)> GetPublicAsync(
+        string url, string what, int appId, CancellationToken ct)
+    {
+        for (var attempt = 0; attempt <= MaxRetries; attempt++)
+        {
+            await WebApiRateLimiter.WaitAsync(ct);
+            try
+            {
+                var response = await _httpClient.GetAsync(url, ct);
+                if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests && attempt < MaxRetries)
+                {
+                    await Task.Delay((attempt + 1) * 5000, ct);
+                    continue;
+                }
+                if (!response.IsSuccessStatusCode)
+                {
+                    if (response.StatusCode is not (System.Net.HttpStatusCode.Forbidden or System.Net.HttpStatusCode.NotFound))
+                        _logger.LogWarning("{What} returned {Status} for AppId {AppId}", what, response.StatusCode, appId);
+                    return (response.StatusCode, null);
+                }
+                return (response.StatusCode, await response.Content.ReadAsStringAsync(ct));
+            }
+            catch (HttpRequestException ex) when (attempt < MaxRetries)
+            {
+                _logger.LogWarning(ex, "HTTP error in {What} for AppId {AppId}, attempt {Attempt}", what, appId, attempt + 1);
+            }
+            finally
+            {
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(WebApiDelayBetweenRequestsMs, CancellationToken.None);
+                    WebApiRateLimiter.Release();
+                }, CancellationToken.None);
+            }
+        }
+        return (null, null);
+    }
 }

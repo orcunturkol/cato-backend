@@ -15,6 +15,9 @@ namespace Cato.Infrastructure.Steam;
 /// (Sourcing/Owned) games into game_achievement_schema. This is the denominator
 /// for the "X of Y achievements at review" metric. Latest-only upsert per
 /// (GameId, ApiName); games with no achievements are valid (recorded as zero).
+/// For Owned games it also stores the day's global unlock percentages
+/// (GetGlobalAchievementPercentagesForApp, no key) in game_achievement_percent;
+/// Sourcing games are left out to keep that daily table small.
 /// </summary>
 public class GameAchievementSchemaWatcherService : BackgroundService
 {
@@ -86,7 +89,7 @@ public class GameAchievementSchemaWatcherService : BackgroundService
         {
         var games = await db.Games
             .Where(g => g.GameType == "Sourcing" || g.GameType == "Owned")
-            .Select(g => new { g.Id, g.AppId })
+            .Select(g => new { g.Id, g.AppId, g.GameType })
             .ToListAsync(ct);
 
         var withAchievements = 0;
@@ -94,6 +97,9 @@ public class GameAchievementSchemaWatcherService : BackgroundService
         var added = 0;
         var updated = 0;
         var skipped = 0;
+        var percentGames = 0;
+        var percentRows = 0;
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
         foreach (var game in games)
         {
@@ -118,6 +124,14 @@ public class GameAchievementSchemaWatcherService : BackgroundService
             var (gameAdded, gameUpdated) = await UpsertSchemaAsync(db, game.Id, game.AppId, achievements, ct);
             added += gameAdded;
             updated += gameUpdated;
+
+            if (game.GameType != "Owned") continue;
+            var percents = await steamApi.GetGlobalAchievementPercentagesAsync(game.AppId, ct);
+            if (percents is null || percents.Count == 0) continue;
+            var (pctAdded, pctUpdated) = await SteamPublicStatsStore.UpsertAchievementPercentsAsync(db, game.Id, game.AppId, today, percents, ct);
+            await db.SaveChangesAsync(ct);
+            percentGames++;
+            percentRows += pctAdded + pctUpdated;
         }
 
         job.Set("games", games.Count);
@@ -126,6 +140,8 @@ public class GameAchievementSchemaWatcherService : BackgroundService
         job.Set("added", added);
         job.Set("updated", updated);
         job.Set("skipped", skipped);
+        job.Set("percentGames", percentGames);
+        job.Set("percentRows", percentRows);
 
         _logger.LogInformation(
             "Achievement schema cycle complete: games={Games} withAchievements={WithAchievements} zeroAchievement={ZeroAchievement} added={Added} updated={Updated} skipped={Skipped}",

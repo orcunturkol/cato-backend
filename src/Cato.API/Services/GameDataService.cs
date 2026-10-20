@@ -680,6 +680,53 @@ public class GameDataService : IGameDataService
         return new BundleDetailDto(request.BundleId, name, days, packageRows);
     }
 
+    public async Task<AchievementsDto> GetAchievementsAsync(GetAchievementsQuery request, CancellationToken ct = default)
+    {
+        var schema = await _db.GameAchievementSchemas.AsNoTracking()
+            .Where(a => a.AppId == request.AppId)
+            .ToListAsync(ct);
+        var latest = await _db.GameAchievementPercents.AsNoTracking()
+            .Where(p => p.AppId == request.AppId)
+            .MaxAsync(p => (DateOnly?)p.SnapshotDate, ct);
+        var percents = latest is { } day
+            ? await _db.GameAchievementPercents.AsNoTracking()
+                .Where(p => p.AppId == request.AppId && p.SnapshotDate == day)
+                .ToDictionaryAsync(p => p.ApiName, p => p.Percent, ct)
+            : new Dictionary<string, decimal>();
+
+        var achievements = schema
+            .Select(a => new AchievementDto(a.ApiName, a.DisplayName, a.Description, a.Hidden, a.IconUrl,
+                percents.TryGetValue(a.ApiName, out var pct) ? pct : null))
+            // Percentages for achievements the schema does not (yet) list.
+            .Concat(percents.Where(p => schema.All(a => a.ApiName != p.Key))
+                .Select(p => new AchievementDto(p.Key, null, null, false, null, p.Value)))
+            .OrderByDescending(a => a.Percent ?? -1)
+            .ThenBy(a => a.DisplayName ?? a.ApiName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return new AchievementsDto(latest, achievements);
+    }
+
+    // BBCode / HTML tags and their noise in Steam news contents.
+    private static readonly System.Text.RegularExpressions.Regex NewsMarkup =
+        new(@"\[/?[^\]]{1,40}\]|<[^>]{1,200}>|\{STEAM_CLAN_IMAGE\}\S*", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    public async Task<List<GameNewsDto>> GetGameNewsAsync(GetGameNewsQuery request, CancellationToken ct = default)
+    {
+        var limit = Math.Clamp(request.Limit, 1, 200);
+        var rows = await _db.GameNews.AsNoTracking()
+            .Where(n => n.Game.AppId == request.AppId)
+            .OrderByDescending(n => n.PublishedAt)
+            .Take(limit)
+            .Select(n => new { n.Title, n.Url, n.Author, n.FeedLabel, n.PublishedAt, n.Contents })
+            .ToListAsync(ct);
+        return rows.Select(n =>
+        {
+            var text = string.Join(' ', NewsMarkup.Replace(n.Contents ?? string.Empty, " ").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+            var excerpt = text.Length > 300 ? text[..300].TrimEnd() + "…" : text;
+            return new GameNewsDto(n.Title, n.Url, n.Author, n.FeedLabel, DateTime.SpecifyKind(n.PublishedAt, DateTimeKind.Utc), excerpt);
+        }).ToList();
+    }
+
     public async Task<List<GroupMemberCountDto>> GetGroupMemberCountAsync(GetGroupMemberCountQuery request, CancellationToken ct = default)
     {
         return await _db.GroupMemberCountSnapshots

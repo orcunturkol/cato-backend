@@ -216,6 +216,18 @@ goes to `steamworks_bundle`. A day missing from a later export keeps its row. Re
 `GET /api/bundles?from&to` and `GET /api/bundles/{bundleId}`; a package's game comes from
 its lines in `steam_sale_financial`.
 
+### Achievement percentages and game news (backend watchers, keyless Web API)
+
+`GameAchievementSchemaWatcherService` (every 6 h, Sourcing + Owned) also stores, for **Owned**
+games only, the day's global unlock percentages (`GetGlobalAchievementPercentagesForApp/v2`, no
+key; a 403/404 means the app has no stats) in `game_achievement_percent`, keyed
+(`GameId`, `ApiName`, `SnapshotDate`) and updated in place within the day. Sourcing games are left
+out to keep the daily table small. `GameNewsWatcherService` (`News:` settings, every 6 h, Owned
+games) upserts the newest `News:Count` items of `GetNewsForApp/v2` into `game_news` by gid with
+the manual upload's mapping (`Source = "news"`). Both writes live in `SteamPublicStatsStore`.
+Read side: `GET /api/games/{appId}/achievements` (schema joined with the latest percentages) and
+`GET /api/games/{appId}/news` (newest first, plain-text excerpt). Spreadsheet rows #20 and #21.
+
 ### Steamworks wishlist reports (owned games)
 
 `steamworks_wishlist_daily` (unique `GameId, DateLocal`) and `steamworks_wishlist_cohort`

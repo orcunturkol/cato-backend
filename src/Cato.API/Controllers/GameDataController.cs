@@ -170,6 +170,18 @@ public class GameDataController : ControllerBase
         return Results.Ok(result);
     }
 
+    /// <summary>Get the game's achievements with the latest global unlock percentage (owned games).</summary>
+    [HttpGet("achievements")]
+    [ProducesResponseType(typeof(AchievementsDto), StatusCodes.Status200OK)]
+    public async Task<IResult> GetAchievements(int appId)
+        => Results.Ok(await _mediator.Send(new GetAchievementsQuery(appId)));
+
+    /// <summary>Get the game's newest Steam news items.</summary>
+    [HttpGet("news")]
+    [ProducesResponseType(typeof(List<GameNewsDto>), StatusCodes.Status200OK)]
+    public async Task<IResult> GetNews(int appId, [FromQuery] int limit = 50)
+        => Results.Ok(await _mediator.Send(new GetGameNewsQuery(appId, limit)));
+
     /// <summary>Get group member count history for a game.</summary>
     [HttpGet("group-members")]
     [ProducesResponseType(typeof(List<GroupMemberCountDto>), StatusCodes.Status200OK)]

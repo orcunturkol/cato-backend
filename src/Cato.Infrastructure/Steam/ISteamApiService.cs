@@ -52,4 +52,17 @@ public interface ISteamApiService
     /// </summary>
     Task<SteamPlayerAchievementsResponse?> GetPlayerAchievementsAsync(
         long steamId64, int appId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Global unlock percentage of each achievement of a game
+    /// (ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2, no key). An app
+    /// without stats is an empty list; null only on a transient failure.
+    /// </summary>
+    Task<List<SteamAchievementPercent>?> GetGlobalAchievementPercentagesAsync(int appId, CancellationToken ct = default);
+
+    /// <summary>
+    /// The newest news items of a game (ISteamNews/GetNewsForApp/v2, no key), full
+    /// contents. Null only on a transient failure.
+    /// </summary>
+    Task<List<SteamNewsItem>?> GetNewsForAppAsync(int appId, int count, CancellationToken ct = default);
 }

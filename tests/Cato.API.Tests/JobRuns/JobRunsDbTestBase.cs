@@ -47,7 +47,8 @@ public abstract class JobRunsDbTestBase : IDisposable
         Options.Create(new AchievementSettings()),
         Options.Create(new PlayerProfileSettings()),
         Options.Create(new SteamWebApiSettings { ApiKey = webApiKey }),
-        Options.Create(new FollowerHistorySweepSettings()));
+        Options.Create(new FollowerHistorySweepSettings()),
+        Options.Create(new NewsSettings()));
 
     private sealed class FixedTimeProvider(DateTime utcNow) : TimeProvider
     {
