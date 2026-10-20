@@ -62,7 +62,7 @@ public class JobRunsOverviewTests : JobRunsDbTestBase
 
         var overview = await OverviewAsync();
 
-        Assert.Equal(9 + CollectorSchedule.Count, overview.Jobs.Count);
+        Assert.Equal(10 + CollectorSchedule.Count, overview.Jobs.Count);
         var source = Assert.Single(overview.ScheduleSources);
         Assert.Equal("catoptric", source.SourceHost);
         Assert.Equal(CollectorSchedule.Count, source.EntryCount);

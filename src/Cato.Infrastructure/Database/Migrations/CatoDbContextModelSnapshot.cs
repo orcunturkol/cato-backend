@@ -561,6 +561,47 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.ToTable("main_game", (string)null);
                 });
 
+            modelBuilder.Entity("Cato.Domain.Entities.GameAchievementPercent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ApiName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("AppId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("GameId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Percent")
+                        .HasColumnType("decimal(6,3)");
+
+                    b.Property<DateOnly>("SnapshotDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GameId", "SnapshotDate")
+                        .HasDatabaseName("idx_game_achievement_percent_game_date");
+
+                    b.HasIndex("GameId", "ApiName", "SnapshotDate")
+                        .IsUnique()
+                        .HasDatabaseName("unique_game_achievement_percent");
+
+                    b.ToTable("game_achievement_percent", (string)null);
+                });
+
             modelBuilder.Entity("Cato.Domain.Entities.GameAchievementSchema", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2644,6 +2685,17 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.Navigation("Developer");
 
                     b.Navigation("Publisher");
+                });
+
+            modelBuilder.Entity("Cato.Domain.Entities.GameAchievementPercent", b =>
+                {
+                    b.HasOne("Cato.Domain.Entities.Game", "Game")
+                        .WithMany()
+                        .HasForeignKey("GameId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Game");
                 });
 
             modelBuilder.Entity("Cato.Domain.Entities.GameAchievementSchema", b =>

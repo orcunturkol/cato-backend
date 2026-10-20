@@ -80,6 +80,8 @@ builder.Services.AddHostedService<GameEnrichmentWatcherService>();
 builder.Services.Configure<AchievementSettings>(builder.Configuration.GetSection(AchievementSettings.SectionName));
 builder.Services.AddHostedService<GameAchievementSchemaWatcherService>();
 builder.Services.AddHostedService<PlayerAchievementWatcherService>();
+builder.Services.Configure<NewsSettings>(builder.Configuration.GetSection(NewsSettings.SectionName));
+builder.Services.AddHostedService<GameNewsWatcherService>();
 
 // ── SteamKit2 ──
 builder.Services.Configure<SteamSettings>(builder.Configuration.GetSection("SteamKit"));

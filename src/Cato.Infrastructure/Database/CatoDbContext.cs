@@ -49,6 +49,7 @@ public class CatoDbContext : DbContext
     public DbSet<SteamReview> SteamReviews => Set<SteamReview>();
     public DbSet<SteamPlayerProfile> SteamPlayerProfiles => Set<SteamPlayerProfile>();
     public DbSet<GameAchievementSchema> GameAchievementSchemas => Set<GameAchievementSchema>();
+    public DbSet<GameAchievementPercent> GameAchievementPercents => Set<GameAchievementPercent>();
     public DbSet<SteamPlayerAchievement> SteamPlayerAchievements => Set<SteamPlayerAchievement>();
     public DbSet<SteamPlayerAchievementFetch> SteamPlayerAchievementFetches => Set<SteamPlayerAchievementFetch>();
     public DbSet<JobRun> JobRuns => Set<JobRun>();
@@ -560,6 +561,25 @@ public class CatoDbContext : DbContext
             entity.HasIndex(e => new { e.BundleId, e.PackageId, e.DateLocal })
                 .IsUnique()
                 .HasDatabaseName("unique_steamworks_bundle_package_sales_daily");
+        });
+
+        // ── GameAchievementPercent ──
+        modelBuilder.Entity<GameAchievementPercent>(entity =>
+        {
+            entity.ToTable("game_achievement_percent");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ApiName).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Percent).HasColumnType("decimal(6,3)");
+
+            entity.HasIndex(e => new { e.GameId, e.ApiName, e.SnapshotDate })
+                .IsUnique()
+                .HasDatabaseName("unique_game_achievement_percent");
+            entity.HasIndex(e => new { e.GameId, e.SnapshotDate }).HasDatabaseName("idx_game_achievement_percent_game_date");
+
+            entity.HasOne(e => e.Game)
+                .WithMany()
+                .HasForeignKey(e => e.GameId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // ── AppKeyValueSnapshot ──
@@ -1299,6 +1319,19 @@ public class CatoDbContext : DbContext
         }
 
         foreach (var entry in ChangeTracker.Entries<SteamworksNavStat>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<GameAchievementPercent>())
         {
             if (entry.State == EntityState.Added)
             {

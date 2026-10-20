@@ -127,6 +127,12 @@ public class SteamGameEnrichmentServiceTests : IDisposable
 
         public Task<SteamPlayerAchievementsResponse?> GetPlayerAchievementsAsync(long steamId64, int appId, CancellationToken ct = default) =>
             throw new NotImplementedException();
+
+        public Task<List<SteamAchievementPercent>?> GetGlobalAchievementPercentagesAsync(int appId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+
+        public Task<List<SteamNewsItem>?> GetNewsForAppAsync(int appId, int count, CancellationToken ct = default) =>
+            throw new NotImplementedException();
     }
 
     private sealed class NoOpRedisSync : IRedisAppIdSyncService

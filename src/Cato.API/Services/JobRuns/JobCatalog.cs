@@ -42,6 +42,7 @@ public sealed class JobCatalog : IJobCatalog
     private readonly PlayerProfileSettings _profiles;
     private readonly SteamWebApiSettings _webApi;
     private readonly FollowerHistorySweepSettings _followerSweep;
+    private readonly NewsSettings _news;
 
     public JobCatalog(
         CatoDbContext db,
@@ -50,7 +51,8 @@ public sealed class JobCatalog : IJobCatalog
         IOptions<AchievementSettings> achievements,
         IOptions<PlayerProfileSettings> profiles,
         IOptions<SteamWebApiSettings> webApi,
-        IOptions<FollowerHistorySweepSettings> followerSweep)
+        IOptions<FollowerHistorySweepSettings> followerSweep,
+        IOptions<NewsSettings> news)
     {
         _db = db;
         _steam = steam.Value;
@@ -59,6 +61,7 @@ public sealed class JobCatalog : IJobCatalog
         _profiles = profiles.Value;
         _webApi = webApi.Value;
         _followerSweep = followerSweep.Value;
+        _news = news.Value;
     }
 
     public async Task<JobCatalogSnapshot> LoadAsync(CancellationToken ct)
@@ -102,6 +105,9 @@ public sealed class JobCatalog : IJobCatalog
             _achievements.SchemaIntervalMinutes, TimeSpan.FromSeconds(10),
             _achievements.Enabled && hasWebApiKey,
             !_achievements.Enabled ? "Achievements:Enabled is false" : hasWebApiKey ? null : noKey);
+        yield return Interval(BackendJobNames.GameNewsWatcher, "Owned game news fetch",
+            _news.IntervalMinutes, TimeSpan.FromSeconds(20),
+            _news.Enabled, _news.Enabled ? null : "News:Enabled is false");
         yield return Interval(BackendJobNames.PlayerAchievementWatcher, "Player achievement fetch",
             _achievements.PlayerIntervalMinutes, TimeSpan.FromSeconds(10),
             _achievements.Enabled && hasWebApiKey,
