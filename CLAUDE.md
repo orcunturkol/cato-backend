@@ -79,6 +79,13 @@ Some older services (`GameService`, `GameDataService`, `IngestionService`, `Stea
 
 Core entity is `Game` (table: `main_game`, keyed by `AppId`). Related time-series/snapshot entities: `SteamSaleFinancial`, `SteamTraffic`, `CcuHistory`, `OwnedGameData`, `GroupMemberCountSnapshot`, `SteamDbSnapshot`, `IngestionLog`. Games have `GameGenre` and `GenreTag` collections. `LegalEntity` represents developers/publishers.
 
+`Services/DbTables/DbTableCatalog.cs` documents every table's data source, validation
+and fallback; `GET /api/db-tables` serves it with live row counts to the frontend's
+Database Tables page, and `GET /api/db-tables/export.csv` gives the same in the layout of
+the "DB-Tables&Content" sheet. Columns, types and unique keys come from the EF model, so
+only the lineage text is hand-written. **A new table fails `DbTablesTests` until it has a
+catalog entry; a changed writer, source or fallback needs its entry updated by hand.**
+
 ### Steam store enrichment
 
 `SteamGameEnrichmentService.EnrichGameAsync` is the single writer of a game's store

@@ -115,6 +115,10 @@ builder.Services.AddScoped<Cato.API.Services.Dispatch.JobDispatchService>();
 // ── Alerts (incidents, SNS e-mail, Discord; the monitor loop runs in the worker) ──
 Cato.API.Services.Alerts.AlertServiceCollectionExtensions.AddAlerts(builder.Services, builder.Configuration);
 
+// ── Database tables page ──
+builder.Services.AddSingleton<Cato.API.Services.DbTables.DbTableCountCache>();
+builder.Services.AddScoped<Cato.API.Services.DbTables.DbTableStats>();
+
 // ── Application Services ──
 builder.Services.AddScoped<ISteamGameEnrichmentService, SteamGameEnrichmentService>();
 builder.Services.AddScoped<Cato.API.Services.IGameService, Cato.API.Services.GameService>();
