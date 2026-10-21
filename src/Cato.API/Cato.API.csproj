@@ -26,6 +26,8 @@
     <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
     <PackageReference Include="Serilog.Sinks.Seq" Version="9.1.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.4" />
+    <!-- Swashbuckle brings Microsoft.OpenApi 2.4.1 (GHSA-v5pm-xwqc-g5wc, NU1903); 2.7.5 is the first fixed 2.x. -->
+    <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
   </ItemGroup>
 
   <PropertyGroup>
