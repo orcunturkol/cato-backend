@@ -51,7 +51,7 @@ Some older services (`GameService`, `GameDataService`, `IngestionService`, `Stea
 
 ### Key Infrastructure
 
-- **Database**: PostgreSQL via EF Core (Npgsql), hosted on AWS RDS. Terraform for the RDS instance lives in `infra/rds/`; see `infra/rds/CUTOVER_RUNBOOK.md` for provisioning, data migration, rollback, and cleanup procedures. On the server the connection string comes from the Secrets Manager secret `cato/backend/config` (see Configuration); the `ConnectionStrings__DefaultConnection` line in docker-compose only holds a development placeholder there. All entity table mappings and indexes are configured via Fluent API in `CatoDbContext.OnModelCreating`. Timestamps (CreatedAt/UpdatedAt) are set automatically in `SaveChanges`/`SaveChangesAsync`.
+- **Database**: PostgreSQL via EF Core (Npgsql), hosted on AWS RDS. Terraform for the RDS instance lives in `infra/rds/` (state in S3 since Phase 2 prep: `imports.tf` adopts the live database); see `infra/rds/CUTOVER_RUNBOOK.md` for provisioning, data migration, rollback, and cleanup procedures. On the server the connection string comes from the Secrets Manager secret `cato/backend/config` (see Configuration); the `ConnectionStrings__DefaultConnection` line in docker-compose only holds a development placeholder there. All entity table mappings and indexes are configured via Fluent API in `CatoDbContext.OnModelCreating`. Timestamps (CreatedAt/UpdatedAt) are set automatically in `SaveChanges`/`SaveChangesAsync`.
 - **Messaging**: RabbitMQ with `IngestionDispatcher` (producer) and `RabbitMqConsumerService` (hosted service consumer). Exchange: `cato-data` (topic). Queues:
   - `cato-ingestion` — legacy single-item path, routing key `ingestion.*` → `IIngestionDispatcher`
   - four batch queues → `IBatchIngestionDispatcher`, each source on an explicit key `ingestion.batch.<source>` (`Messaging/BatchQueues.cs`): `cato-ingestion-ccu` (CCU, every 4 h), `cato-ingestion-followers` (SteamDB follower series, hourly), `cato-ingestion-steamworks` (the seven full-history `steamworks_*` sources) and `cato-ingestion-v2` (group members, SteamDB lists, financial). A slow source holds up only its own queue. **A new source needs a handler in `BatchIngestionDispatcher.Handlers` and a queue in `BatchQueues`** (a test checks that the lists match); the collector publishes with `mandatory=True`, so a source without a binding fails as unroutable instead of disappearing. The start-up binds every key before it removes the old wildcard `ingestion.batch.#` from v2. To roll back to a build with the wildcard, delete the three new queues first, or they collect copies with no consumer.
@@ -428,6 +428,10 @@ whole cookie header, checks it like the collector's `--set-refresh-cookie` (a St
 lifetime over a week, not expired, a warning for a second account in the paste) and
 writes `cato/steamworks/refresh`. No endpoint returns a cookie, and the log has only the
 masked account.
+
+**AWS foundation for the ECS split:** `infra/phase2/` (Terraform, not applied yet; `README.md` has
+the apply order, the cost and the Phase 3 prerequisites; `deploy.sh` builds, pushes, migrates and
+rolls the services).
 
 ## Configuration
 
