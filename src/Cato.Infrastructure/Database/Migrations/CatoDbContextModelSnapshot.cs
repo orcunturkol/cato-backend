@@ -473,6 +473,10 @@ namespace Cato.Infrastructure.Database.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("PeriodEnd")
+                        .HasDatabaseName("idx_demo_download_period_end")
+                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
+
                     b.HasIndex("SnapshotDate")
                         .HasDatabaseName("idx_demo_download_snapshot_date");
 
@@ -2344,6 +2348,10 @@ namespace Cato.Infrastructure.Database.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("PeriodEnd")
+                        .HasDatabaseName("idx_steam_traffic_breakdown_period_end")
+                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
+
                     b.HasIndex("GameId", "SnapshotDate", "PeriodEnd", "PageCategory", "PageFeature")
                         .IsUnique()
                         .HasDatabaseName("unique_traffic_breakdown");
@@ -2562,6 +2570,10 @@ namespace Cato.Infrastructure.Database.Migrations
                         .HasColumnType("bigint");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("PeriodEnd")
+                        .HasDatabaseName("idx_steamworks_nav_stat_period_end")
+                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
 
                     b.HasIndex("PublisherId", "PeriodStart", "PeriodEnd", "Attribution", "Region", "AppId")
                         .IsUnique()
@@ -2793,6 +2805,10 @@ namespace Cato.Infrastructure.Database.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DateLocal")
+                        .HasDatabaseName("idx_steamworks_wishlist_daily_date")
+                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
 
                     b.HasIndex("GameId", "DateLocal")
                         .IsUnique()

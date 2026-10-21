@@ -416,6 +416,8 @@ public class CatoDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(e => e.GameId)
                 .OnDelete(DeleteBehavior.Cascade);
+            // The data freshness check takes MAX(DateLocal).
+            entity.HasIndex(e => e.DateLocal).HasDatabaseName("idx_steamworks_wishlist_daily_date").IsCreatedConcurrently();
         });
 
         // ── SteamworksWishlistCohort ──
@@ -490,6 +492,8 @@ public class CatoDbContext : DbContext
                 .WithMany(g => g.TrafficBreakdowns)
                 .HasForeignKey(e => e.GameId)
                 .OnDelete(DeleteBehavior.Cascade);
+            // The data freshness check takes MAX(PeriodEnd).
+            entity.HasIndex(e => e.PeriodEnd).HasDatabaseName("idx_steam_traffic_breakdown_period_end").IsCreatedConcurrently();
         });
 
         // ── SteamworksNavStat ──
@@ -504,6 +508,8 @@ public class CatoDbContext : DbContext
             entity.HasIndex(e => new { e.PublisherId, e.PeriodStart, e.PeriodEnd, e.Attribution, e.Region, e.AppId })
                 .IsUnique()
                 .HasDatabaseName("unique_steamworks_nav_stat");
+            // The data freshness check takes MAX(PeriodEnd).
+            entity.HasIndex(e => e.PeriodEnd).HasDatabaseName("idx_steamworks_nav_stat_period_end").IsCreatedConcurrently();
         });
 
         // ── SteamworksPlayerCountry ──
@@ -987,6 +993,8 @@ public class CatoDbContext : DbContext
                 .WithMany(g => g.DemoDownloads)
                 .HasForeignKey(e => e.GameId)
                 .OnDelete(DeleteBehavior.Cascade);
+            // The data freshness check takes MAX(PeriodEnd).
+            entity.HasIndex(e => e.PeriodEnd).HasDatabaseName("idx_demo_download_period_end").IsCreatedConcurrently();
         });
 
         // ── ActionImpact ──
