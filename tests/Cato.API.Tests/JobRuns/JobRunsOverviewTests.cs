@@ -46,13 +46,84 @@ public class JobRunsOverviewTests : JobRunsDbTestBase
         DurationMs = end is null ? null : (long)(end.Value - start).TotalMilliseconds,
     };
 
-    private async Task<JobRunsOverviewDto> OverviewAsync()
+    private async Task<JobRunsOverviewDto> OverviewAsync(bool runsWatchers = true)
     {
         await using var db = NewContext();
         var catalog = NewCatalog(db);
         var handler = new GetJobRunsOverviewHandler(
-            db, catalog, new JobRunStatusResolver(db, Process, Clock), Process, Clock);
+            db, catalog, new JobRunStatusResolver(db, WorkerStart(db, runsWatchers), Clock), Process,
+            WorkerStart(db, runsWatchers), Clock);
         return await handler.Handle(new GetJobRunsOverviewQuery(), CancellationToken.None);
+    }
+
+    private async Task RecordWorkerStartAsync(DateTime started)
+    {
+        await using var db = NewContext();
+        db.WorkerStates.Add(new WorkerState
+        {
+            Key = WorkerStateKeys.WorkerStartedAt,
+            Value = started.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+            UpdatedAt = started,
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private static JobRun PriceCycle(DateTime start) =>
+        Run(BackendJobNames.SteamPriceWatcher, JobRunStatus.Running, start, producer: JobRunProducer.CatoBackend);
+
+    [Fact]
+    public async Task An_api_only_restart_leaves_the_workers_runs_running()
+    {
+        // Role api: this process started at ApiStart; the worker has run for two hours.
+        await SeedAsync(PriceCycle(ApiStart.AddMinutes(-20)));
+        await RecordWorkerStartAsync(ApiStart.AddHours(-2));
+
+        var overview = await OverviewAsync(runsWatchers: false);
+
+        var price = overview.Jobs.Single(j => j.JobName == BackendJobNames.SteamPriceWatcher);
+        Assert.Equal(JobRunStatus.Running, price.LastRun!.EffectiveStatus);
+        Assert.Equal(ApiStart.AddHours(-2), overview.WorkerStartedAt);
+    }
+
+    [Fact]
+    public async Task A_worker_restart_ends_the_runs_it_interrupted()
+    {
+        await SeedAsync(PriceCycle(ApiStart.AddMinutes(-20)));
+        await RecordWorkerStartAsync(ApiStart.AddMinutes(-5));
+
+        var overview = await OverviewAsync(runsWatchers: false);
+
+        var price = overview.Jobs.Single(j => j.JobName == BackendJobNames.SteamPriceWatcher);
+        Assert.Equal(JobRunStatus.Lost, price.LastRun!.EffectiveStatus);
+        Assert.Equal(JobRunStatusEvaluator.ReasonWorkerRestarted, price.LastRun.LostReason);
+    }
+
+    [Fact]
+    public async Task Without_a_recorded_worker_start_no_run_is_lost_by_a_restart()
+    {
+        await SeedAsync(PriceCycle(ApiStart.AddMinutes(-20)));
+
+        var overview = await OverviewAsync(runsWatchers: false);
+
+        Assert.Equal(JobRunStatus.Running,
+            overview.Jobs.Single(j => j.JobName == BackendJobNames.SteamPriceWatcher).LastRun!.EffectiveStatus);
+        Assert.Null(overview.WorkerStartedAt);
+    }
+
+    [Fact]
+    public async Task The_worker_records_its_start_for_api_processes()
+    {
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddScoped(services, _ => NewContext());
+        var scopes = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions
+            .GetRequiredService<Microsoft.Extensions.DependencyInjection.IServiceScopeFactory>(
+                Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider(services));
+
+        await new WorkerStartRecorder(scopes, Process, Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkerStartRecorder>.Instance)
+            .StartAsync(default);
+
+        await using var db = NewContext();
+        Assert.Equal(ApiStart, await WorkerStart(db, runsWatchers: false).GetAsync(default));
     }
 
     [Fact]
@@ -106,7 +177,7 @@ public class JobRunsOverviewTests : JobRunsDbTestBase
         Assert.Equal("no finish reported within 2h 10m", followers.LastRun.LostReason);
 
         var price = overview.Jobs.Single(j => j.JobName == BackendJobNames.SteamPriceWatcher);
-        Assert.Equal(JobRunStatusEvaluator.ReasonApiRestarted, price.LastRun!.LostReason);
+        Assert.Equal(JobRunStatusEvaluator.ReasonWorkerRestarted, price.LastRun!.LostReason);
     }
 
     [Fact]
@@ -187,7 +258,7 @@ public class JobRunsOverviewTests : JobRunsDbTestBase
         await SeedAsync(older, newer);
 
         await using var db = NewContext();
-        var handler = new GetJobRunsHandler(db, NewCatalog(db), new JobRunStatusResolver(db, Process, Clock));
+        var handler = new GetJobRunsHandler(db, NewCatalog(db), new JobRunStatusResolver(db, WorkerStart(db), Clock));
         var runs = await handler.Handle(new GetJobRunsQuery("ccu", JobRunStatus.Running), CancellationToken.None);
 
         Assert.Equal(JobRunStatus.Running, runs.Single(r => r.Id == newer.Id).EffectiveStatus);

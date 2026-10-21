@@ -49,7 +49,8 @@ public record JobRunsOverviewDto(
     DateTime ApiStartedAt,
     List<JobScheduleSourceDto> ScheduleSources,
     List<JobRunDto> Running,
-    List<JobOverviewDto> Jobs);
+    List<JobOverviewDto> Jobs,
+    DateTime? WorkerStartedAt = null);
 
 /// <summary>One job with its schedule, last run and next expected run.</summary>
 public record JobOverviewDto(

@@ -10,13 +10,13 @@ namespace Cato.API.Services.JobRuns;
 public sealed class JobRunStatusResolver
 {
     private readonly CatoDbContext _db;
-    private readonly ApiProcessInfo _process;
+    private readonly WorkerStartTime _workerStart;
     private readonly TimeProvider _time;
 
-    public JobRunStatusResolver(CatoDbContext db, ApiProcessInfo process, TimeProvider time)
+    public JobRunStatusResolver(CatoDbContext db, WorkerStartTime workerStart, TimeProvider time)
     {
         _db = db;
-        _process = process;
+        _workerStart = workerStart;
         _time = time;
     }
 
@@ -25,6 +25,7 @@ public sealed class JobRunStatusResolver
         IReadOnlyList<JobRun> rows, JobCatalogSnapshot catalog, CancellationToken ct)
     {
         var now = _time.GetUtcNow().UtcDateTime;
+        var workerStarted = await _workerStart.GetAsync(ct);
         var latestStarts = await LatestStartsAsync(rows, ct);
 
         return rows.Select(run =>
@@ -32,7 +33,7 @@ public sealed class JobRunStatusResolver
             var newer = latestStarts.TryGetValue((run.Producer, run.JobName), out var latest)
                         && latest > run.StartTime;
             var (status, reason) = JobRunStatusEvaluator.Evaluate(
-                run, newer, catalog.StaleAfterFor(run.Producer, run.JobName), now, _process.StartedAtUtc);
+                run, newer, catalog.StaleAfterFor(run.Producer, run.JobName), now, workerStarted);
             return JobRunMapper.ToDto(run, status, reason);
         }).ToList();
     }

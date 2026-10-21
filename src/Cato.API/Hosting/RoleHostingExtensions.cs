@@ -31,6 +31,8 @@ public static class RoleHostingExtensions
         // Exactly one dispatcher: the worker is a single task.
         services.AddHostedService<Services.Dispatch.JobDispatcherService>();
         services.AddHostedService<Services.Alerts.AlertMonitorService>();
+        // So an API process can tell which watcher runs a worker restart ended.
+        services.AddHostedService<Services.JobRuns.WorkerStartRecorder>();
         return services;
     }
 

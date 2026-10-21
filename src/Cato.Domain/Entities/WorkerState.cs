@@ -16,4 +16,6 @@ public static class WorkerStateKeys
 {
     public const string PicsWatcherChangeNumber = "pics_watcher_change_number";
     public const string PicsHistoryChangeNumber = "pics_history_change_number";
+    /// <summary>When the process that runs the backend watchers last started (ISO 8601, UTC).</summary>
+    public const string WorkerStartedAt = "worker_started_at";
 }

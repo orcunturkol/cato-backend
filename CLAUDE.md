@@ -330,7 +330,7 @@ state and returns firing / not firing; firing opens one incident per job and rul
 
 | Rule | Fires when | Resolves when |
 |---|---|---|
-| `run_failed` | the newest finished run is `Failed`, or `Lost` (collector jobs only) | the newest finished run succeeded |
+| `run_failed` | the newest finished run is `Failed`, or `Lost` (for watchers only a hang: no finish within the limit) | the newest finished run succeeded |
 | `items_failed` | `items_failed / items_total` >= the job's `AlertFailedRatio` and >= `AlertMinItems` | a newer run is below that |
 | `missed_run` | a dispatch is pending > 5 min with its agent group idle, or expired | the newest dispatch is claimed or finished |
 | `agent_offline` | an agent seen this week is silent > 10 min | it calls again |
@@ -345,8 +345,17 @@ reports `Succeeded` but writes nothing. The checks are typed queries in code, on
 columns or small tables, cached 10 minutes; `GET /api/job-runs/freshness` shows them.
 A new collector job needs an entry there.
 
-`Skipped` and `Interrupted` runs decide nothing. A watcher run that shows `Lost` only
-because the API restarted is ignored, so for watchers only a stored `Failed` alerts.
+`Skipped` and `Interrupted` runs decide nothing. A watcher run lost to a worker restart
+(or replaced by the next cycle after one) does not alert; the heartbeat alarm reports a
+dead worker.
+
+**Lost and the worker's start.** A backend run still `Running` that started before the
+**worker** last started is `Lost` ("the worker restarted during this run"). The worker
+(role all or worker) writes its start to `worker_state` (`worker_started_at`,
+`WorkerStartRecorder`); a role-api process reads it there (`WorkerStartTime`), so an
+API-only restart no longer marks the worker's runs lost. With no recorded start, no run is
+lost by a restart. A watcher cycle that fails while the app stops is stored as
+`Interrupted` (`JobRunTracker`).
 Messages go to every `IAlertNotifier` (SNS e-mail, Discord); `OpenSentTo` and
 `ResolveSentTo` record the channels that sent, so a failed channel is retried alone
 next cycle and a "resolved" message goes only where the "opened" one went. Queue counts
