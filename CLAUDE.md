@@ -336,6 +336,14 @@ state and returns firing / not firing; firing opens one incident per job and rul
 | `agent_offline` | an agent seen this week is silent > 10 min | it calls again |
 | `dlq_not_empty` | `cato-ingestion-dlq` has messages | it is empty |
 | `queue_stuck` | a queue has messages and the count has not dropped for 30 min | the count drops |
+| `stale_data` | the newest data of an enabled job is older than its limit | newer data arrives |
+
+`stale_data` reads `JobFreshnessChecks` (`Services/JobRuns/JobFreshness.cs`): per job the
+newest value of a date column in the table it writes (`ccu_history.Timestamp` within
+4.5 h, daily tables within 2-3 days of their date's midnight, ...). It finds a job that
+reports `Succeeded` but writes nothing. The checks are typed queries in code, on indexed
+columns or small tables, cached 10 minutes; `GET /api/job-runs/freshness` shows them.
+A new collector job needs an entry there.
 
 `Skipped` and `Interrupted` runs decide nothing. A watcher run that shows `Lost` only
 because the API restarted is ignored, so for watchers only a stored `Failed` alerts.
