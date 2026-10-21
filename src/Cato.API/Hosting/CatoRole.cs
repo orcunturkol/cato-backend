@@ -36,6 +36,19 @@ public static class CatoRoles
     public static bool MigratesOnStartup(this CatoRole role) => role is CatoRole.All;
 
     /// <summary>
+    /// Npgsql's Maximum Pool Size when <c>Database:MaxPoolSize</c> is not set. Npgsql's own
+    /// default is 100 per process; RDS db.t4g.medium allows about 400 connections in all, so
+    /// several api tasks and the worker must stay well below it. The single container uses about 6.
+    /// </summary>
+    public static int DefaultMaxPoolSize(this CatoRole role) => role switch
+    {
+        CatoRole.Api => 30,
+        CatoRole.Worker => 40,
+        CatoRole.Migrate => 5,
+        _ => 60,
+    };
+
+    /// <summary>
     /// Which controllers a role maps. A <see cref="WorkerOnlyAttribute"/> controller needs the
     /// worker's SteamKit login, so the api role leaves it out and the worker maps only those.
     /// </summary>

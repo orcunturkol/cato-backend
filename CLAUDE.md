@@ -72,8 +72,17 @@ Some older services (`GameService`, `GameDataService`, `IngestionService`, `Stea
   **Redis writes belong after `SaveChangesAsync`, never inside a transaction** (`GameService.cs`, `SteamGameEnrichmentService.cs`). This is why `game.analyzed` has its own queue rather than riding the batch path — `BatchIngestionDispatcher` runs every item handler inside one transaction, and a Redis write there would not roll back with it.
 - **Steam Integration**: `SteamApiService` (HTTP client for Steam Web API) and `SteamKitService` (SteamKit2 for PICS change monitoring via `SteamPicsWatcherService` background service).
   - **SteamKit Game Discovery**: `SteamPicsWatcherService` polls Steam's PICS change feed via `PICSGetChangesSince`, which returns all AppIDs with any metadata change since the last known change number (persisted in `pics_change_number.txt`). For each changed AppID, it calls `PICSGetProductInfo` and reads the `common` KeyValue section. It filters by `common["type"] == "game"` (excludes DLCs, tools, demos) and `common["releasestate"] == "released"` (excludes unreleased). Also extracts `common["name"]` and `common["steam_release_date"]` (unix timestamp). Matching games are saved with `GameType = "Sourcing"`.
-- **Logging**: Serilog with console sink.
-- **Swagger**: Available at `/swagger` in Development.
+- **Logging**: Serilog, levels from the `Serilog` section. The console sink is always on;
+  the Seq sink only when `Seq:ServerUrl` is set (compose: `http://seq:80`). Health probes
+  and the agents' `POST /api/job-agents/*` polls log at Verbose unless they fail.
+  `Microsoft.EntityFrameworkCore.Database.Command` is at `Fatal`: its "Failed executing
+  DbCommand" error carries the whole SQL batch. From 2026-08-22 to 2026-10-04 one
+  duplicate genre (app 2885250) poisoned the enrichment watcher's DbContext, so every
+  later save of each 200-game cycle failed and re-sent the earlier rows: about 40 times
+  the normal log volume (Seq: ~390 MB/day against ~10). The docker log reached 62 GB and
+  filled the disk. The exception itself still logs (`Microsoft.EntityFrameworkCore.Update`
+  and `.Query`, and the app's own handlers).
+- **Swagger**: `/swagger` when `Swagger:Enabled` is true (Development, and compose on the server).
 
 ### Database Entities
 
@@ -417,7 +426,19 @@ refresh token is the rotating secret `cato/steam/steamkit-auth`. For local devel
 the Steam account with `dotnet user-secrets` or `SteamKit__Username` / `SteamKit__Password`.
 The Steam password was in git history until 2026-10-21; rotate it.
 
-CORS allows `localhost:5173` and `localhost:3000` (frontend dev servers).
+The container runs as `Production` (Dockerfile and compose); `appsettings.Development.json`
+holds only local-development values. Other settings:
+
+| Key | Default | Server (compose) |
+|---|---|---|
+| `Cors:AllowedOrigins` | none (Development: `localhost:5173`, `localhost:3000`) | the site origin; the frontend calls its own origin anyway |
+| `Seq:ServerUrl` | none, so no Seq sink (Development: `localhost:5341`) | `http://seq:80` |
+| `Swagger:Enabled` | false (Development: true) | true |
+| `Database:MaxPoolSize` | per role: all 60, api 30, worker 40, migrate 5 | the role default |
+
+Scope and start-up DI validation stay on in Production (`UseDefaultServiceProvider`). The
+start log has one `Configuration:` line with the environment, pool limit, Seq, Swagger and
+CORS origins.
 
 # Agent Guidance: dotnet-skills
 

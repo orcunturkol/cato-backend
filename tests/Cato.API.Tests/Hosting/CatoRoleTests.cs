@@ -41,6 +41,16 @@ public class CatoRoleTests
         Assert.Equal(migratesOnStart, role.MigratesOnStartup());
     }
 
+    [Fact]
+    public void Each_role_has_a_pool_limit_and_all_of_them_together_stay_below_the_database_limit()
+    {
+        Assert.Equal(60, CatoRole.All.DefaultMaxPoolSize());
+        Assert.Equal(5, CatoRole.Migrate.DefaultMaxPoolSize());
+        // Phase 3: three api tasks, the worker and a migrate task against ~400 connections.
+        Assert.True(3 * CatoRole.Api.DefaultMaxPoolSize() + CatoRole.Worker.DefaultMaxPoolSize()
+                    + CatoRole.Migrate.DefaultMaxPoolSize() < 200);
+    }
+
     [Theory]
     [InlineData(CatoRole.All, true, true)]
     [InlineData(CatoRole.Api, true, false)]
