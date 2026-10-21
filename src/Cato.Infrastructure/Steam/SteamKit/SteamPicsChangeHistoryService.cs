@@ -40,20 +40,26 @@ public sealed class SteamPicsChangeHistoryService : BackgroundService
         _changeNumberFile = Path.Combine(AppContext.BaseDirectory, "pics_history_change_number.txt");
     }
 
+    // The first value of this watcher's scheduled_job row; the Jobs page owns it after that.
+    private WatcherDefaults Defaults => new("PICS change history", TimeSpan.FromMinutes(_settings.PicsPollingIntervalMinutes), true);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("PicsChangeHistory: Waiting for SteamKit2 connection...");
         await WaitForConnectionAsync(stoppingToken);
 
-        var interval = TimeSpan.FromMinutes(_settings.PicsPollingIntervalMinutes);
         _logger.LogInformation("PicsChangeHistory: Starting change history polling every {Minutes} minutes",
             _settings.PicsPollingIntervalMinutes);
 
         // Bootstrap: take initial snapshots for tracked games that have none
         await BootstrapSnapshotsAsync(stoppingToken);
 
+        DateTime? previousEnd = null;
         while (!stoppingToken.IsCancellationRequested)
         {
+            await WatcherSchedule.WaitForNextRunAsync(
+                _scopeFactory, BackendJobNames.SteamPicsChangeHistory, Defaults, previousEnd, _logger, stoppingToken);
+
             try
             {
                 await PollForChangesAsync(stoppingToken);
@@ -67,7 +73,7 @@ public sealed class SteamPicsChangeHistoryService : BackgroundService
                 _logger.LogError(ex, "PicsChangeHistory: Error during change history poll");
             }
 
-            await Task.Delay(interval, stoppingToken);
+            previousEnd = DateTime.UtcNow;
         }
     }
 

@@ -306,6 +306,21 @@ rows up to the graph's last day, then list values, then the group scrape. List v
 are never written into `group_member_count_snapshot`: the 0-1 day offset would put
 them on the wrong date.
 
+### Job schedules (`scheduled_job`)
+
+One row per job. A collector job has a cron, a time limit and an agent group; the job
+dispatcher (worker) turns its slots into `job_dispatch` rows and the collector's
+`cato-agent@<group>` claims them (`ManagedBy` `dispatcher`; `cron` while the host
+crontab still starts it). A backend watcher has `ManagedBy` `worker` and an
+`IntervalMinutes` instead: before every cycle it calls
+`WatcherSchedule.WaitForNextRunAsync`, which reads its row once a minute and returns when
+the row is enabled and the interval has passed since the last cycle ended. The first read
+writes the row from the watcher's settings (`IntervalMinutes`, `Enabled`); after that the
+settings are only the fallback when the database cannot be read. So
+`PUT /api/scheduled-jobs/{name}` changes a watcher's interval or pauses it within a
+minute, without a deploy. A missing Steam Web API key still stops the watchers that need
+one, whatever the row says.
+
 ### Alerts (`alert_incident`)
 
 `AlertMonitorService` (worker role only) runs `AlertService.RunCycleAsync` every minute,

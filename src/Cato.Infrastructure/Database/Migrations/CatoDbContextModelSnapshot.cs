@@ -1533,6 +1533,9 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.Property<bool>("Enabled")
                         .HasColumnType("boolean");
 
+                    b.Property<int?>("IntervalMinutes")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Label")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");

@@ -43,6 +43,8 @@ public sealed class JobCatalog : IJobCatalog
     private readonly SteamWebApiSettings _webApi;
     private readonly FollowerHistorySweepSettings _followerSweep;
     private readonly NewsSettings _news;
+    // Watcher rows of scheduled_job by name, read by LoadAsync; they win over the settings.
+    private IReadOnlyDictionary<string, ScheduledJob> _watcherRows = new Dictionary<string, ScheduledJob>();
 
     public JobCatalog(
         CatoDbContext db,
@@ -66,6 +68,9 @@ public sealed class JobCatalog : IJobCatalog
 
     public async Task<JobCatalogSnapshot> LoadAsync(CancellationToken ct)
     {
+        _watcherRows = await _db.ScheduledJobs.AsNoTracking()
+            .Where(j => j.ManagedBy == ScheduledJobManagedBy.Worker)
+            .ToDictionaryAsync(j => j.Name, ct);
         var jobs = new List<JobDefinition>(BackendJobs());
         var sources = new List<JobScheduleSourceDto>();
 
@@ -116,11 +121,17 @@ public sealed class JobCatalog : IJobCatalog
             TimeSpan.Zero);
     }
 
-    /// <summary>Backend watchers. Intervals and switches mirror each watcher's ExecuteAsync.</summary>
+    /// <summary>
+    /// Backend watchers. A watcher's scheduled_job row (written by the watcher itself on its
+    /// first cycle) decides its interval and switch; until then its settings do. A missing
+    /// Web API key still blocks the watchers that need it.
+    /// </summary>
     public IEnumerable<JobDefinition> BackendJobs()
     {
         var hasWebApiKey = !string.IsNullOrWhiteSpace(_webApi.ApiKey);
         const string noKey = "no Steam Web API key configured";
+
+        var keyBlock = hasWebApiKey ? null : noKey;
 
         yield return Interval(BackendJobNames.SteamPicsWatcher, "PICS new-game discovery",
             _steam.PicsPollingIntervalMinutes, TimeSpan.Zero, true, null);
@@ -132,32 +143,42 @@ public sealed class JobCatalog : IJobCatalog
             _steam.ReviewCheckIntervalHours * 60, TimeSpan.FromSeconds(10), true, null);
         yield return Interval(BackendJobNames.GameEnrichmentWatcher, "Store enrichment sweep",
             _enrichment.IntervalMinutes, TimeSpan.FromMinutes(1),
-            _enrichment.Enabled, _enrichment.Enabled ? null : "GameEnrichment:Enabled is false");
+            _enrichment.Enabled, "GameEnrichment:Enabled is false");
         yield return Interval(BackendJobNames.GameAchievementSchemaWatcher, "Achievement schema fetch",
             _achievements.SchemaIntervalMinutes, TimeSpan.FromSeconds(10),
-            _achievements.Enabled && hasWebApiKey,
-            !_achievements.Enabled ? "Achievements:Enabled is false" : hasWebApiKey ? null : noKey);
+            _achievements.Enabled, "Achievements:Enabled is false", keyBlock);
         yield return Interval(BackendJobNames.GameNewsWatcher, "Owned game news fetch",
             _news.IntervalMinutes, TimeSpan.FromSeconds(20),
-            _news.Enabled, _news.Enabled ? null : "News:Enabled is false");
+            _news.Enabled, "News:Enabled is false");
         yield return Interval(BackendJobNames.PlayerAchievementWatcher, "Player achievement fetch",
             _achievements.PlayerIntervalMinutes, TimeSpan.FromSeconds(10),
-            _achievements.Enabled && hasWebApiKey,
-            !_achievements.Enabled ? "Achievements:Enabled is false" : hasWebApiKey ? null : noKey);
+            _achievements.Enabled, "Achievements:Enabled is false", keyBlock);
         yield return Interval(BackendJobNames.SteamPlayerProfileWatcher, "Player profile fetch",
             _profiles.IntervalMinutes, TimeSpan.FromSeconds(10),
-            _profiles.Enabled && hasWebApiKey,
-            !_profiles.Enabled ? "PlayerProfile:Enabled is false" : hasWebApiKey ? null : noKey);
+            _profiles.Enabled, "PlayerProfile:Enabled is false", keyBlock);
         yield return Interval(BackendJobNames.FollowerHistorySweep, "Follower history queue sweep",
             _followerSweep.IntervalMinutes, TimeSpan.FromMinutes(1),
-            _followerSweep.Enabled, _followerSweep.Enabled ? null : "FollowerHistorySweep:Enabled is false");
+            _followerSweep.Enabled, "FollowerHistorySweep:Enabled is false");
     }
 
-    private static JobDefinition Interval(
-        string name, string label, int intervalMinutes, TimeSpan initialDelay, bool enabled, string? disabledReason) =>
-        new(name, JobRunProducer.CatoBackend, label, JobScheduleKind.Interval, [], intervalMinutes,
-            enabled, disabledReason, TimeoutSeconds: null,
+    /// <param name="settingsReason">Why it is off when the settings switch it off.</param>
+    /// <param name="blockedReason">Set when the watcher cannot run whatever its switch says.</param>
+    private JobDefinition Interval(
+        string name, string label, int intervalMinutes, TimeSpan initialDelay,
+        bool settingsEnabled, string? settingsReason, string? blockedReason = null)
+    {
+        var on = settingsEnabled;
+        var offReason = settingsReason;
+        if (_watcherRows.TryGetValue(name, out var row))
+        {
+            on = row.Enabled;
+            offReason = "paused on the Jobs page";
+            intervalMinutes = row.IntervalMinutes ?? intervalMinutes;
+        }
+        return new(name, JobRunProducer.CatoBackend, label, JobScheduleKind.Interval, [], intervalMinutes,
+            on && blockedReason is null, !on ? offReason : blockedReason, TimeoutSeconds: null,
             JobRunRules.ForInterval(TimeSpan.FromMinutes(Math.Max(intervalMinutes, 1))), initialDelay);
+    }
 
     internal static List<JobScheduleEntryDto> ParseEntries(string json)
     {

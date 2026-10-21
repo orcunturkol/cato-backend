@@ -38,14 +38,11 @@ public class GameAchievementSchemaWatcherService : BackgroundService
         _webApiSettings = webApiSettings.Value;
     }
 
+    // The first value of this watcher's scheduled_job row; the Jobs page owns it after that.
+    private WatcherDefaults Defaults => new("Achievement schema fetch", TimeSpan.FromMinutes(_settings.SchemaIntervalMinutes), _settings.Enabled);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!_settings.Enabled)
-        {
-            _logger.LogInformation("Achievement schema watcher disabled via Achievements:Enabled");
-            return;
-        }
-
         if (string.IsNullOrWhiteSpace(_webApiSettings.ApiKey))
         {
             _logger.LogWarning(
@@ -56,8 +53,12 @@ public class GameAchievementSchemaWatcherService : BackgroundService
         // Brief startup delay to let the database finish migrating.
         await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
 
+        DateTime? previousEnd = null;
         while (!stoppingToken.IsCancellationRequested)
         {
+            await WatcherSchedule.WaitForNextRunAsync(
+                _scopeFactory, BackendJobNames.GameAchievementSchemaWatcher, Defaults, previousEnd, _logger, stoppingToken);
+
             try
             {
                 await RunCycleAsync(stoppingToken);
@@ -71,9 +72,7 @@ public class GameAchievementSchemaWatcherService : BackgroundService
                 _logger.LogError(ex, "Achievement schema fetch cycle failed");
             }
 
-            await Task.Delay(
-                TimeSpan.FromMinutes(_settings.SchemaIntervalMinutes),
-                stoppingToken);
+            previousEnd = DateTime.UtcNow;
         }
     }
 

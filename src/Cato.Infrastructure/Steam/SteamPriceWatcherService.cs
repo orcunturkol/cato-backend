@@ -30,16 +30,22 @@ public sealed class SteamPriceWatcherService : BackgroundService
         _settings = settings.Value;
     }
 
+    // The first value of this watcher's scheduled_job row; the Jobs page owns it after that.
+    private WatcherDefaults Defaults => new("Store price check", TimeSpan.FromHours(_settings.PriceCheckIntervalHours), true);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var interval = TimeSpan.FromHours(_settings.PriceCheckIntervalHours);
         _logger.LogInformation("SteamPriceWatcher: Starting price polling every {Hours} hours", _settings.PriceCheckIntervalHours);
 
         // Initial delay to let other services start up
         await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
 
+        DateTime? previousEnd = null;
         while (!stoppingToken.IsCancellationRequested)
         {
+            await WatcherSchedule.WaitForNextRunAsync(
+                _scopeFactory, BackendJobNames.SteamPriceWatcher, Defaults, previousEnd, _logger, stoppingToken);
+
             try
             {
                 await CheckPricesAsync(stoppingToken);
@@ -53,7 +59,7 @@ public sealed class SteamPriceWatcherService : BackgroundService
                 _logger.LogError(ex, "SteamPriceWatcher: Error during price check");
             }
 
-            await Task.Delay(interval, stoppingToken);
+            previousEnd = DateTime.UtcNow;
         }
     }
 

@@ -37,14 +37,11 @@ public class SteamPlayerProfileWatcherService : BackgroundService
         _webApiSettings = webApiSettings.Value;
     }
 
+    // The first value of this watcher's scheduled_job row; the Jobs page owns it after that.
+    private WatcherDefaults Defaults => new("Player profile fetch", TimeSpan.FromMinutes(_settings.IntervalMinutes), _settings.Enabled);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!_settings.Enabled)
-        {
-            _logger.LogInformation("Player profile watcher disabled via PlayerProfile:Enabled");
-            return;
-        }
-
         if (string.IsNullOrWhiteSpace(_webApiSettings.ApiKey))
         {
             _logger.LogWarning(
@@ -55,8 +52,12 @@ public class SteamPlayerProfileWatcherService : BackgroundService
         // Brief startup delay to let the database finish migrating.
         await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
 
+        DateTime? previousEnd = null;
         while (!stoppingToken.IsCancellationRequested)
         {
+            await WatcherSchedule.WaitForNextRunAsync(
+                _scopeFactory, BackendJobNames.SteamPlayerProfileWatcher, Defaults, previousEnd, _logger, stoppingToken);
+
             try
             {
                 await RunCycleAsync(stoppingToken);
@@ -70,9 +71,7 @@ public class SteamPlayerProfileWatcherService : BackgroundService
                 _logger.LogError(ex, "Player profile fetch cycle failed");
             }
 
-            await Task.Delay(
-                TimeSpan.FromMinutes(_settings.IntervalMinutes),
-                stoppingToken);
+            previousEnd = DateTime.UtcNow;
         }
     }
 

@@ -43,17 +43,23 @@ public sealed class SteamPicsWatcherService : BackgroundService
         _changeNumberFile = Path.Combine(AppContext.BaseDirectory, "pics_change_number.txt");
     }
 
+    // The first value of this watcher's scheduled_job row; the Jobs page owns it after that.
+    private WatcherDefaults Defaults => new("PICS new-game discovery", TimeSpan.FromMinutes(_settings.PicsPollingIntervalMinutes), true);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // Wait for SteamKit2 to connect before starting polling
         _logger.LogInformation("SteamPicsWatcher: Waiting for SteamKit2 connection...");
         await WaitForConnectionAsync(stoppingToken);
 
-        var interval = TimeSpan.FromMinutes(_settings.PicsPollingIntervalMinutes);
         _logger.LogInformation("SteamPicsWatcher: Starting PICS polling every {Minutes} minutes", _settings.PicsPollingIntervalMinutes);
 
+        DateTime? previousEnd = null;
         while (!stoppingToken.IsCancellationRequested)
         {
+            await WatcherSchedule.WaitForNextRunAsync(
+                _scopeFactory, BackendJobNames.SteamPicsWatcher, Defaults, previousEnd, _logger, stoppingToken);
+
             try
             {
                 await PollForNewGamesAsync(stoppingToken);
@@ -67,7 +73,7 @@ public sealed class SteamPicsWatcherService : BackgroundService
                 _logger.LogError(ex, "SteamPicsWatcher: Error during PICS poll");
             }
 
-            await Task.Delay(interval, stoppingToken);
+            previousEnd = DateTime.UtcNow;
         }
     }
 

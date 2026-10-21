@@ -41,14 +41,11 @@ public class PlayerAchievementWatcherService : BackgroundService
         _webApiSettings = webApiSettings.Value;
     }
 
+    // The first value of this watcher's scheduled_job row; the Jobs page owns it after that.
+    private WatcherDefaults Defaults => new("Player achievement fetch", TimeSpan.FromMinutes(_settings.PlayerIntervalMinutes), _settings.Enabled);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!_settings.Enabled)
-        {
-            _logger.LogInformation("Player achievement watcher disabled via Achievements:Enabled");
-            return;
-        }
-
         if (string.IsNullOrWhiteSpace(_webApiSettings.ApiKey))
         {
             _logger.LogWarning(
@@ -59,8 +56,12 @@ public class PlayerAchievementWatcherService : BackgroundService
         // Brief startup delay to let the database finish migrating.
         await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
 
+        DateTime? previousEnd = null;
         while (!stoppingToken.IsCancellationRequested)
         {
+            await WatcherSchedule.WaitForNextRunAsync(
+                _scopeFactory, BackendJobNames.PlayerAchievementWatcher, Defaults, previousEnd, _logger, stoppingToken);
+
             try
             {
                 await RunCycleAsync(stoppingToken);
@@ -74,9 +75,7 @@ public class PlayerAchievementWatcherService : BackgroundService
                 _logger.LogError(ex, "Player achievement fetch cycle failed");
             }
 
-            await Task.Delay(
-                TimeSpan.FromMinutes(_settings.PlayerIntervalMinutes),
-                stoppingToken);
+            previousEnd = DateTime.UtcNow;
         }
     }
 

@@ -8,7 +8,8 @@ public sealed record ScheduleSettings(
     bool Enabled,
     int TimeoutSeconds,
     decimal AlertFailedRatio,
-    int AlertMinItems);
+    int AlertMinItems,
+    int? IntervalMinutes = null);
 
 /// <summary>Checks and previews for schedule edits on the Jobs page. Cron times are UTC.</summary>
 public static class ScheduledJobRules
@@ -16,6 +17,8 @@ public static class ScheduledJobRules
     public const int MinTimeoutSeconds = 60;
     public const int MaxTimeoutSeconds = 24 * 3600;
     public const int MaxExpressions = 10;
+    public const int MinIntervalMinutes = 1;
+    public const int MaxIntervalMinutes = 7 * 24 * 60;
 
     // Long enough to see a weekly expression twice and every daily job seven times.
     private static readonly TimeSpan GapHorizon = TimeSpan.FromDays(15);
@@ -35,7 +38,25 @@ public static class ScheduledJobRules
     }
 
     public static ScheduleSettings Of(ScheduledJob job) => new(
-        job.Cron, job.Enabled, job.TimeoutSeconds, job.AlertFailedRatio, job.AlertMinItems);
+        job.Cron, job.Enabled, job.TimeoutSeconds, job.AlertFailedRatio, job.AlertMinItems, job.IntervalMinutes);
+
+    /// <summary>A backend watcher: an interval instead of a cron and a time limit.</summary>
+    public static List<string> ValidateWatcher(ScheduleSettings settings)
+    {
+        var errors = new List<string>();
+        if (settings.IntervalMinutes is not (>= MinIntervalMinutes and <= MaxIntervalMinutes))
+            errors.Add($"The interval must be between {MinIntervalMinutes} minute and {MaxIntervalMinutes / 1440} days.");
+        AddAlertErrors(settings, errors);
+        return errors;
+    }
+
+    private static void AddAlertErrors(ScheduleSettings settings, List<string> errors)
+    {
+        if (settings.AlertFailedRatio is < 0.01m or > 1m)
+            errors.Add("The alert threshold must be between 1% and 100% failed items.");
+        if (settings.AlertMinItems < 1)
+            errors.Add("The minimum failed items for an alert must be 1 or more.");
+    }
 
     /// <summary>Problems that block a save. An empty list means the settings are valid.</summary>
     public static List<string> Validate(ScheduleSettings settings, DateTime nowUtc)
@@ -53,10 +74,7 @@ public static class ScheduledJobRules
 
         if (settings.TimeoutSeconds is < MinTimeoutSeconds or > MaxTimeoutSeconds)
             errors.Add($"The time limit must be between {MinTimeoutSeconds / 60} minute and {MaxTimeoutSeconds / 3600} hours.");
-        if (settings.AlertFailedRatio is < 0.01m or > 1m)
-            errors.Add("The alert threshold must be between 1% and 100% failed items.");
-        if (settings.AlertMinItems < 1)
-            errors.Add("The minimum failed items for an alert must be 1 or more.");
+        AddAlertErrors(settings, errors);
 
         if (errors.Count == 0 && ShortestGap(expressions, nowUtc) is { } gap
             && gap <= TimeSpan.FromSeconds(settings.TimeoutSeconds))
