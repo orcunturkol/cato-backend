@@ -86,6 +86,21 @@ the "DB-Tables&Content" sheet. Columns, types and unique keys come from the EF m
 only the lineage text is hand-written. **A new table fails `DbTablesTests` until it has a
 catalog entry; a changed writer, source or fallback needs its entry updated by hand.**
 
+### Process roles (`CATO_ROLE`)
+
+One image runs as `all` (today's single container), `api` (HTTP only), `worker` (the
+hosted services: watchers, consumers, dispatcher, alerts, SteamKit) or `migrate` (applies
+migrations and exits). `[WorkerOnly]` controllers need the worker (the SteamKit login):
+the api role does not map them, the worker maps only them. Store enrichment runs in the
+worker, because it shares the static Steam throttle with the watchers:
+`GameService.EnrichGameFromSteamAsync` (used by single enrich, by-appid enrich for OGT,
+re-enrich, bulk import and owned-sync) calls `IGameEnrichmentGateway`. In role all or
+worker that is `LocalGameEnrichmentGateway`; in role api it is
+`RemoteGameEnrichmentGateway`, which posts to the worker's
+`POST /api/internal/enrichment/games/{id}` (`Worker:BaseUrl`, 90 s). The answers keep
+OGT's contract: 200 enriched, 404 unknown game, 400 failed; a worker that is down is an
+error, not a quiet failure.
+
 ### Steam store enrichment
 
 `SteamGameEnrichmentService.EnrichGameAsync` is the single writer of a game's store
