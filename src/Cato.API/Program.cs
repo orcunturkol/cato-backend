@@ -144,6 +144,23 @@ builder.Services.AddScoped<Cato.API.Services.DbTables.DbTableStats>();
 
 // ── Application Services ──
 builder.Services.AddScoped<ISteamGameEnrichmentService, SteamGameEnrichmentService>();
+// Enrichment runs where the Steam throttle and the watchers are: the worker. The api role
+// asks it over HTTP (Worker:BaseUrl, the worker's address on the internal network).
+builder.Services.AddScoped<Cato.API.Services.Enrichment.LocalGameEnrichmentGateway>();
+if (role.RunsHostedServices())
+{
+    builder.Services.AddScoped<Cato.API.Services.Enrichment.IGameEnrichmentGateway>(sp =>
+        sp.GetRequiredService<Cato.API.Services.Enrichment.LocalGameEnrichmentGateway>());
+}
+else
+{
+    builder.Services.AddHttpClient<Cato.API.Services.Enrichment.IGameEnrichmentGateway,
+        Cato.API.Services.Enrichment.RemoteGameEnrichmentGateway>(client =>
+    {
+        client.BaseAddress = new Uri(builder.Configuration["Worker:BaseUrl"] ?? "http://worker:8080/");
+        client.Timeout = Cato.API.Services.Enrichment.RemoteGameEnrichmentGateway.Timeout;
+    });
+}
 builder.Services.AddScoped<Cato.API.Services.IGameService, Cato.API.Services.GameService>();
 builder.Services.AddScoped<Cato.API.Services.IGameDataService, Cato.API.Services.GameDataService>();
 builder.Services.AddScoped<Cato.API.Services.IIngestionService, Cato.API.Services.IngestionService>();

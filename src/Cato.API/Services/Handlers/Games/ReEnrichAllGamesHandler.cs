@@ -1,7 +1,6 @@
 using Cato.API.DTOs;
 using Cato.API.Models.Games;
 using Cato.Infrastructure.Database;
-using Cato.Infrastructure.Steam;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -87,7 +86,7 @@ public class ReEnrichAllGamesBackgroundHandler : IRequestHandler<ReEnrichAllGame
         _ = Task.Run(async () =>
         {
             using var scope = _scopeFactory.CreateScope();
-            var enrichment = scope.ServiceProvider.GetRequiredService<ISteamGameEnrichmentService>();
+            var enrichment = scope.ServiceProvider.GetRequiredService<Cato.API.Services.Enrichment.IGameEnrichmentGateway>();
             var enriched = 0;
             var failed = 0;
 
@@ -95,8 +94,8 @@ public class ReEnrichAllGamesBackgroundHandler : IRequestHandler<ReEnrichAllGame
             {
                 try
                 {
-                    var success = await enrichment.EnrichGameAsync(gameId);
-                    if (success) enriched++;
+                    var outcome = await enrichment.EnrichAsync(gameId, CancellationToken.None);
+                    if (outcome == Cato.API.Services.Enrichment.EnrichmentOutcome.Enriched) enriched++;
                     else failed++;
                 }
                 catch (Exception ex)
