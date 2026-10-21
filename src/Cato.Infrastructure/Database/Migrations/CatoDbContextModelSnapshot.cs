@@ -933,6 +933,10 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.HasIndex("Source")
                         .HasDatabaseName("idx_group_member_count_source");
 
+                    b.HasIndex("Source", "SnapshotDate")
+                        .HasDatabaseName("idx_group_member_count_source_date")
+                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
+
                     b.HasIndex("GameId", "SnapshotDate", "Source")
                         .IsUnique()
                         .HasDatabaseName("unique_group_member_count_snapshot");

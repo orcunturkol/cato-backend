@@ -28,7 +28,8 @@ public sealed record JobFreshnessDto(
     double? AgeHours,
     bool Stale,
     bool Enabled,
-    string? Error);
+    string? Error,
+    long DurationMs = 0);
 
 /// <summary>
 /// Finds a job that reports Succeeded but writes nothing. Columns are chosen to be indexed
@@ -102,6 +103,7 @@ public sealed class JobFreshnessService
             var enabled = catalog.Find(check.Producer, check.JobName)?.Enabled ?? false;
             DateTime? newest = null;
             string? error = null;
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
             try
             {
                 newest = await check.NewestAsync(_db, ct);
@@ -118,7 +120,8 @@ public sealed class JobFreshnessService
                 check.JobName, check.Producer, check.Table, check.Column,
                 newest is { } t ? DateTime.SpecifyKind(t, DateTimeKind.Utc) : null,
                 check.MaxAge.TotalHours, age?.TotalHours is { } h ? Math.Round(h, 1) : null,
-                stale, enabled, error));
+                stale, enabled, error,
+                (long)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds));
         }
         return results;
     }

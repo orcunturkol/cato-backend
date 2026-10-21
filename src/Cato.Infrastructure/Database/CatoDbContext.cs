@@ -275,6 +275,10 @@ public class CatoDbContext : DbContext
                 .HasDatabaseName("unique_group_member_count_snapshot");
             entity.HasIndex(e => e.SnapshotDate).HasDatabaseName("idx_group_member_count_date");
             entity.HasIndex(e => e.Source).HasDatabaseName("idx_group_member_count_source");
+            // The freshness checks take MAX(SnapshotDate) per source of 3.8M rows.
+            entity.HasIndex(e => new { e.Source, e.SnapshotDate })
+                .HasDatabaseName("idx_group_member_count_source_date")
+                .IsCreatedConcurrently();
 
             entity.HasOne(e => e.Game)
                 .WithMany(g => g.GroupMemberCountSnapshots)
