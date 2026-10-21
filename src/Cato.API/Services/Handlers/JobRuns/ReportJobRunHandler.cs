@@ -56,6 +56,7 @@ public class ReportJobRunHandler : IRequestHandler<ReportJobRunCommand, Result<J
             run.MetricsJson = metrics.GetRawText();
         if (request.ErrorMessage is not null || end is not null)
             run.ErrorMessage = request.ErrorMessage;
+        run.DispatchId ??= request.DispatchId;
 
         await _db.SaveChangesAsync(ct);
 

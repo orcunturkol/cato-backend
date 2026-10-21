@@ -77,7 +77,8 @@ public static class JobRunMapper
             metrics,
             run.ErrorMessage,
             effectiveStatus ?? run.Status,
-            lostReason);
+            lostReason,
+            run.DispatchId);
     }
 
     // Npgsql already returns UTC; this keeps the "Z" in JSON for other providers too.

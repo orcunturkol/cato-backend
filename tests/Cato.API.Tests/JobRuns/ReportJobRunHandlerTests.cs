@@ -25,6 +25,21 @@ public class ReportJobRunHandlerTests : JobRunsDbTestBase
     }
 
     [Fact]
+    public async Task A_run_keeps_the_dispatch_that_started_it()
+    {
+        var id = Guid.NewGuid();
+        var dispatch = Guid.NewGuid();
+        await SendAsync(new ReportJobRunCommand("ccu", Start, null, JobRunStatus.Running, null, null,
+            Id: id, DispatchId: dispatch));
+        // The finish report of an older collector build has no dispatch id.
+        var result = await SendAsync(new ReportJobRunCommand("ccu", Start, Start.AddMinutes(2),
+            JobRunStatus.Succeeded, null, null, Id: id));
+
+        Assert.Equal(dispatch, Assert.Single(Rows()).DispatchId);
+        Assert.Equal(dispatch, result.Data!.DispatchId);
+    }
+
+    [Fact]
     public async Task Report_without_id_inserts_a_finished_run_like_before()
     {
         var result = await SendAsync(new ReportJobRunCommand(

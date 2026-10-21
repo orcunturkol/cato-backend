@@ -54,6 +54,24 @@ resource "aws_secretsmanager_secret" "discord_webhook" {
   recovery_window_in_days = 7
 }
 
+# Watches the watcher: the worker's alert monitor sends CATO/WorkerHeartbeat every minute.
+# Five silent minutes (worker, host or AWS access down) e-mail the topic; ok_actions
+# says when it is back. Missing data counts as breaching, because silence is the failure.
+resource "aws_cloudwatch_metric_alarm" "worker_heartbeat" {
+  alarm_name          = "cato-worker-heartbeat"
+  alarm_description   = "The CATO worker sent no heartbeat for 5 minutes: the worker, its host or its AWS access is down."
+  namespace           = "CATO"
+  metric_name         = "WorkerHeartbeat"
+  statistic           = "SampleCount"
+  period              = 60
+  evaluation_periods  = 5
+  threshold           = 1
+  comparison_operator = "LessThanThreshold"
+  treat_missing_data  = "breaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+}
+
 # ── Role for today's EC2 host ──
 # Every CATO process still runs on one host, so one role covers them. The ECS move
 # replaces it with one task role per service and agent, each limited to its own secrets.

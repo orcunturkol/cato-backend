@@ -299,6 +299,34 @@ rows up to the graph's last day, then list values, then the group scrape. List v
 are never written into `group_member_count_snapshot`: the 0-1 day offset would put
 them on the wrong date.
 
+### Alerts (`alert_incident`)
+
+`AlertMonitorService` (worker role only) runs `AlertService.RunCycleAsync` every minute,
+two minutes after start so a deploy does not alert. Each rule judges the **current**
+state and returns firing / not firing; firing opens one incident per job and rule
+(`OpenKey` = `job|rule`, unique, null once resolved), not firing resolves it.
+
+| Rule | Fires when | Resolves when |
+|---|---|---|
+| `run_failed` | the newest finished run is `Failed`, or `Lost` (collector jobs only) | the newest finished run succeeded |
+| `items_failed` | `items_failed / items_total` >= the job's `AlertFailedRatio` and >= `AlertMinItems` | a newer run is below that |
+| `missed_run` | a dispatch is pending > 5 min with its agent group idle, or expired | the newest dispatch is claimed or finished |
+| `agent_offline` | an agent seen this week is silent > 10 min | it calls again |
+| `dlq_not_empty` | `cato-ingestion-dlq` has messages | it is empty |
+| `queue_stuck` | a queue has messages and the count has not dropped for 30 min | the count drops |
+
+`Skipped` and `Interrupted` runs decide nothing. A watcher run that shows `Lost` only
+because the API restarted is ignored, so for watchers only a stored `Failed` alerts.
+Messages go to every `IAlertNotifier` (SNS e-mail, Discord); `OpenSentTo` and
+`ResolveSentTo` record the channels that sent, so a failed channel is retried alone
+next cycle and a "resolved" message goes only where the "opened" one went. Queue counts
+come from a passive declare (plain AMQP, works on Amazon MQ). The monitor also sends
+`CATO/WorkerHeartbeat` to CloudWatch; the alarm `cato-worker-heartbeat`
+(`infra/phase1`) e-mails after five silent minutes. Everything is off unless
+`ALERTS_ENABLED=true` in `.env`; `POST /api/alerts/test` sends one message to every
+channel and `GET /api/alerts` lists incidents. A collector run reports
+`CATO_DISPATCH_ID` as `job_run.DispatchId`.
+
 ## Configuration
 
 Settings are in `src/Cato.API/appsettings.json`. Key sections: `ConnectionStrings:DefaultConnection`, `RabbitMQ`, `SteamKit`, `Ingestion:DataPath`.

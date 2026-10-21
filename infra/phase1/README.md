@@ -53,3 +53,17 @@ aws ec2 associate-iam-instance-profile --region eu-central-1 \
 aws ec2 modify-instance-metadata-options --region eu-central-1 \
   --instance-id i-0b69760b8c49c78d1 --http-tokens required --http-put-response-hop-limit 2
 ```
+
+Turn the alerts on in the backend's `.env` on the host (none of these are secrets),
+then recreate the API:
+
+```sh
+ALERTS_ENABLED=true
+ALERTS_SNS_TOPIC_ARN=<terraform output alerts_topic_arn>
+ALERTS_DISCORD_SECRET_ID=cato/alerts/discord-webhook
+```
+
+**Apply the heartbeat alarm only after the worker sends the metric.** Until the first
+`CATO/WorkerHeartbeat` data point exists, "missing data = breaching" alarms at once.
+Check with `aws cloudwatch list-metrics --namespace CATO`, then
+`terraform apply -target=aws_cloudwatch_metric_alarm.worker_heartbeat`.

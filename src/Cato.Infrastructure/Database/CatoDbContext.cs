@@ -59,6 +59,7 @@ public class CatoDbContext : DbContext
     public DbSet<ScheduledJobChange> ScheduledJobChanges => Set<ScheduledJobChange>();
     public DbSet<JobDispatch> JobDispatches => Set<JobDispatch>();
     public DbSet<JobAgent> JobAgents => Set<JobAgent>();
+    public DbSet<AlertIncident> AlertIncidents => Set<AlertIncident>();
     public DbSet<SteamSpecialEvent> SteamSpecialEvents => Set<SteamSpecialEvent>();
     public DbSet<SteamSpecialEventGame> SteamSpecialEventGames => Set<SteamSpecialEventGame>();
 
@@ -752,6 +753,24 @@ public class CatoDbContext : DbContext
                 .HasDatabaseName("ux_job_dispatch_job_slot");
             entity.HasIndex(e => new { e.AgentGroup, e.Status, e.ScheduledAt })
                 .HasDatabaseName("idx_job_dispatch_group_status");
+        });
+
+        // ── AlertIncident ──
+        modelBuilder.Entity<AlertIncident>(entity =>
+        {
+            entity.ToTable("alert_incident");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.JobName).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Rule).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.OpenKey).HasMaxLength(260);
+            entity.Property(e => e.Message).HasColumnType("text").IsRequired();
+            entity.Property(e => e.OpenSentTo).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.ResolveSentTo).HasMaxLength(100).IsRequired();
+
+            // Null once resolved; nulls never collide, so one open incident per job and rule.
+            entity.HasIndex(e => e.OpenKey).IsUnique().HasDatabaseName("ux_alert_incident_open_key");
+            entity.HasIndex(e => e.OpenedAt).HasDatabaseName("idx_alert_incident_opened_at");
         });
 
         // ── JobAgent ──

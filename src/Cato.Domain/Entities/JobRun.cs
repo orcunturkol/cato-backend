@@ -32,6 +32,9 @@ public class JobRun
 
     public string? ErrorMessage { get; set; }
 
+    /// <summary>The dispatch that started this run (CATO_DISPATCH_ID), when an agent ran it.</summary>
+    public Guid? DispatchId { get; set; }
+
     public DateTime CreatedAt { get; set; }
 }
 

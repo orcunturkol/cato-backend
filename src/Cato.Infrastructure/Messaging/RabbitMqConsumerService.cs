@@ -51,7 +51,7 @@ public class RabbitMqConsumerService : BackgroundService
     /// Maps the settings to a connection factory. A non-empty <see cref="RabbitMqSettings.Uri"/>
     /// overrides host, port, user and password; <c>amqps</c> turns TLS on.
     /// </summary>
-    internal static ConnectionFactory CreateConnectionFactory(RabbitMqSettings settings)
+    public static ConnectionFactory CreateConnectionFactory(RabbitMqSettings settings)
     {
         var factory = new ConnectionFactory
         {

@@ -233,6 +233,64 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.ToTable("active_users_history", (string)null);
                 });
 
+            modelBuilder.Entity("Cato.Domain.Entities.AlertIncident", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("JobName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("OpenKey")
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)");
+
+                    b.Property<string>("OpenSentTo")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("OpenedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ResolveSentTo")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Rule")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid?>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OpenKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_alert_incident_open_key");
+
+                    b.HasIndex("OpenedAt")
+                        .HasDatabaseName("idx_alert_incident_opened_at");
+
+                    b.ToTable("alert_incident", (string)null);
+                });
+
             modelBuilder.Entity("Cato.Domain.Entities.AppChangeRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1041,6 +1099,9 @@ namespace Cato.Infrastructure.Database.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DispatchId")
+                        .HasColumnType("uuid");
 
                     b.Property<long?>("DurationMs")
                         .HasColumnType("bigint");
