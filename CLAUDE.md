@@ -357,6 +357,25 @@ come from a passive declare (plain AMQP, works on Amazon MQ). The monitor also s
 channel and `GET /api/alerts` lists incidents. A collector run reports
 `CATO_DISPATCH_ID` as `job_run.DispatchId`.
 
+### Write protection and the Steamworks login form
+
+Every non-GET request through Caddy (`https://catoptricgames.duckdns.org/api/...`) needs
+the admin password, user `cato` (Caddy `basic_auth`, hash `CATO_ADMIN_HASH` in `.env`,
+set with `scripts/set-admin-password.sh`; until then a hash of a thrown-away string keeps
+writes locked). Reads stay open. The API port 5039 is bound to `127.0.0.1` only: the
+collector's jobs and agents call `localhost:5039` directly, OGT calls `api:8080` on the
+Docker network, and people go through Caddy. Remember that the frontend's paths are
+`/api/api/...` (Caddy strips the first `/api`).
+
+`GET /api/credentials/steamworks` shows the Steamworks login of the collector's jobs from
+the secret store: the masked account, the refresh token's expiry and days left, and the
+last session token (its issue time is the last refresh). `PUT
+/api/credentials/steamworks/refresh-cookie` takes the `steamRefresh_partner` value or the
+whole cookie header, checks it like the collector's `--set-refresh-cookie` (a Steam JWT,
+lifetime over a week, not expired, a warning for a second account in the paste) and
+writes `cato/steamworks/refresh`. No endpoint returns a cookie, and the log has only the
+masked account.
+
 ## Configuration
 
 Settings are in `src/Cato.API/appsettings.json`. Key sections: `ConnectionStrings:DefaultConnection`, `RabbitMQ`, `SteamKit`, `Ingestion:DataPath`.
