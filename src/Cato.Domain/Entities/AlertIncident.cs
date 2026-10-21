@@ -49,6 +49,8 @@ public static class AlertRules
     public const string DlqNotEmpty = "dlq_not_empty";
     /// <summary>A queue has messages and makes no progress.</summary>
     public const string QueueStuck = "queue_stuck";
+    /// <summary>The newest data a job writes is older than its limit.</summary>
+    public const string StaleData = "stale_data";
 
     public static string Title(string rule) => rule switch
     {
@@ -58,6 +60,7 @@ public static class AlertRules
         AgentOffline => "agent offline",
         DlqNotEmpty => "rejected batches in the DLQ",
         QueueStuck => "queue stuck",
+        StaleData => "stale data",
         _ => rule,
     };
 }

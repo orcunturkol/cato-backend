@@ -58,6 +58,7 @@ public sealed class AlertService
     private readonly IQueueStatsReader _queues;
     private readonly QueueProgressTracker _progress;
     private readonly AlertSettings _settings;
+    private readonly IJobFreshnessSource _freshness;
     private readonly string _deadLetterQueue;
     private readonly ILogger<AlertService> _logger;
 
@@ -70,6 +71,7 @@ public sealed class AlertService
         QueueProgressTracker progress,
         IOptions<AlertSettings> settings,
         IOptions<Cato.Infrastructure.Messaging.RabbitMqSettings> rabbit,
+        IJobFreshnessSource freshness,
         ILogger<AlertService> logger)
     {
         _db = db;
@@ -79,6 +81,7 @@ public sealed class AlertService
         _queues = queues;
         _progress = progress;
         _settings = settings.Value;
+        _freshness = freshness;
         _deadLetterQueue = rabbit.Value.DeadLetterQueue;
         _logger = logger;
     }
@@ -90,6 +93,7 @@ public sealed class AlertService
         checks.AddRange(await CheckDispatchesAsync(nowUtc, ct));
         checks.AddRange(await CheckAgentsAsync(nowUtc, ct));
         checks.AddRange(await CheckQueuesAsync(nowUtc, ct));
+        checks.AddRange(await CheckFreshnessAsync(nowUtc, ct));
         var (opened, resolved) = await ApplyAsync(checks, nowUtc, ct);
         var sent = await DeliverAsync(nowUtc, ct);
         return new AlertCycleResult(checks.Count, opened, resolved, sent);
@@ -246,6 +250,21 @@ public sealed class AlertService
                     : null));
         }
         return checks;
+    }
+
+    /// <summary>stale_data: the newest data of an enabled job is older than its limit (checked every 10 min).</summary>
+    public async Task<List<AlertCheck>> CheckFreshnessAsync(DateTime nowUtc, CancellationToken ct)
+    {
+        var (_, results) = await _freshness.GetAsync(nowUtc, ct);
+        // A paused job or a failed query decides nothing.
+        return results.Where(r => r.Enabled && r.Error is null)
+            .Select(r => new AlertCheck(r.JobName, AlertRules.StaleData, r.Stale,
+                r.Stale
+                    ? r.NewestAt is { } newest
+                        ? $"the newest {r.Column} in {r.Table} is {Stamp(newest)} UTC, {r.AgeHours:0.#} h old; the limit is {r.MaxAgeHours:0.#} h"
+                        : $"{r.Table} has no {r.Column} at all"
+                    : null))
+            .ToList();
     }
 
     // ── incidents ──
