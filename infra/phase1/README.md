@@ -37,6 +37,9 @@ arrive only after its link is clicked.
 
 ## Steps outside Terraform
 
+The compose services' secrets (`cato/server/compose-env`) reach the containers through
+`/run/cato/*.env`: install `systemd/cato-compose-secrets.service` once (see its header).
+
 Set the Discord webhook from a file, so the URL appears in no command line or state:
 
 ```sh

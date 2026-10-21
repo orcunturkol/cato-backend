@@ -442,6 +442,13 @@ refresh token is the rotating secret `cato/steam/steamkit-auth`. For local devel
 the Steam account with `dotnet user-secrets` or `SteamKit__Username` / `SteamKit__Password`.
 The Steam password was in git history until 2026-10-21; rotate it.
 
+The other containers' secrets (Caddy's DuckDNS token, Seq's first-run password, OGT's
+database login and invite code) are the secret `cato/server/compose-env`, a JSON object
+`{service: {NAME: value}}`. `cato-compose-secrets.service` (`infra/phase1/systemd`) runs
+`scripts/compose-secrets.py` at boot, which writes `/run/cato/<service>.env` (tmpfs, mode
+600); compose reads them with `env_file`. After a rotation: `sudo systemctl restart
+cato-compose-secrets`, then recreate that service. The backend `.env` holds no secret.
+
 The container runs as `Production` (Dockerfile and compose); `appsettings.Development.json`
 holds only local-development values. Other settings:
 
