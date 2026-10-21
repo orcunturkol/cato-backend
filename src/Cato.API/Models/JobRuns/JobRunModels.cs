@@ -18,7 +18,8 @@ public record ReportJobRunCommand(
     JsonElement? Metrics,
     string? ErrorMessage,
     string Producer = "external-collector",
-    Guid? Id = null) : IRequest<Result<JobRunDto>>;
+    Guid? Id = null,
+    Guid? DispatchId = null) : IRequest<Result<JobRunDto>>;
 
 public record GetJobRunsQuery(string? JobName, string? Status, int Limit = 50, string? Producer = null)
     : IRequest<List<JobRunDto>>;
@@ -38,7 +39,8 @@ public record JobRunDto(
     JsonElement? Metrics,
     string? ErrorMessage,
     string EffectiveStatus,
-    string? LostReason = null);
+    string? LostReason = null,
+    Guid? DispatchId = null);
 
 public record GetJobRunsOverviewQuery(int RecentRunsPerJob = 5) : IRequest<JobRunsOverviewDto>;
 

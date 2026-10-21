@@ -112,6 +112,9 @@ builder.Services.Configure<Cato.API.Services.Dispatch.JobDispatcherSettings>(
     builder.Configuration.GetSection(Cato.API.Services.Dispatch.JobDispatcherSettings.SectionName));
 builder.Services.AddScoped<Cato.API.Services.Dispatch.JobDispatchService>();
 
+// ── Alerts (incidents, SNS e-mail, Discord; the monitor loop runs in the worker) ──
+Cato.API.Services.Alerts.AlertServiceCollectionExtensions.AddAlerts(builder.Services, builder.Configuration);
+
 // ── Application Services ──
 builder.Services.AddScoped<ISteamGameEnrichmentService, SteamGameEnrichmentService>();
 builder.Services.AddScoped<Cato.API.Services.IGameService, Cato.API.Services.GameService>();

@@ -36,6 +36,12 @@ services:
       Redis__ConnectionString: "redis:6379"
       Redis__InstanceName: "cato"
       SteamWebApi__ApiKey: "${STEAM_WEB_API_KEY:-}"
+      # Alerts stay off unless .env sets ALERTS_ENABLED=true (the server). SNS, Secrets
+      # Manager and CloudWatch use the EC2 instance role (infra/phase1).
+      Alerts__Enabled: "${ALERTS_ENABLED:-false}"
+      Alerts__HeartbeatEnabled: "${ALERTS_ENABLED:-false}"
+      Alerts__SnsTopicArn: "${ALERTS_SNS_TOPIC_ARN:-}"
+      Alerts__DiscordWebhookSecretId: "${ALERTS_DISCORD_SECRET_ID:-}"
       # Ship structured logs to the Seq container (overrides appsettings serverUrl; index 1 = the Seq sink)
       Serilog__WriteTo__1__Args__serverUrl: "http://seq:80"
     volumes:

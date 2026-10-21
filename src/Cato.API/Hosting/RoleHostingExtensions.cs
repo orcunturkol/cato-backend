@@ -30,6 +30,7 @@ public static class RoleHostingExtensions
         services.AddHostedService<SteamReviewWatcherService>();
         // Exactly one dispatcher: the worker is a single task.
         services.AddHostedService<Services.Dispatch.JobDispatcherService>();
+        services.AddHostedService<Services.Alerts.AlertMonitorService>();
         return services;
     }
 
