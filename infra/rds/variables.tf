@@ -38,10 +38,12 @@ variable "engine_version" {
   default     = "16.14"
 }
 
+# 2026-10-21: micro (1 GB) had ~95 MB free and swapped; watcher queries hit the 30 s
+# command limit every few hours. Changed with modify-db-instance (state is not here).
 variable "instance_class" {
   description = "RDS instance class"
   type        = string
-  default     = "db.t4g.micro"
+  default     = "db.t4g.medium"
 }
 
 variable "db_name" {
