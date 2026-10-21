@@ -12,13 +12,13 @@ public class GameService : IGameService
 {
     private readonly CatoDbContext _db;
     private readonly ISteamApiService _steam;
-    private readonly ISteamGameEnrichmentService _enrichment;
+    private readonly Enrichment.IGameEnrichmentGateway _enrichment;
     private readonly IRedisAppIdSyncService _redisSync;
 
     public GameService(
         CatoDbContext db,
         ISteamApiService steam,
-        ISteamGameEnrichmentService enrichment,
+        Enrichment.IGameEnrichmentGateway enrichment,
         IRedisAppIdSyncService redisSync)
     {
         _db = db;
@@ -318,8 +318,11 @@ public class GameService : IGameService
 
     public async Task<Result<GameDto>> EnrichGameFromSteamAsync(Guid id, CancellationToken ct = default)
     {
-        var success = await _enrichment.EnrichGameAsync(id, ct);
-        if (!success)
+        // In the worker this enriches here; in the api role it asks the worker (PR 6 of the split).
+        var outcome = await _enrichment.EnrichAsync(id, ct);
+        if (outcome == Enrichment.EnrichmentOutcome.NotFound)
+            return Result<GameDto>.Failure($"Game with Id {id} not found.");
+        if (outcome != Enrichment.EnrichmentOutcome.Enriched)
             return Result<GameDto>.Failure($"Enrichment failed for game {id}.");
 
         var enrichedGame = await _db.Games

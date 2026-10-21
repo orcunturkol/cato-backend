@@ -1,10 +1,13 @@
+using Cato.API.Hosting;
 using Cato.API.Services;
 using Cato.Infrastructure.Steam.SteamKit;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Cato.API.Controllers;
 
+// Needs the SteamKit login, which only the worker holds (the frontend does not call it).
 [ApiController]
+[WorkerOnly]
 [Route("api/steamkit")]
 public class SteamKitController : ControllerBase
 {
