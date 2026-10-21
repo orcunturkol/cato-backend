@@ -175,6 +175,27 @@ public class GameEnrichmentQueueTests : IDisposable
     }
 
     [Fact]
+    public async Task Stale_games_that_keep_failing_wait_behind_every_other_refresh()
+    {
+        // 2026-10-21: 199 delisted games were the stalest records and filled every cycle.
+        var failing = await SeedAsync(10, lastEnrichedAt: Now.AddDays(-200), failures: 5);
+        var failingReddit = await SeedAsync(11, analyzedAt: Now.AddDays(-1), lastEnrichedAt: Now.AddDays(-150), failures: 7);
+        var stale = await SeedAsync(20, lastEnrichedAt: Now.AddDays(-40));
+        var staleReddit = await SeedAsync(21, analyzedAt: Now.AddDays(-2), lastEnrichedAt: Now.AddDays(-40));
+        var retryable = await SeedAsync(22, lastEnrichedAt: Now.AddDays(-45), failures: 4);
+        var settings = new GameEnrichmentSettings { BatchSize = 10, RefreshAfterDays = 30, FailureThreshold = 5 };
+
+        var batch = await SelectAsync(settings);
+
+        Assert.Equal([staleReddit, retryable, stale, failing, failingReddit], batch.GameIds);
+        Assert.Equal(5, batch.Refresh);
+        Assert.Equal(1, batch.Analysed);
+
+        settings.BatchSize = 3;
+        Assert.Equal([staleReddit, retryable, stale], (await SelectAsync(settings)).GameIds);
+    }
+
+    [Fact]
     public async Task Discovered_games_can_be_excluded_entirely()
     {
         var analysed = await SeedAsync(100, analyzedAt: Now.AddDays(-1));

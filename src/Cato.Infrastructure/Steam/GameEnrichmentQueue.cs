@@ -24,6 +24,7 @@ public static class GameEnrichmentQueue
     /// <item>reddit-analysed games whose record has gone stale</item>
     /// <item>everything else with no store record, by app id</item>
     /// <item>everything else that has gone stale, stalest first</item>
+    /// <item>stale games past the failure threshold, stalest first</item>
     /// </list>
     ///
     /// Both reddit bands come before either general one, deliberately. Ordering
@@ -35,7 +36,10 @@ public static class GameEnrichmentQueue
     /// is set; bands 3 and 4 only when
     /// <see cref="GameEnrichmentSettings.IncludeUnanalyzedGames"/> is on. Games at or
     /// past the failure threshold are excluded from the never-enriched bands: an app
-    /// with no store page answers the same way every cycle.
+    /// with no store page answers the same way every cycle. A stale game past the threshold
+    /// waits for band 5, so it is retried only when no other refresh is due: until
+    /// 2026-10-21 199 delisted games were the stalest records and took 199 of the 200 slots
+    /// of every cycle, and the other 62,000 stale games were never refreshed.
     /// </summary>
     public static async Task<GameEnrichmentBatch> SelectAsync(
         CatoDbContext db,
@@ -53,6 +57,7 @@ public static class GameEnrichmentQueue
             ? db.Games.Where(g => g.LastEnrichedAt != null
                                   && g.LastEnrichedAt < DateTime.UtcNow.AddDays(-settings.RefreshAfterDays))
             : null;
+        var staleOk = stale?.Where(g => g.EnrichmentFailures < settings.FailureThreshold);
 
         var gameIds = new List<Guid>();
         var analysed = 0;
@@ -75,9 +80,9 @@ public static class GameEnrichmentQueue
             .Select(g => g.Id));
 
         // 2. Stale reddit games.
-        if (stale is not null)
+        if (staleOk is not null)
         {
-            var n = await TakeAsync(stale
+            var n = await TakeAsync(staleOk
                 .Where(g => g.AnalyzedAt != null)
                 .OrderByDescending(g => g.AnalyzedAt)
                 .Select(g => g.Id));
@@ -94,12 +99,20 @@ public static class GameEnrichmentQueue
                 .Select(g => g.Id));
 
             // 4. Everything else that has gone stale.
-            if (stale is not null)
-                refreshed += await TakeAsync(stale
+            if (staleOk is not null)
+                refreshed += await TakeAsync(staleOk
                     .Where(g => g.AnalyzedAt == null)
                     .OrderBy(g => g.LastEnrichedAt)
                     .Select(g => g.Id));
         }
+
+        // 5. Stale games that failed FailureThreshold times in a row (mostly delisted apps).
+        if (stale is not null)
+            refreshed += await TakeAsync(stale
+                .Where(g => g.EnrichmentFailures >= settings.FailureThreshold)
+                .Where(g => settings.IncludeUnanalyzedGames || g.AnalyzedAt != null)
+                .OrderBy(g => g.LastEnrichedAt)
+                .Select(g => g.Id));
 
         return new GameEnrichmentBatch(gameIds, analysed, refreshed);
     }

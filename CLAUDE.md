@@ -126,14 +126,17 @@ scraped user tags as `UserTag` with their rank as `Weight`). Two things reach it
 | `SteamPicsWatcherService` | a newly discovered app, immediately after creation |
 | `GameEnrichmentWatcherService` | hourly sweep — every game that has none |
 
-The sweep (`GameEnrichment` settings section) works four bands in order:
+The sweep (`GameEnrichment` settings section) works five bands in order:
 
 1. reddit-analysed games with no store record (`AnalyzedAt != null`, newest first)
 2. reddit-analysed games whose record has gone stale
 3. everything else with no store record, by app id
 4. everything else that has gone stale, stalest first
+5. stale games past `FailureThreshold` (mostly delisted apps), stalest first
 
-Bands 2 and 4 need `RefreshAfterDays > 0`. **Both reddit bands come before either
+Bands 2, 4 and 5 need `RefreshAfterDays > 0`. Band 5 exists because a delisted app keeps
+its old `LastEnrichedAt`: until 2026-10-21, 199 of them were the stalest records and took
+199 of the 200 slots of every cycle, so the other ~62,000 stale games never refreshed. **Both reddit bands come before either
 general band** — on plain "never enriched first" ordering a stale reddit game sits
 behind ~9k discovered ones and would not be reached for two days.
 
