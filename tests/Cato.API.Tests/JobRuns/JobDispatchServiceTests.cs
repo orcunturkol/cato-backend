@@ -139,6 +139,47 @@ public class JobDispatchServiceTests : JobRunsDbTestBase
     }
 
     [Fact]
+    public async Task A_time_limit_stop_fails_the_run_and_an_agent_stop_does_not()
+    {
+        Seed(Job("ccu", "*/10 * * * *"), Job("financial", "*/10 * * * *"),
+            Job("group_member_count", "*/10 * * * *"), Job("sale_collection", "*/10 * * * *"));
+        await using var db = NewContext();
+        var service = Service(db);
+        await service.DispatchDueAsync(Now, default);
+
+        // One claim at a time; the job reports its run, then the agent reports the finish.
+        async Task<Guid> RunAsync(string reported, int exitCode, string note, int minutes)
+        {
+            var claimed = await service.ClaimAsync(JobAgentGroups.Light, "light@a", "a", Now, default);
+            db.JobRuns.Add(new JobRun
+            {
+                Id = Guid.NewGuid(), JobName = claimed!.JobName, Producer = JobRunProducer.ExternalCollector,
+                StartTime = Now, EndTime = reported == JobRunStatus.Running ? null : Now.AddMinutes(minutes),
+                Status = reported, DispatchId = claimed.DispatchId,
+            });
+            await db.SaveChangesAsync();
+            await service.FinishAsync(claimed.DispatchId, "light@a", exitCode, note, Now.AddMinutes(minutes), default);
+            return claimed.DispatchId;
+        }
+
+        var timedOut = await RunAsync(JobRunStatus.Interrupted, 124, JobDispatchService.TimeLimitNote, 30);
+        var neverReported = await RunAsync(JobRunStatus.Running, 137, JobDispatchService.TimeLimitNote, 32);
+        var agentStopped = await RunAsync(JobRunStatus.Interrupted, 143, "agent stopped", 5);
+        var reportedFirst = await RunAsync(JobRunStatus.Succeeded, 124, JobDispatchService.TimeLimitNote, 30);
+
+        await using var check = NewContext();
+        var runs = check.JobRuns.ToDictionary(r => r.DispatchId!.Value);
+        Assert.Equal(JobRunStatus.Failed, runs[timedOut].Status);
+        Assert.Equal("time limit reached: the agent stopped the run after 30 min (exit 124)", runs[timedOut].ErrorMessage);
+        Assert.Equal(JobRunStatus.Failed, runs[neverReported].Status);
+        Assert.Equal(Now.AddMinutes(32), runs[neverReported].EndTime);
+        Assert.Equal((long)TimeSpan.FromMinutes(32).TotalMilliseconds, runs[neverReported].DurationMs);
+        Assert.Equal(JobRunStatus.Interrupted, runs[agentStopped].Status);
+        Assert.Null(runs[agentStopped].ErrorMessage);
+        Assert.Equal(JobRunStatus.Succeeded, runs[reportedFirst].Status);
+    }
+
+    [Fact]
     public async Task Unclaimed_runs_expire_and_silent_claims_are_lost()
     {
         Seed(Job("ccu", "*/10 * * * *"), Job("steamdb", "0 3 * * *", JobAgentGroups.SteamDb, timeoutSeconds: 600));
