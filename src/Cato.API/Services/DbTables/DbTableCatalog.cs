@@ -653,6 +653,38 @@ public static class DbTableCatalog
             ["Producer is not cato-backend; at most 200 entries; cron has 5 fields; enabled entries need a cron."],
             ["Each publish replaces the whole list."]),
 
+        new("scheduled_job", DataCollection.Internal,
+            "One row per collector job: schedule, time limit, agent group, alert threshold, and whether cron or the dispatcher starts it.",
+            [new(DataSite.Cato, "Seed from the 2026-10-20 crontab", null, "AddScheduledJobs migration"),
+             new(DataSite.Cato, "Jobs page edits", null, "PUT /api/scheduled-jobs/{name}, POST /api/scheduled-jobs/groups/{group}/managed-by")],
+            ["Cron is checked with Cronos; the interval between runs must be longer than the time limit; overlaps in one agent group give warnings.",
+             "Only dispatcher-managed jobs can be edited."],
+            ["No automatic source: rows change only through the API, and every change is logged in scheduled_job_change."]),
+
+        new("scheduled_job_change", DataCollection.Internal,
+            "Audit log of scheduled_job: who changed what, when and why, with the values before and after.",
+            [new(DataSite.Cato, "Schedule edits", null, "Written with each scheduled_job change")],
+            ["Old and new values are JSON objects."],
+            ["Append only."]),
+
+        new("job_dispatch", DataCollection.Internal,
+            "One row per run the dispatcher hands to an agent group: a cron slot or a run-now request.",
+            [new(DataSite.Cato, "Job dispatcher", null, "JobDispatcherService every 20 s (worker), POST /api/scheduled-jobs/{name}/run, the follower-history button")],
+            ["(JobName, ScheduledAt) is unique, so a restart never dispatches a slot twice; one claimed run per agent group."],
+            ["A pending run nobody claims expires after 6 h; a claimed run with no finish is marked lost after its time limit + 10 min, or when its agent claims again."]),
+
+        new("job_agent", DataCollection.Internal,
+            "One row per job agent process (cato-agent@<group>): when it was last heard and what it runs now.",
+            [new(DataSite.Cato, "Agent claims and heartbeats", null, "POST /api/job-agents/{group}/claim and /heartbeat")],
+            ["The agent id is <group>@<host>; the group must be light, events, steamdb or steamworks."],
+            ["A silent agent stays in the table; the agent_offline alert reports it after 10 min."]),
+
+        new("alert_incident", DataCollection.Internal,
+            "One row per alert: a rule firing for a job, an agent or a queue, from open to resolved, with the channels that sent each message.",
+            [new(DataSite.Cato, "Alert monitor", null, "AlertMonitorService every 60 s (worker)")],
+            ["OpenKey (job|rule) is unique while the incident is open, so one open incident per job and rule."],
+            ["A channel that fails is retried alone next cycle; an incident resolved before any message went out sends nothing."]),
+
         new("marketing_target", DataCollection.Manual,
             "Influencers, media, events and mailing lists.",
             [new(DataSite.Manual, "Marketing targets", null, "POST, PATCH, DELETE /api/marketing-targets")],
