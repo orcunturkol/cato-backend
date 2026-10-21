@@ -18,4 +18,6 @@ public static class WorkerStateKeys
     public const string PicsHistoryChangeNumber = "pics_history_change_number";
     /// <summary>When the process that runs the backend watchers last started (ISO 8601, UTC).</summary>
     public const string WorkerStartedAt = "worker_started_at";
+    /// <summary>The last app id the price watcher saved in its current cycle; 0 once the cycle is complete.</summary>
+    public const string PriceWatcherLastAppId = "price_watcher_last_app_id";
 }

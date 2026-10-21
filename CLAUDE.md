@@ -72,6 +72,10 @@ Some older services (`GameService`, `GameDataService`, `IngestionService`, `Stea
   **Redis writes belong after `SaveChangesAsync`, never inside a transaction** (`GameService.cs`, `SteamGameEnrichmentService.cs`). This is why `game.analyzed` has its own queue rather than riding the batch path — `BatchIngestionDispatcher` runs every item handler inside one transaction, and a Redis write there would not roll back with it.
 - **Steam Integration**: `SteamApiService` (HTTP client for Steam Web API) and `SteamKitService` (SteamKit2 for PICS change monitoring via `SteamPicsWatcherService` background service).
   - **SteamKit Game Discovery**: `SteamPicsWatcherService` polls Steam's PICS change feed via `PICSGetChangesSince`, which returns all AppIDs with any metadata change since the last known change number (persisted in `pics_change_number.txt`). For each changed AppID, it calls `PICSGetProductInfo` and reads the `common` KeyValue section. It filters by `common["type"] == "game"` (excludes DLCs, tools, demos) and `common["releasestate"] == "released"` (excludes unreleased). Also extracts `common["name"]` and `common["steam_release_date"]` (unix timestamp). Matching games are saved with `GameType = "Sourcing"`.
+- **Price watcher**: `SteamPriceWatcherService` reads about 33,000 store prices per cycle (about
+  18 h behind the shared Steam throttle). It saves every 200 games and keeps the last saved
+  app id in `worker_state` (`price_watcher_last_app_id`, 0 when a cycle is complete), so a
+  restart goes on from there; a snapshot's `CapturedAt` is when its price was read.
 - **Logging**: Serilog, levels from the `Serilog` section. The console sink is always on;
   the Seq sink only when `Seq:ServerUrl` is set (compose: `http://seq:80`). Health probes
   and the agents' `POST /api/job-agents/*` polls log at Verbose unless they fail.

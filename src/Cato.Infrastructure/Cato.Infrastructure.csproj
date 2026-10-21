@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Cato.Infrastructure.Tests" />
+    <InternalsVisibleTo Include="Cato.API.Tests" />
   </ItemGroup>
 
   <PropertyGroup>
