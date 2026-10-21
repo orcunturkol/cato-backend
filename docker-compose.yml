@@ -157,12 +157,15 @@ services:
     restart: unless-stopped
     environment:
       ACCEPT_EULA: "Y"
-      # First-run admin password (required by Seq on initial store creation).
-      # Set SEQ_ADMIN_PASSWORD in .env. Username is "admin".
-      SEQ_FIRSTRUN_ADMINPASSWORD: "${SEQ_ADMIN_PASSWORD:?set SEQ_ADMIN_PASSWORD in .env}"
     ports:
       - "127.0.0.1:5341:80"
       - "${TAILSCALE_IP}:5341:80"
+    # SEQ_FIRSTRUN_ADMINPASSWORD (used only when the store is new; username "admin").
+    # Secrets come from Secrets Manager (cato/server/compose-env) through a file in memory,
+    # written at boot by cato-compose-secrets.service (infra/phase1/systemd).
+    env_file:
+      - path: /run/cato/seq.env
+        required: false
     volumes:
       - cato_seq:/data
 
@@ -194,14 +197,15 @@ services:
       - "${TAILSCALE_IP}:5139:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      # Same RDS server as the CATO API, separate "ogt" database. Create it once
-      # (as the RDS master user): CREATE ROLE ogt LOGIN PASSWORD '...';
-      # CREATE DATABASE ogt OWNER ogt; then set OGT_DB_PASSWORD in .env.
-      ConnectionStrings__DefaultConnection: "Host=${RDS_HOST:-postgres};Port=${RDS_PORT:-5432};Database=${OGT_DB_NAME:-ogt};Username=${OGT_DB_USER:-ogt};Password=${OGT_DB_PASSWORD:?set OGT_DB_PASSWORD in .env}"
       Cato__BaseUrl: "http://api:8080"
-      # Shared secret required to register an OGT account. Set OGT_INVITE_CODE in .env.
-      Auth__InviteCode: "${OGT_INVITE_CODE:?set OGT_INVITE_CODE in .env}"
       Serilog__WriteTo__1__Args__serverUrl: "http://seq:80"
+    # ConnectionStrings__DefaultConnection (same RDS server as CATO, database "ogt", role
+    # "ogt") and Auth__InviteCode (needed to register; empty means nobody can register).
+    # Secrets come from Secrets Manager (cato/server/compose-env) through a file in memory,
+    # written at boot by cato-compose-secrets.service (infra/phase1/systemd).
+    env_file:
+      - path: /run/cato/ogt-api.env
+        required: false
     volumes:
       # Persist ASP.NET data-protection keys so auth cookies survive restarts.
       - ogt_dpkeys:/root/.aspnet/DataProtection-Keys
@@ -238,8 +242,13 @@ services:
       - 8.8.8.8
     ports:
       - "${TAILSCALE_IP}:443:443"
+    # DUCKDNS_TOKEN (DNS-01 certificate challenge).
+    # Secrets come from Secrets Manager (cato/server/compose-env) through a file in memory,
+    # written at boot by cato-compose-secrets.service (infra/phase1/systemd).
+    env_file:
+      - path: /run/cato/caddy.env
+        required: false
     environment:
-      DUCKDNS_TOKEN: ${DUCKDNS_TOKEN}
       ACME_EMAIL: ${ACME_EMAIL:-ofturkol@proton.me}
       # Write-action password (Caddyfile). The default is the hash of a random string nobody
       # kept: writes stay locked until scripts/set-admin-password.sh sets CATO_ADMIN_HASH.

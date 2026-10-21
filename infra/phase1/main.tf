@@ -65,6 +65,7 @@ locals {
     "cato/steamdb/cookies"     = "SteamDB login cookies (__Host-steamdb list) of the SteamDB jobs."
     "cato/backend/config"      = "Static backend secrets as JSON configuration keys (database, Steam account, Web API key)."
     "cato/collector/config"    = "Static collector secrets as JSON environment variables (API keys, Webshare, RabbitMQ)."
+    "cato/server/compose-env"  = "Container environment per compose service as JSON {service: {NAME: value}}: Caddy's DuckDNS token, Seq's first-run password, OGT's database login and invite code."
   }
 }
 
