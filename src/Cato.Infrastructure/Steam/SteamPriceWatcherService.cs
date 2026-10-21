@@ -63,7 +63,13 @@ public sealed class SteamPriceWatcherService : BackgroundService
         }
     }
 
-    private async Task CheckPricesAsync(CancellationToken ct)
+    // A cycle reads about 33,000 games behind the shared Steam throttle and takes about 18 h.
+    // It saves every SaveEvery games and keeps the last saved app id in worker_state, so a
+    // restart loses at most one unsaved group and the next cycle goes on from there. Until
+    // 2026-10-21 it saved once at the end, and every deploy lost the whole cycle.
+    internal const int SaveEvery = 200;
+
+    internal async Task CheckPricesAsync(CancellationToken ct, int saveEvery = SaveEvery)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CatoDbContext>();
@@ -73,93 +79,128 @@ public sealed class SteamPriceWatcherService : BackgroundService
         await using var job = await tracker.StartAsync(BackendJobNames.SteamPriceWatcher, ct: ct);
         try
         {
-        var games = await db.Games
+        var stored = await WorkerStateStore.GetAsync(_scopeFactory, WorkerStateKeys.PriceWatcherLastAppId, ct);
+        var resumeAfter = int.TryParse(stored, out var lastAppId) ? lastAppId : 0;
+        var appIds = await db.Games.AsNoTracking()
             .Where(g => g.IsReleased)
             .Where(g => g.ReleaseDate != null && g.ReleaseDate >= new DateOnly(2023, 1, 1))
             .Where(g => g.PriceUsd != null && g.PriceUsd > 0)
+            .Where(g => g.AppId > resumeAfter)
             .OrderBy(g => g.AppId)
+            .Select(g => g.AppId)
             .ToListAsync(ct);
 
-        _logger.LogInformation("SteamPriceWatcher: Checking prices for {Count} games", games.Count);
+        if (resumeAfter > 0)
+            _logger.LogInformation("SteamPriceWatcher: Resuming after AppId {AppId}: {Count} games left", resumeAfter, appIds.Count);
+        else
+            _logger.LogInformation("SteamPriceWatcher: Checking prices for {Count} games", appIds.Count);
 
-        var now = DateTime.UtcNow;
-        int updated = 0;
-        int skipped = 0;
-        int failed = 0;
-
-        foreach (var game in games)
+        var counts = new PriceCounts();
+        foreach (var chunk in appIds.Chunk(saveEvery))
         {
-            if (ct.IsCancellationRequested) break;
-
+            var games = await db.Games.Where(g => chunk.Contains(g.AppId)).OrderBy(g => g.AppId).ToListAsync(ct);
+            int? lastDone = null;
             try
             {
-                var steamData = await steam.GetAppDetailsAsync(game.AppId, ct);
-                if (steamData?.PriceOverview is null)
+                foreach (var game in games)
                 {
-                    skipped++;
-                    continue;
+                    ct.ThrowIfCancellationRequested();
+                    await CheckGameAsync(db, steam, game, counts, ct);
+                    lastDone = game.AppId;
                 }
-
-                var price = steamData.PriceOverview;
-                var basePriceUsd = price.InitialUsd ?? 0m;
-                var finalPriceUsd = price.FinalUsd ?? 0m;
-                var discountPercent = price.DiscountPercent ?? 0;
-
-                // Check if price differs from the latest snapshot
-                var latestSnapshot = await db.PriceSnapshots
-                    .Where(ps => ps.GameId == game.Id)
-                    .OrderByDescending(ps => ps.CapturedAt)
-                    .FirstOrDefaultAsync(ct);
-
-                var priceChanged = latestSnapshot is null
-                    || latestSnapshot.BasePriceUsd != basePriceUsd
-                    || latestSnapshot.FinalPriceUsd != finalPriceUsd
-                    || latestSnapshot.DiscountPercent != discountPercent;
-
-                if (priceChanged)
-                {
-                    db.PriceSnapshots.Add(new PriceSnapshot
-                    {
-                        Id = Guid.NewGuid(),
-                        GameId = game.Id,
-                        CapturedAt = now,
-                        BasePriceUsd = basePriceUsd,
-                        FinalPriceUsd = finalPriceUsd,
-                        DiscountPercent = discountPercent,
-                        Currency = price.Currency ?? "USD"
-                    });
-
-                    updated++;
-                }
-
-                // Always update game with fresh base price and discount
-                game.PriceUsd = basePriceUsd;
-                game.DiscountPercent = discountPercent;
             }
-            catch (Exception ex)
+            finally
             {
-                failed++;
-                _logger.LogWarning(ex, "SteamPriceWatcher: Failed to check price for AppId {AppId}", game.AppId);
+                // Also when the app stops: the games read so far stay read.
+                await db.SaveChangesAsync(CancellationToken.None);
+                db.ChangeTracker.Clear();
+                if (lastDone is { } done)
+                    await WorkerStateStore.SetAsync(_scopeFactory, WorkerStateKeys.PriceWatcherLastAppId,
+                        done.ToString(System.Globalization.CultureInfo.InvariantCulture), CancellationToken.None);
             }
         }
 
-        if (updated > 0 || games.Count > 0)
-            await db.SaveChangesAsync(ct);
+        // The cycle is complete: the next one starts from the first game.
+        await WorkerStateStore.SetAsync(_scopeFactory, WorkerStateKeys.PriceWatcherLastAppId, "0", ct);
 
-        job.Set("games", games.Count);
-        job.Set("updated", updated);
-        job.Set("skipped", skipped);
-        job.Set("failed", failed);
-        if (failed > 0) job.MarkPartialSuccess();
+        job.Set("games", appIds.Count);
+        job.Set("resumed_after_app_id", resumeAfter);
+        job.Set("updated", counts.Updated);
+        job.Set("skipped", counts.Skipped);
+        job.Set("failed", counts.Failed);
+        if (counts.Failed > 0) job.MarkPartialSuccess();
 
         _logger.LogInformation(
             "SteamPriceWatcher: Price check complete — {Updated} snapshots created, {Skipped} skipped (no price data)",
-            updated, skipped);
+            counts.Updated, counts.Skipped);
         }
         catch (Exception ex)
         {
             job.Fail(ex.Message);
             throw;
+        }
+    }
+
+    private sealed class PriceCounts
+    {
+        public int Updated;
+        public int Skipped;
+        public int Failed;
+    }
+
+    private async Task CheckGameAsync(
+        CatoDbContext db, ISteamApiService steam, Game game, PriceCounts counts, CancellationToken ct)
+    {
+        try
+        {
+            var steamData = await steam.GetAppDetailsAsync(game.AppId, ct);
+            if (steamData?.PriceOverview is null)
+            {
+                counts.Skipped++;
+                return;
+            }
+
+            var price = steamData.PriceOverview;
+            var basePriceUsd = price.InitialUsd ?? 0m;
+            var finalPriceUsd = price.FinalUsd ?? 0m;
+            var discountPercent = price.DiscountPercent ?? 0;
+
+            // Check if price differs from the latest snapshot
+            var latestSnapshot = await db.PriceSnapshots
+                .Where(ps => ps.GameId == game.Id)
+                .OrderByDescending(ps => ps.CapturedAt)
+                .FirstOrDefaultAsync(ct);
+
+            var priceChanged = latestSnapshot is null
+                || latestSnapshot.BasePriceUsd != basePriceUsd
+                || latestSnapshot.FinalPriceUsd != finalPriceUsd
+                || latestSnapshot.DiscountPercent != discountPercent;
+
+            if (priceChanged)
+            {
+                db.PriceSnapshots.Add(new PriceSnapshot
+                {
+                    Id = Guid.NewGuid(),
+                    GameId = game.Id,
+                    // When this price was read, not when the 18 h cycle began.
+                    CapturedAt = DateTime.UtcNow,
+                    BasePriceUsd = basePriceUsd,
+                    FinalPriceUsd = finalPriceUsd,
+                    DiscountPercent = discountPercent,
+                    Currency = price.Currency ?? "USD"
+                });
+
+                counts.Updated++;
+            }
+
+            // Always update game with fresh base price and discount
+            game.PriceUsd = basePriceUsd;
+            game.DiscountPercent = discountPercent;
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            counts.Failed++;
+            _logger.LogWarning(ex, "SteamPriceWatcher: Failed to check price for AppId {AppId}", game.AppId);
         }
     }
 }
