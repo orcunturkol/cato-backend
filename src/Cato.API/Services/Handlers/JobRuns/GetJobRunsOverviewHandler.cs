@@ -18,6 +18,7 @@ public class GetJobRunsOverviewHandler : IRequestHandler<GetJobRunsOverviewQuery
     private readonly IJobCatalog _catalog;
     private readonly JobRunStatusResolver _resolver;
     private readonly ApiProcessInfo _process;
+    private readonly WorkerStartTime _workerStart;
     private readonly TimeProvider _time;
 
     public GetJobRunsOverviewHandler(
@@ -25,12 +26,14 @@ public class GetJobRunsOverviewHandler : IRequestHandler<GetJobRunsOverviewQuery
         IJobCatalog catalog,
         JobRunStatusResolver resolver,
         ApiProcessInfo process,
+        WorkerStartTime workerStart,
         TimeProvider time)
     {
         _db = db;
         _catalog = catalog;
         _resolver = resolver;
         _process = process;
+        _workerStart = workerStart;
         _time = time;
     }
 
@@ -39,6 +42,7 @@ public class GetJobRunsOverviewHandler : IRequestHandler<GetJobRunsOverviewQuery
         var now = _time.GetUtcNow().UtcDateTime;
         var perJob = Math.Clamp(request.RecentRunsPerJob, 1, 50);
         var catalog = await _catalog.LoadAsync(ct);
+        var workerStarted = await _workerStart.GetAsync(ct);
 
         var since = now - SeenWindow;
         var seen = await _db.JobRuns.AsNoTracking()
@@ -54,7 +58,7 @@ public class GetJobRunsOverviewHandler : IRequestHandler<GetJobRunsOverviewQuery
 
         var jobs = new List<JobOverviewDto>(definitions.Count);
         foreach (var job in definitions)
-            jobs.Add(await BuildJobAsync(job, perJob, now, ct));
+            jobs.Add(await BuildJobAsync(job, perJob, now, workerStarted, ct));
 
         var runningRows = await _db.JobRuns.AsNoTracking()
             .Where(j => j.Status == JobRunStatus.Running)
@@ -74,10 +78,12 @@ public class GetJobRunsOverviewHandler : IRequestHandler<GetJobRunsOverviewQuery
                 .OrderBy(j => j.NextRunAt is null)
                 .ThenBy(j => j.NextRunAt)
                 .ThenBy(j => j.JobName, StringComparer.Ordinal)
-                .ToList());
+                .ToList(),
+            workerStarted == DateTime.MinValue ? null : DateTime.SpecifyKind(workerStarted, DateTimeKind.Utc));
     }
 
-    private async Task<JobOverviewDto> BuildJobAsync(JobDefinition job, int perJob, DateTime now, CancellationToken ct)
+    private async Task<JobOverviewDto> BuildJobAsync(
+        JobDefinition job, int perJob, DateTime now, DateTime workerStarted, CancellationToken ct)
     {
         var rows = await _db.JobRuns.AsNoTracking()
             .Where(j => j.Producer == job.Producer && j.JobName == job.JobName)
@@ -86,13 +92,13 @@ public class GetJobRunsOverviewHandler : IRequestHandler<GetJobRunsOverviewQuery
             .ToListAsync(ct);
 
         var recent = JobRunStatusEvaluator
-            .EvaluateNewestFirst(rows, job.StaleAfter, now, _process.StartedAtUtc)
+            .EvaluateNewestFirst(rows, job.StaleAfter, now, workerStarted)
             .Select(e => JobRunMapper.ToDto(e.Run, e.Status, e.LostReason))
             .ToList();
 
         // A skip says nothing about when the job itself last ran.
         var lastRun = recent.FirstOrDefault(r => r.Status != JobRunStatus.Skipped) ?? recent.FirstOrDefault();
-        var (nextRunAt, note) = JobNextRunCalculator.Calculate(job, lastRun, now, _process.StartedAtUtc);
+        var (nextRunAt, note) = JobNextRunCalculator.Calculate(job, lastRun, now, workerStarted);
 
         return new JobOverviewDto(
             job.JobName,

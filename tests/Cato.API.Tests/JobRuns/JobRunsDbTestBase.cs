@@ -40,6 +40,10 @@ public abstract class JobRunsDbTestBase : IDisposable
 
     protected static ApiProcessInfo Process { get; } = new(ApiStart);
 
+    /// <summary>Role all by default: this process runs the watchers, so its start is the worker's.</summary>
+    protected static WorkerStartTime WorkerStart(Cato.Infrastructure.Database.CatoDbContext db, bool runsWatchers = true) =>
+        new(db, Process, runsWatchers);
+
     protected static JobCatalog NewCatalog(CatoDbContext db, string webApiKey = "key") => new(
         db,
         Options.Create(new SteamSettings()),

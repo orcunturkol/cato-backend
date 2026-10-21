@@ -53,7 +53,7 @@ public sealed class AlertService
 
     private readonly CatoDbContext _db;
     private readonly IJobCatalog _catalog;
-    private readonly ApiProcessInfo _process;
+    private readonly WorkerStartTime _workerStart;
     private readonly IReadOnlyList<IAlertNotifier> _notifiers;
     private readonly IQueueStatsReader _queues;
     private readonly QueueProgressTracker _progress;
@@ -65,7 +65,7 @@ public sealed class AlertService
     public AlertService(
         CatoDbContext db,
         IJobCatalog catalog,
-        ApiProcessInfo process,
+        WorkerStartTime workerStart,
         IEnumerable<IAlertNotifier> notifiers,
         IQueueStatsReader queues,
         QueueProgressTracker progress,
@@ -76,7 +76,7 @@ public sealed class AlertService
     {
         _db = db;
         _catalog = catalog;
-        _process = process;
+        _workerStart = workerStart;
         _notifiers = notifiers.ToList();
         _queues = queues;
         _progress = progress;
@@ -105,6 +105,7 @@ public sealed class AlertService
     public async Task<List<AlertCheck>> CheckRunsAsync(DateTime nowUtc, CancellationToken ct)
     {
         var catalog = await _catalog.LoadAsync(ct);
+        var workerStarted = await _workerStart.GetAsync(ct);
         var thresholds = await _db.ScheduledJobs.AsNoTracking()
             .ToDictionaryAsync(j => j.Name, j => (j.AlertFailedRatio, j.AlertMinItems), ct);
         var checks = new List<AlertCheck>();
@@ -118,14 +119,16 @@ public sealed class AlertService
                 .Take(RunsPerJob)
                 .ToListAsync(ct);
             var evaluated = JobRunStatusEvaluator.EvaluateNewestFirst(
-                runs, job.StaleAfter, nowUtc, _process.StartedAtUtc);
+                runs, job.StaleAfter, nowUtc, workerStarted);
 
-            // Skipped, Interrupted and live runs decide nothing. A watcher run shows Lost after
-            // every API restart until the Lost rule learns about worker restarts, so for
-            // watchers only a stored Failed counts.
+            // Skipped, Interrupted and live runs decide nothing. A watcher run lost to a worker
+            // restart (or replaced by the next cycle after one) does not alert: the heartbeat
+            // alarm reports a dead worker. A watcher that hangs past its limit does.
             var decisive = evaluated.FirstOrDefault(e =>
                 e.Status is JobRunStatus.Succeeded or JobRunStatus.PartialSuccess or JobRunStatus.Failed
-                || (collector && e.Status == JobRunStatus.Lost));
+                || (e.Status == JobRunStatus.Lost
+                    && (collector || e.LostReason is not (JobRunStatusEvaluator.ReasonWorkerRestarted
+                                                          or JobRunStatusEvaluator.ReasonNewerRun))));
             if (decisive.Run is not { } run)
                 continue;
 

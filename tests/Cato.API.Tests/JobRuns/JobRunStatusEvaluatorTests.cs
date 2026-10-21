@@ -51,7 +51,7 @@ public class JobRunStatusEvaluatorTests
         var (status, reason) = JobRunStatusEvaluator.Evaluate(run, false, TimeSpan.FromHours(48), Now, ApiStart);
 
         Assert.Equal(JobRunStatus.Lost, status);
-        Assert.Equal(JobRunStatusEvaluator.ReasonApiRestarted, reason);
+        Assert.Equal(JobRunStatusEvaluator.ReasonWorkerRestarted, reason);
     }
 
     [Fact]

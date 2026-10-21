@@ -8,7 +8,7 @@ namespace Cato.API.Services.JobRuns;
 public static class JobNextRunCalculator
 {
     public const string NoteAfterCurrentRun = "after the current run";
-    public const string NoteFirstRunSinceStart = "first run since API start";
+    public const string NoteFirstRunSinceStart = "first run since the worker started";
     public const string NoteOverdue = "overdue";
 
     // Allowed lateness before an interval job counts as overdue.
@@ -18,7 +18,7 @@ public static class JobNextRunCalculator
         JobDefinition job,
         JobRunDto? lastRun,
         DateTime nowUtc,
-        DateTime apiStartedAtUtc)
+        DateTime workerStartedAtUtc)
     {
         if (!job.Enabled)
             return (null, job.DisabledReason ?? "disabled");
@@ -26,7 +26,7 @@ public static class JobNextRunCalculator
         return job.ScheduleKind switch
         {
             JobScheduleKind.Cron => (NextCronOccurrence(job.CronExpressions, nowUtc), null),
-            JobScheduleKind.Interval => NextIntervalRun(job, lastRun, nowUtc, apiStartedAtUtc),
+            JobScheduleKind.Interval => NextIntervalRun(job, lastRun, nowUtc, workerStartedAtUtc),
             _ => (null, null),
         };
     }
@@ -61,7 +61,7 @@ public static class JobNextRunCalculator
 
     // Watchers loop "run, then wait the interval", so the next start follows the last end.
     private static (DateTime?, string?) NextIntervalRun(
-        JobDefinition job, JobRunDto? lastRun, DateTime nowUtc, DateTime apiStartedAtUtc)
+        JobDefinition job, JobRunDto? lastRun, DateTime nowUtc, DateTime workerStartedAtUtc)
     {
         if (job.IntervalMinutes is not > 0) return (null, null);
         var interval = TimeSpan.FromMinutes(job.IntervalMinutes.Value);
@@ -71,9 +71,9 @@ public static class JobNextRunCalculator
 
         DateTime next;
         string? note = null;
-        if (lastRun is null || lastRun.StartTime < apiStartedAtUtc)
+        if (lastRun is null || lastRun.StartTime < workerStartedAtUtc)
         {
-            next = apiStartedAtUtc + job.InitialDelay;
+            next = workerStartedAtUtc + job.InitialDelay;
             note = NoteFirstRunSinceStart;
         }
         else

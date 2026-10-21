@@ -20,7 +20,7 @@ public class AlertServiceTests : JobRunsDbTestBase
     private IJobFreshnessSource _freshness = new FakeFreshness([]);
 
     private AlertService Service(CatoDbContext db) => new(
-        db, NewCatalog(db), Process, [_email, _discord], _queues, _progress,
+        db, NewCatalog(db), WorkerStart(db), [_email, _discord], _queues, _progress,
         Options.Create(new AlertSettings()), Options.Create(new RabbitMqSettings()), _freshness,
         NullLogger<AlertService>.Instance);
 
@@ -141,6 +141,22 @@ public class AlertServiceTests : JobRunsDbTestBase
         var incident = Assert.Single(Incidents());
         Assert.Equal(("steamdb_followers", AlertRules.RunFailed), (incident.JobName, incident.Rule));
         Assert.StartsWith("Lost: no finish reported", incident.Message);
+    }
+
+    [Fact]
+    public async Task A_hung_watcher_alerts_but_one_lost_to_a_worker_restart_does_not()
+    {
+        Add(
+            // PICS polls every 10 min, so no finish within 1 h means it hangs.
+            Run(BackendJobNames.SteamPicsWatcher, ApiStart.AddMinutes(1), JobRunStatus.Running, producer: JobRunProducer.CatoBackend),
+            // Started before the worker's start: ended by the restart.
+            Run(BackendJobNames.GameNewsWatcher, ApiStart.AddMinutes(-10), JobRunStatus.Running, producer: JobRunProducer.CatoBackend));
+
+        await CycleAsync(Now);
+
+        var incident = Assert.Single(Incidents());
+        Assert.Equal((BackendJobNames.SteamPicsWatcher, AlertRules.RunFailed), (incident.JobName, incident.Rule));
+        Assert.StartsWith("Lost: no finish reported within 1h", incident.Message);
     }
 
     [Fact]

@@ -9,14 +9,14 @@ namespace Cato.API.Services.JobRuns;
 public static class JobRunStatusEvaluator
 {
     public const string ReasonNewerRun = "a later run of this job started";
-    public const string ReasonApiRestarted = "the API restarted during this run";
+    public const string ReasonWorkerRestarted = "the worker restarted during this run";
 
     public static (string Status, string? LostReason) Evaluate(
         JobRun run,
         bool newerRunExists,
         TimeSpan staleAfter,
         DateTime nowUtc,
-        DateTime apiStartedAtUtc)
+        DateTime workerStartedAtUtc)
     {
         if (run.Status != JobRunStatus.Running)
             return (run.Status, null);
@@ -25,8 +25,9 @@ public static class JobRunStatusEvaluator
         if (newerRunExists)
             return (JobRunStatus.Lost, ReasonNewerRun);
 
-        if (run.Producer == JobRunProducer.CatoBackend && run.StartTime < apiStartedAtUtc)
-            return (JobRunStatus.Lost, ReasonApiRestarted);
+        // Backend runs belong to the worker's watchers; the API process may restart alone.
+        if (run.Producer == JobRunProducer.CatoBackend && run.StartTime < workerStartedAtUtc)
+            return (JobRunStatus.Lost, ReasonWorkerRestarted);
 
         if (nowUtc - run.StartTime > staleAfter)
             return (JobRunStatus.Lost, $"no finish reported within {FormatSpan(staleAfter)}");
@@ -42,13 +43,13 @@ public static class JobRunStatusEvaluator
         IReadOnlyList<JobRun> newestFirst,
         TimeSpan staleAfter,
         DateTime nowUtc,
-        DateTime apiStartedAtUtc)
+        DateTime workerStartedAtUtc)
     {
         var result = new List<(JobRun, string, string?)>(newestFirst.Count);
         var newerSeen = false;
         foreach (var run in newestFirst)
         {
-            var (status, reason) = Evaluate(run, newerSeen, staleAfter, nowUtc, apiStartedAtUtc);
+            var (status, reason) = Evaluate(run, newerSeen, staleAfter, nowUtc, workerStartedAtUtc);
             result.Add((run, status, reason));
             if (run.Status != JobRunStatus.Skipped)
                 newerSeen = true;
