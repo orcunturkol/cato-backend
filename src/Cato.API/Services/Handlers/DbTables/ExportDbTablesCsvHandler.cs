@@ -32,9 +32,15 @@ public class ExportDbTablesCsvHandler : IRequestHandler<ExportDbTablesCsvQuery, 
         var csv = new StringBuilder();
         AppendRow(csv, Header);
 
+        // Postgres row estimates in one query: exact counts of every table take longer than the
+        // 30 s command limit on the server (77 s and a 500 on 2026-10-21). Off Postgres
+        // (tests) there are no estimates, so count exactly.
+        var estimates = await _stats.EstimateRowsAsync(ct);
         foreach (var schema in DbTableSchemaReader.Read(_db.GetService<IDesignTimeModel>().Model))
         {
-            var count = await _stats.CountRowsAsync(schema.Table, ct);
+            var rows = estimates is not null
+                ? estimates.GetValueOrDefault(schema.Table)
+                : (await _stats.CountRowsAsync(schema.Table, ct)).Rows;
             var summary = DbTableView.Summary(schema, null);
             var keyRow = true;
 
@@ -49,7 +55,7 @@ public class ExportDbTablesCsvHandler : IRequestHandler<ExportDbTablesCsvQuery, 
                     column.MaxLength?.ToString() ?? "",
                     column.PrimaryKey ? "PK" : "",
                     column.ClrType,
-                    keyRow ? count.Rows.ToString() : "",
+                    keyRow ? rows.ToString() : "",
                     keyRow ? TableSources(summary) : column.Source,
                     keyRow ? Lines(summary.Validation.Append(column.Validation)) : column.Validation ?? "",
                     keyRow ? Lines(summary.Fallback.Append(column.Fallback)) : column.Fallback ?? "",
