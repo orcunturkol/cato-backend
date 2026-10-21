@@ -4,9 +4,10 @@
     python3 infra/phase1/scripts/set_secret.py cato/collector/config WEBSHARE_PROXY_PASSWORD
     python3 infra/phase1/scripts/set_secret.py cato/backend/config SteamKit:Password
     python3 infra/phase1/scripts/set_secret.py cato/alerts/discord-webhook
+    python3 infra/phase1/scripts/set_secret.py cato/server/compose-env caddy/DUCKDNS_TOKEN
 
-With a key, the secret is a JSON object and only that key changes; without one, the whole
-value is replaced. The value is read with a hidden prompt (twice), never from the command
+With a key, the secret is a JSON object and only that key changes ("service/NAME" for the
+nested cato/server/compose-env); without one, the whole value is replaced. The value is read with a hidden prompt (twice), never from the command
 line, so it stays out of the shell history and the screen. Needs the AWS CLI login of the
 account (or the server's instance role) and Python with boto3. Secrets Manager keeps the
 previous value as AWSPREVIOUS, so a mistake can be undone.
@@ -41,10 +42,17 @@ def main() -> int:
     else:
         current = client.get_secret_value(SecretId=secret_id).get("SecretString") or "{}"
         data = json.loads(current)
-        if key not in data:
-            print(f"{secret_id} has no key {key}; keys: {sorted(data)}")
+        *parents, name = key.split("/")
+        node = data
+        for part in parents:
+            node = node.get(part) if isinstance(node, dict) else None
+        # Only an existing text value: replacing a whole object would break its reader.
+        if not isinstance(node, dict) or not isinstance(node.get(name), str):
+            paths = [f"{k}/{n}" if isinstance(v, dict) else k
+                     for k, v in data.items() for n in (v if isinstance(v, dict) else [None])]
+            print(f"{secret_id} has no text value at {key}; keys: {sorted(paths)}")
             return 1
-        data[key] = value
+        node[name] = value
         new = json.dumps(data)
 
     version = client.put_secret_value(SecretId=secret_id, SecretString=new)["VersionId"]
