@@ -115,22 +115,31 @@ public class BatchIngestionDispatcher : IBatchIngestionDispatcher
         }
     }
 
+    private delegate Task<ItemIngestResult> ItemHandler(IIngestionService ingestion, BatchIngestionItem item, CancellationToken ct);
+
+    // Every batch source this dispatcher takes. Each one also needs a queue binding in
+    // Cato.Infrastructure.Messaging.BatchQueues; a test checks that the two lists match.
+    private static readonly Dictionary<string, ItemHandler> Handlers = new(StringComparer.Ordinal)
+    {
+        ["steam_current_players"]      = (s, i, ct) => s.IngestCcuItemAsync(i.AppId, i.ScrapedAt, i.Data, ct),
+        ["group_member_count"]         = (s, i, ct) => s.IngestGroupMemberCountItemAsync(i.AppId, i.ScrapedAt, i.Data, ct),
+        ["steamdb_most_wished"]        = (s, i, ct) => s.IngestSteamDbSnapshotItemAsync(i.AppId, i.ScrapedAt, i.Data, ct),
+        ["steamdb_wishlist_activity"]  = (s, i, ct) => s.IngestSteamDbSnapshotItemAsync(i.AppId, i.ScrapedAt, i.Data, ct),
+        ["steamdb_follower_history"]   = (s, i, ct) => s.IngestFollowerHistoryItemAsync(i.AppId, i.ScrapedAt, i.Data, ct),
+        ["steam_financial"]            = (s, i, ct) => s.IngestFinancialDataItemAsync(i.AppId, i.ScrapedAt, i.Data, ct),
+        ["steamworks_wishlist_report"] = (s, i, ct) => s.IngestSteamworksWishlistReportItemAsync(i.AppId, i.ScrapedAt, i.Data, ct),
+        ["steamworks_store_traffic"]   = (s, i, ct) => s.IngestSteamworksStoreTrafficItemAsync(i.AppId, i.ScrapedAt, i.Data, ct),
+        ["steamworks_nav_stats"]       = (s, i, ct) => s.IngestSteamworksNavStatsItemAsync(i.AppId, i.ScrapedAt, i.Data, ct),
+        ["steamworks_players"]         = (s, i, ct) => s.IngestSteamworksPlayersItemAsync(i.AppId, i.ScrapedAt, i.Data, ct),
+        ["steamworks_demo_downloads"]  = (s, i, ct) => s.IngestSteamworksDemoDownloadsItemAsync(i.AppId, i.ScrapedAt, i.Data, ct),
+        ["steamworks_bundle_sales"]    = (s, i, ct) => s.IngestSteamworksBundleSalesItemAsync(i.AppId, i.ScrapedAt, i.Data, ct),
+        ["steamworks_nextfest"]        = (s, i, ct) => s.IngestSteamworksNextFestItemAsync(i.AppId, i.ScrapedAt, i.Data, ct),
+    };
+
+    public static IReadOnlyCollection<string> Sources => Handlers.Keys;
+
     private Task<ItemIngestResult> DispatchItemAsync(string source, BatchIngestionItem item, CancellationToken ct) =>
-        source switch
-        {
-            "steam_current_players"     => _ingestionService.IngestCcuItemAsync(item.AppId, item.ScrapedAt, item.Data, ct),
-            "group_member_count"        => _ingestionService.IngestGroupMemberCountItemAsync(item.AppId, item.ScrapedAt, item.Data, ct),
-            "steamdb_most_wished"       => _ingestionService.IngestSteamDbSnapshotItemAsync(item.AppId, item.ScrapedAt, item.Data, ct),
-            "steamdb_wishlist_activity" => _ingestionService.IngestSteamDbSnapshotItemAsync(item.AppId, item.ScrapedAt, item.Data, ct),
-            "steamdb_follower_history"  => _ingestionService.IngestFollowerHistoryItemAsync(item.AppId, item.ScrapedAt, item.Data, ct),
-            "steam_financial"           => _ingestionService.IngestFinancialDataItemAsync(item.AppId, item.ScrapedAt, item.Data, ct),
-            "steamworks_wishlist_report" => _ingestionService.IngestSteamworksWishlistReportItemAsync(item.AppId, item.ScrapedAt, item.Data, ct),
-            "steamworks_store_traffic"  => _ingestionService.IngestSteamworksStoreTrafficItemAsync(item.AppId, item.ScrapedAt, item.Data, ct),
-            "steamworks_nav_stats"      => _ingestionService.IngestSteamworksNavStatsItemAsync(item.AppId, item.ScrapedAt, item.Data, ct),
-            "steamworks_players"        => _ingestionService.IngestSteamworksPlayersItemAsync(item.AppId, item.ScrapedAt, item.Data, ct),
-            "steamworks_demo_downloads" => _ingestionService.IngestSteamworksDemoDownloadsItemAsync(item.AppId, item.ScrapedAt, item.Data, ct),
-            "steamworks_bundle_sales"   => _ingestionService.IngestSteamworksBundleSalesItemAsync(item.AppId, item.ScrapedAt, item.Data, ct),
-            "steamworks_nextfest"       => _ingestionService.IngestSteamworksNextFestItemAsync(item.AppId, item.ScrapedAt, item.Data, ct),
-            _ => throw new InvalidOperationException($"Unknown batch source: '{source}'"),
-        };
+        Handlers.TryGetValue(source, out var handler)
+            ? handler(_ingestionService, item, ct)
+            : throw new InvalidOperationException($"Unknown batch source: '{source}'");
 }
