@@ -6,62 +6,99 @@ x-logging: &default-logging
     max-size: "100m"
     max-file: "5"
 
+# One image, three roles (Hosting/CatoRole.cs), as the ECS tasks will run it: migrate applies
+# the EF migrations and exits, api serves HTTP only, worker runs every hosted service
+# (watchers, queue consumers, job dispatcher, alerts, SteamKit). Exactly one worker: it is
+# one Steam login, and the Steam throttles are per process.
+x-cato-backend: &cato-backend
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: cato-backend:local
+  logging: *default-logging
+
+x-cato-env: &cato-env
+  ASPNETCORE_ENVIRONMENT: Production
+  ConnectionStrings__DefaultConnection: "Host=${RDS_HOST:-postgres};Port=${RDS_PORT:-5432};Database=cato;Username=cato_user;Password=${RDS_DB_PASSWORD:-cato_dev_password}"
+  RabbitMQ__HostName: rabbitmq
+  RabbitMQ__Port: "5672"
+  RabbitMQ__UserName: cato_user
+  RabbitMQ__Password: cato_dev_password
+  Redis__ConnectionString: "redis:6379"
+  Redis__InstanceName: "cato"
+  SteamWebApi__ApiKey: "${STEAM_WEB_API_KEY:-}"
+  # Alerts stay off unless .env sets ALERTS_ENABLED=true (the server). SNS, Secrets
+  # Manager and CloudWatch use the EC2 instance role (infra/phase1). The worker runs the
+  # monitor and the heartbeat; the api sends POST /api/alerts/test.
+  Alerts__Enabled: "${ALERTS_ENABLED:-false}"
+  Alerts__HeartbeatEnabled: "${ALERTS_ENABLED:-false}"
+  Alerts__SnsTopicArn: "${ALERTS_SNS_TOPIC_ARN:-}"
+  Alerts__DiscordWebhookSecretId: "${ALERTS_DISCORD_SECRET_ID:-}"
+  # Secrets Manager when .env sets SECRETS_BACKEND=aws (the server), else files inside the container.
+  Secrets__Backend: "${SECRETS_BACKEND:-file}"
+  # Structured logs also go to the Seq container; without this line a process logs to the console only.
+  Seq__ServerUrl: "http://seq:80"
+
 services:
-  # ── CATO API ──
+  # ── CATO migrations (one-shot; api and worker start after it exits 0) ──
+  migrate:
+    <<: *cato-backend
+    container_name: cato-migrate
+    restart: "no"
+    environment:
+      <<: *cato-env
+      CATO_ROLE: migrate
+
+  # ── CATO API (HTTP only) ──
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    <<: *cato-backend
     container_name: cato-api
-    logging: *default-logging
     restart: unless-stopped
-    # The .NET host gives its services up to 30 s to stop; Docker's default of 10 s killed
-    # the API first, so watcher cycles cut by a deploy stayed "Running" (shown as Lost)
-    # instead of being stored as Interrupted.
     stop_grace_period: 45s
-    # Cap the API so a memory leak kills this container (which auto-restarts)
-    # instead of the whole host. Inside a limited container the .NET GC defaults
-    # its heap hard limit to 75% of the cgroup limit and throws OOM in-process.
-    # memswap_limit == mem_limit forbids the container from touching host swap.
-    mem_limit: 4g
-    memswap_limit: 4g
+    # Cap each process so a memory leak kills its own container (which auto-restarts)
+    # instead of the whole host. Inside a limited container the .NET GC defaults its heap
+    # hard limit to 75% of the cgroup limit. memswap_limit == mem_limit forbids host swap.
+    mem_limit: 1536m
+    memswap_limit: 1536m
     ports:
       # Loopback only: the collector's jobs and agents call localhost:5039. People reach the
       # API through Caddy (https://catoptricgames.duckdns.org/api), which asks for the admin
       # password on write actions; a tailnet port here would go around that.
       - "127.0.0.1:5039:8080"
     environment:
-      ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__DefaultConnection: "Host=${RDS_HOST:-postgres};Port=${RDS_PORT:-5432};Database=cato;Username=cato_user;Password=${RDS_DB_PASSWORD:-cato_dev_password}"
-      RabbitMQ__HostName: rabbitmq
-      RabbitMQ__Port: "5672"
-      RabbitMQ__UserName: cato_user
-      RabbitMQ__Password: cato_dev_password
-      Redis__ConnectionString: "redis:6379"
-      Redis__InstanceName: "cato"
-      SteamWebApi__ApiKey: "${STEAM_WEB_API_KEY:-}"
-      # Alerts stay off unless .env sets ALERTS_ENABLED=true (the server). SNS, Secrets
-      # Manager and CloudWatch use the EC2 instance role (infra/phase1).
-      Alerts__Enabled: "${ALERTS_ENABLED:-false}"
-      Alerts__HeartbeatEnabled: "${ALERTS_ENABLED:-false}"
-      Alerts__SnsTopicArn: "${ALERTS_SNS_TOPIC_ARN:-}"
-      Alerts__DiscordWebhookSecretId: "${ALERTS_DISCORD_SECRET_ID:-}"
-      # The SteamKit login token: Secrets Manager when .env sets SECRETS_BACKEND=aws (the
-      # server), else a file inside the container.
-      Secrets__Backend: "${SECRETS_BACKEND:-file}"
-      # Structured logs also go to the Seq container; without this line the API logs to the console only.
-      Seq__ServerUrl: "http://seq:80"
+      <<: *cato-env
+      CATO_ROLE: api
+      # Store enrichment runs in the worker (RemoteGameEnrichmentGateway, 90 s).
+      Worker__BaseUrl: "http://worker:8080/"
       # People open the site at this origin; the frontend there calls the same origin anyway.
       Cors__AllowedOrigins__0: "https://catoptricgames.duckdns.org"
       # /swagger stays on the private server, as it was in Development.
       Swagger__Enabled: "true"
-    volumes:
-      # Mount the collector's data dir at the SAME absolute path inside the
-      # container, so the absolute file paths the collector puts in ingestion
-      # messages resolve here. Set COLLECTOR_DATA_PATH in .env to the collector's
-      # data dir on this host (e.g. /home/ubuntu/catoptric-data-collector/data).
-      - ${COLLECTOR_DATA_PATH:-/home/ofturkol/catoptric-data-collector/data}:${COLLECTOR_DATA_PATH:-/home/ofturkol/catoptric-data-collector/data}:ro
     depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      seq:
+        condition: service_started
+
+  # ── CATO worker (hosted services; no published port, the api calls http://worker:8080) ──
+  worker:
+    <<: *cato-backend
+    container_name: cato-worker
+    restart: unless-stopped
+    # The .NET host gives its services up to 30 s to stop; Docker's default of 10 s killed
+    # it first, so watcher cycles cut by a deploy stayed "Running" (shown as Lost)
+    # instead of being stored as Interrupted.
+    stop_grace_period: 45s
+    mem_limit: 3g
+    memswap_limit: 3g
+    environment:
+      <<: *cato-env
+      CATO_ROLE: worker
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
       rabbitmq:
         condition: service_healthy
       redis:

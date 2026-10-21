@@ -21,7 +21,8 @@ dotnet ef migrations add <MigrationName> --project src/Cato.Infrastructure --sta
 dotnet ef database update --project src/Cato.Infrastructure --startup-project src/Cato.API
 ```
 
-The database auto-migrates on startup (`Program.cs` calls `db.Database.Migrate()`).
+Role `all` (a plain `dotnet run`) auto-migrates on startup. In compose the one-shot
+`migrate` service applies the migrations, and `api` and `worker` start after it exits 0.
 
 ```bash
 dotnet test                                          # all test projects
@@ -101,7 +102,7 @@ catalog entry; a changed writer, source or fallback needs its entry updated by h
 
 ### Process roles (`CATO_ROLE`)
 
-One image runs as `all` (today's single container), `api` (HTTP only), `worker` (the
+One image runs as `all` (a plain `dotnet run`), `api` (HTTP only), `worker` (the
 hosted services: watchers, consumers, dispatcher, alerts, SteamKit) or `migrate` (applies
 migrations and exits). `[WorkerOnly]` controllers need the worker (the SteamKit login):
 the api role does not map them, the worker maps only them. Store enrichment runs in the
@@ -113,6 +114,14 @@ worker that is `LocalGameEnrichmentGateway`; in role api it is
 `POST /api/internal/enrichment/games/{id}` (`Worker:BaseUrl`, 90 s). The answers keep
 OGT's contract: 200 enriched, 404 unknown game, 400 failed; a worker that is down is an
 error, not a quiet failure.
+
+Compose runs the split since 2026-10-21 (PR 15): `migrate` (one-shot), `api` (`cato-api`,
+`127.0.0.1:5039`, 1.5 GB) and `worker` (`cato-worker`, no published port, 3 GB), one image
+`cato-backend:local`. Deploy with `docker compose up -d --build api worker`: compose runs
+`migrate` first. Read both logs (`docker compose logs api worker`); the watchers, consumers,
+dispatcher, alerts and SteamKit log in `worker`. The collector's data folder is no longer
+mounted: every job publishes its data inline (only the unscheduled legacy `run_daily.py`
+sent file paths).
 
 ### Steam store enrichment
 
