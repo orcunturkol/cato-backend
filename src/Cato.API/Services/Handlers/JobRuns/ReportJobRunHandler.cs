@@ -9,7 +9,8 @@ namespace Cato.API.Services.Handlers.JobRuns;
 
 /// <summary>
 /// Inserts a run, or upserts it when the producer sends its own id. A finished row
-/// is never reopened by a late "Running" report.
+/// is never reopened by a late "Running" report, and a late "Interrupted" report never
+/// replaces "Failed" (the agent's time-limit verdict, <see cref="Dispatch.JobDispatchService.FinishAsync"/>).
 /// </summary>
 public class ReportJobRunHandler : IRequestHandler<ReportJobRunCommand, Result<JobRunDto>>
 {
@@ -44,7 +45,8 @@ public class ReportJobRunHandler : IRequestHandler<ReportJobRunCommand, Result<J
             return Result<JobRunDto>.Failure(
                 $"Run {run.Id} belongs to {run.Producer}/{run.JobName}, not {request.Producer}/{request.JobName}.");
         }
-        else if (run.Status != JobRunStatus.Running && request.Status == JobRunStatus.Running)
+        else if ((run.Status != JobRunStatus.Running && request.Status == JobRunStatus.Running)
+                 || (run.Status == JobRunStatus.Failed && request.Status == JobRunStatus.Interrupted))
         {
             return Result<JobRunDto>.Success(JobRunMapper.ToDto(run));
         }

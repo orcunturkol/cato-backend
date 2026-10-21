@@ -102,6 +102,23 @@ public class ReportJobRunHandlerTests : JobRunsDbTestBase
     }
 
     [Fact]
+    public async Task Late_interrupted_report_keeps_the_time_limit_failure()
+    {
+        var id = Guid.NewGuid();
+        // The agent's time-limit finish failed the run before the job's own report arrived.
+        await SendAsync(new ReportJobRunCommand("ccu", Start, Start.AddMinutes(30), JobRunStatus.Failed, null,
+            "time limit reached: the agent stopped the run after 30 min (exit 124)", Id: id));
+
+        var result = await SendAsync(new ReportJobRunCommand(
+            "ccu", Start, Start.AddMinutes(30), JobRunStatus.Interrupted, null, null, Id: id));
+
+        Assert.True(result.IsSuccess);
+        var row = Assert.Single(Rows());
+        Assert.Equal(JobRunStatus.Failed, row.Status);
+        Assert.StartsWith("time limit reached", row.ErrorMessage);
+    }
+
+    [Fact]
     public async Task Id_of_another_job_is_a_conflict()
     {
         var id = Guid.NewGuid();

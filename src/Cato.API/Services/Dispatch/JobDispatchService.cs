@@ -52,6 +52,9 @@ public sealed class JobDispatchService
     private static readonly TimeSpan Lookback = TimeSpan.FromDays(8);
     private const int DefaultTimeoutSeconds = 3600;
 
+    /// <summary>The agent's finish note when its time limit stopped the run (exit 124 or 137).</summary>
+    public const string TimeLimitNote = "time limit reached";
+
     private readonly CatoDbContext _db;
     private readonly JobDispatcherSettings _settings;
 
@@ -288,8 +291,35 @@ public sealed class JobDispatchService
             if (agent.CurrentDispatchId == dispatchId) agent.CurrentDispatchId = null;
         }
 
+        if (note == TimeLimitNote)
+            await FailRunsStoppedByTimeLimitAsync(dispatch, exitCode, nowUtc, ct);
+
         await _db.SaveChangesAsync(ct);
         return FinishOutcome.Recorded;
+    }
+
+    /// <summary>
+    /// The job reports a SIGTERM as Interrupted, which never alerts, because a deploy or an
+    /// agent stop interrupts runs too. Only the agent knows that its time limit sent the
+    /// signal, so its finish turns the run into Failed (also a run that never reported its end).
+    /// A run that reported its own result before the stop keeps it.
+    /// </summary>
+    private async Task FailRunsStoppedByTimeLimitAsync(
+        JobDispatch dispatch, int exitCode, DateTime nowUtc, CancellationToken ct)
+    {
+        var runs = await _db.JobRuns
+            .Where(r => r.DispatchId == dispatch.Id
+                        && (r.Status == JobRunStatus.Running || r.Status == JobRunStatus.Interrupted))
+            .ToListAsync(ct);
+        var minutes = Math.Round((nowUtc - (dispatch.ClaimedAt ?? nowUtc)).TotalMinutes);
+        var reason = $"time limit reached: the agent stopped the run after {minutes:0} min (exit {exitCode})";
+        foreach (var run in runs)
+        {
+            run.Status = JobRunStatus.Failed;
+            run.ErrorMessage = run.ErrorMessage is null ? reason : $"{reason}; {run.ErrorMessage}";
+            run.EndTime ??= nowUtc;
+            run.DurationMs ??= (long)(run.EndTime.Value - run.StartTime).TotalMilliseconds;
+        }
     }
 
     /// <summary>

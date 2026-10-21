@@ -28,7 +28,10 @@ public class JobDispatchesController : ControllerBase
         _time = time;
     }
 
-    /// <summary>The agent reports that a run ended, with its exit code (124 or 137: time limit).</summary>
+    /// <summary>
+    /// The agent reports that a run ended, with its exit code (124 or 137: time limit). The note
+    /// "time limit reached" makes the job's run Failed, so it alerts.
+    /// </summary>
     [HttpPost("{id:guid}/finish")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

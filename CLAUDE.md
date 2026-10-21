@@ -360,7 +360,11 @@ reports `Succeeded` but writes nothing. The checks are typed queries in code, on
 columns or small tables, cached 10 minutes; `GET /api/job-runs/freshness` shows them.
 A new collector job needs an entry there.
 
-`Skipped` and `Interrupted` runs decide nothing. A watcher run lost to a worker restart
+`Skipped` and `Interrupted` runs decide nothing. A time-limit stop is not left as
+`Interrupted`: the job sees only a SIGTERM, but the agent's finish (exit 124/137, note
+`time limit reached`) makes the run `Failed` (`JobDispatchService.FinishAsync`), so it
+alerts. Until 2026-10-21 `steamworks_bundles` hit its limit daily and nobody was told.
+A watcher run lost to a worker restart
 (or replaced by the next cycle after one) does not alert; the heartbeat alarm reports a
 dead worker.
 

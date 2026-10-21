@@ -56,7 +56,10 @@ public static class JobRunStatus
     /// <summary>Did not run because another run held the job's lock.</summary>
     public const string Skipped = "Skipped";
 
-    /// <summary>Stopped by a signal (SIGTERM/SIGINT), usually the cron timeout.</summary>
+    /// <summary>
+    /// Stopped by a signal (SIGTERM/SIGINT), for example by a deploy or an agent stop. When the
+    /// agent's time limit sent the signal, the agent's finish report makes the run Failed.
+    /// </summary>
     public const string Interrupted = "Interrupted";
 
     /// <summary>
