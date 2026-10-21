@@ -247,10 +247,13 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// Health probes arrive every few seconds; keep them out of the request log.
+// Health probes and the agents' claim and heartbeat calls (four agents, every 10 s) are
+// polls; keep them out of the request log unless they fail.
 app.UseSerilogRequestLogging(options => options.GetLevel = (context, _, exception) =>
     exception is not null || context.Response.StatusCode >= 500 ? LogEventLevel.Error
     : context.Request.Path.StartsWithSegments("/health") ? LogEventLevel.Verbose
+    : HttpMethods.IsPost(context.Request.Method) && context.Request.Path.StartsWithSegments("/api/job-agents")
+        ? LogEventLevel.Verbose
     : LogEventLevel.Information);
 app.UseCors("AllowFrontend");
 app.UseOutputCache();
