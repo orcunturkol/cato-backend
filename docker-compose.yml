@@ -15,6 +15,10 @@ services:
     container_name: cato-api
     logging: *default-logging
     restart: unless-stopped
+    # The .NET host gives its services up to 30 s to stop; Docker's default of 10 s killed
+    # the API first, so watcher cycles cut by a deploy stayed "Running" (shown as Lost)
+    # instead of being stored as Interrupted.
+    stop_grace_period: 45s
     # Cap the API so a memory leak kills this container (which auto-restarts)
     # instead of the whole host. Inside a limited container the .NET GC defaults
     # its heap hard limit to 75% of the cgroup limit and throws OOM in-process.
