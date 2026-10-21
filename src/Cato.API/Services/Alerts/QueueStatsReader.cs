@@ -26,7 +26,9 @@ public sealed class RabbitQueueStatsReader : IQueueStatsReader, IAsyncDisposable
 
     public IReadOnlyList<string> Queues =>
     [
-        _settings.DeadLetterQueue, _settings.QueueName, _settings.QueueNameV2, _settings.GameAnalyzedQueue,
+        _settings.DeadLetterQueue, _settings.QueueName,
+        .. BatchQueues.For(_settings).Select(r => r.Queue),
+        _settings.GameAnalyzedQueue,
     ];
 
     public async Task<IReadOnlyList<QueueStats>> ReadAsync(CancellationToken ct)

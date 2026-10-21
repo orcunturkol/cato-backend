@@ -108,13 +108,14 @@ public class RabbitMqConsumerService : BackgroundService
             }
 
             channels.Add(await ConsumeAsync(connection, _settings.QueueName, DispatchTarget.Legacy, stoppingToken));
-            channels.Add(await ConsumeAsync(connection, _settings.QueueNameV2, DispatchTarget.Batch, stoppingToken));
+            foreach (var route in BatchQueues.For(_settings))
+                channels.Add(await ConsumeAsync(connection, route.Queue, DispatchTarget.Batch, stoppingToken));
             channels.Add(await ConsumeAsync(connection, _settings.GameAnalyzedQueue, DispatchTarget.GameAnalyzed, stoppingToken));
 
             _logger.LogInformation(
-                "Listening on queues '{Legacy}' (single), '{V2}' (batch) and '{Analyzed}' (game.analyzed), one channel each; DLX='{DLX}'",
-                _settings.QueueName, _settings.QueueNameV2, _settings.GameAnalyzedQueue,
-                _settings.DeadLetterExchange);
+                "Listening on queues '{Legacy}' (single), {Batch} (batch) and '{Analyzed}' (game.analyzed), one channel each; DLX='{DLX}'",
+                _settings.QueueName, string.Join(", ", BatchQueues.For(_settings).Select(r => r.Queue)),
+                _settings.GameAnalyzedQueue, _settings.DeadLetterExchange);
 
             await Task.Delay(Timeout.Infinite, stoppingToken);
         }
@@ -140,7 +141,7 @@ public class RabbitMqConsumerService : BackgroundService
         }
     }
 
-    private async Task DeclareTopologyAsync(IChannel channel, CancellationToken stoppingToken)
+    internal async Task DeclareTopologyAsync(IChannel channel, CancellationToken stoppingToken)
     {
         // ── Primary exchange ───────────────────────────────────────────────
         await channel.ExchangeDeclareAsync(
@@ -183,23 +184,37 @@ public class RabbitMqConsumerService : BackgroundService
             routingKey: "ingestion.*",
             cancellationToken: stoppingToken);
 
-        // ── V2 queue (batch path) with DLX args ────────────────────────────
-        await channel.QueueDeclareAsync(
-            queue: _settings.QueueNameV2,
-            durable: true,
-            exclusive: false,
-            autoDelete: false,
-            arguments: new Dictionary<string, object?>
-            {
-                ["x-dead-letter-exchange"]    = _settings.DeadLetterExchange,
-                ["x-dead-letter-routing-key"] = "ingestion.batch.dead"
-            },
-            cancellationToken: stoppingToken);
+        // ── Batch queues, one per source group, with DLX args ─────────────
+        // Every explicit binding exists before the old wildcard goes: the collector publishes
+        // a batch with no route nowhere (or, with mandatory=True, as a failure).
+        foreach (var route in BatchQueues.For(_settings))
+        {
+            await channel.QueueDeclareAsync(
+                queue: route.Queue,
+                durable: true,
+                exclusive: false,
+                autoDelete: false,
+                arguments: new Dictionary<string, object?>
+                {
+                    ["x-dead-letter-exchange"]    = _settings.DeadLetterExchange,
+                    ["x-dead-letter-routing-key"] = "ingestion.batch.dead"
+                },
+                cancellationToken: stoppingToken);
 
-        await channel.QueueBindAsync(
+            foreach (var source in route.Sources)
+                await channel.QueueBindAsync(
+                    queue: route.Queue,
+                    exchange: _settings.ExchangeName,
+                    routingKey: BatchQueues.RoutingKey(source),
+                    cancellationToken: stoppingToken);
+        }
+
+        // Until 2026-10 every source went to v2 through this wildcard; with it the per-source
+        // queues would get each batch twice. Unbinding a missing binding is a no-op.
+        await channel.QueueUnbindAsync(
             queue: _settings.QueueNameV2,
             exchange: _settings.ExchangeName,
-            routingKey: "ingestion.batch.#",
+            routingKey: BatchQueues.LegacyWildcard,
             cancellationToken: stoppingToken);
 
         // ── game.analyzed queue (reddit_metrics events) with DLX args ──────

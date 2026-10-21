@@ -19,7 +19,11 @@ public class RabbitMqSettings
     public string ClientProvidedName { get; set; } = "cato-backend";
 
     public string QueueName { get; set; } = "cato-ingestion";
+    /// <summary>Batch queue of the small daily sources; see <see cref="BatchQueues"/>.</summary>
     public string QueueNameV2 { get; set; } = "cato-ingestion-v2";
+    public string QueueNameCcu { get; set; } = "cato-ingestion-ccu";
+    public string QueueNameFollowers { get; set; } = "cato-ingestion-followers";
+    public string QueueNameSteamworks { get; set; } = "cato-ingestion-steamworks";
     public string GameAnalyzedQueue { get; set; } = "cato-game-analyzed";
     public string ExchangeName { get; set; } = "cato-data";
     public string DeadLetterExchange { get; set; } = "cato-data-dlx";

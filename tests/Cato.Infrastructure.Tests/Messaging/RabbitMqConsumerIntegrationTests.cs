@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
+using RabbitMQ.Client.Exceptions;
 using Xunit.Abstractions;
 
 namespace Cato.Infrastructure.Tests.Messaging;
@@ -54,6 +55,9 @@ public sealed class RabbitMqConsumerIntegrationTests(ITestOutputHelper output) :
         ClientProvidedName = "cato-backend-test",
         QueueName = $"test-{id}-ingestion",
         QueueNameV2 = $"test-{id}-ingestion-v2",
+        QueueNameCcu = $"test-{id}-ingestion-ccu",
+        QueueNameFollowers = $"test-{id}-ingestion-followers",
+        QueueNameSteamworks = $"test-{id}-ingestion-steamworks",
         GameAnalyzedQueue = $"test-{id}-game-analyzed",
         ExchangeName = $"test-{id}-data",
         DeadLetterExchange = $"test-{id}-dlx",
@@ -85,10 +89,10 @@ public sealed class RabbitMqConsumerIntegrationTests(ITestOutputHelper output) :
                 return Task.CompletedTask;
             });
 
-        await PublishAsync("ingestion.batch.test", "batch-1");
+        await PublishAsync("ingestion.batch.group_member_count", "batch-1");
         await batchStarted.Task.WaitAsync(Wait);
         Log("batch-1 is in its handler and blocked");
-        await PublishAsync("ingestion.batch.test", "batch-2");
+        await PublishAsync("ingestion.batch.group_member_count", "batch-2");
 
         for (var i = 1; i <= 3; i++)
             await PublishAsync("game.analyzed.test", $"analyzed-{i}");
@@ -126,7 +130,7 @@ public sealed class RabbitMqConsumerIntegrationTests(ITestOutputHelper output) :
         await WaitUntilAsync(async () => await MessageCountAsync(_settings.DeadLetterQueue) == 1, "the bad message in the DLQ");
         Log("control: the failing game.analyzed message is in the DLQ");
 
-        await PublishAsync("ingestion.batch.test", "in-flight");
+        await PublishAsync("ingestion.batch.group_member_count", "in-flight");
         await batchStarted.Task.WaitAsync(Wait);
         Log("in-flight batch message is in its handler; stopping the service");
         await service.StopAsync(CancellationToken.None);
@@ -169,7 +173,7 @@ public sealed class RabbitMqConsumerIntegrationTests(ITestOutputHelper output) :
         Log("'before' handled on every queue");
 
         // Mid-flow: a batch message is in its handler when the broker goes down.
-        await PublishAsync("ingestion.batch.test", "in-flight");
+        await PublishAsync("ingestion.batch.group_member_count", "in-flight");
         await inFlightStarted.Task.WaitAsync(Wait);
         Log("in-flight batch message is in its handler; restarting the broker");
 
@@ -190,13 +194,58 @@ public sealed class RabbitMqConsumerIntegrationTests(ITestOutputHelper output) :
         Log($"handled in order: {string.Join(", ", seen)}; DLQ empty");
     }
 
+    [RabbitMqFact]
+    public async Task Every_batch_source_reaches_its_own_queue_once_and_an_unknown_source_comes_back()
+    {
+        // Today's production topology: v2 takes every batch source through the wildcard.
+        await using (var connection = await ConnectAsync())
+        await using (var channel = await connection.CreateChannelAsync())
+        {
+            await channel.ExchangeDeclareAsync(_settings.ExchangeName, ExchangeType.Topic, durable: true);
+            await channel.QueueDeclareAsync(_settings.QueueNameV2, durable: true, exclusive: false, autoDelete: false,
+                arguments: new Dictionary<string, object?>
+                {
+                    ["x-dead-letter-exchange"] = _settings.DeadLetterExchange,
+                    ["x-dead-letter-routing-key"] = "ingestion.batch.dead",
+                });
+            await channel.QueueBindAsync(_settings.QueueNameV2, _settings.ExchangeName, BatchQueues.LegacyWildcard);
+        }
+
+        // The new start-up topology, without consumers, so the messages stay to be counted.
+        await using (var connection = await ConnectAsync())
+        await using (var channel = await connection.CreateChannelAsync())
+        {
+            var service = new RabbitMqConsumerService(
+                new ServiceCollection().BuildServiceProvider(), Options.Create(_settings),
+                new TestOutputLogger<RabbitMqConsumerService>(output, _clock));
+            await service.DeclareTopologyAsync(channel, CancellationToken.None);
+        }
+
+        var routes = BatchQueues.For(_settings);
+        foreach (var source in routes.SelectMany(r => r.Sources))
+            await PublishAsync(BatchQueues.RoutingKey(source), source);
+        await PublishAsync("ingestion.steam_special_events", "legacy");
+
+        foreach (var route in routes)
+        {
+            Assert.Equal((uint)route.Sources.Count, await MessageCountAsync(route.Queue));
+            Log($"{route.Queue}: {route.Sources.Count} message(s), one per source");
+        }
+        Assert.Equal(1u, await MessageCountAsync(_settings.QueueName));
+
+        var unknown = await Assert.ThrowsAsync<PublishReturnException>(
+            () => PublishAsync(BatchQueues.RoutingKey("not_a_source"), "lost?"));
+        Assert.Contains("NO_ROUTE", unknown.Message);
+        Log("an unknown source comes back to the publisher (mandatory), it is not dropped");
+    }
+
     private static bool SeenOnEveryQueue(ConcurrentQueue<string> seen, string body) =>
         seen.Contains($"legacy:{body}") && seen.Contains($"batch:{body}") && seen.Contains($"analyzed:{body}");
 
     private async Task PublishToEveryQueueAsync(string body)
     {
         await PublishAsync("ingestion.test", body);
-        await PublishAsync("ingestion.batch.test", body);
+        await PublishAsync("ingestion.batch.group_member_count", body);
         await PublishAsync("game.analyzed.test", body);
     }
 
@@ -244,14 +293,17 @@ public sealed class RabbitMqConsumerIntegrationTests(ITestOutputHelper output) :
         return await channel.MessageCountAsync(queue);
     }
 
-    /// <summary>Waits until each of the three queues has a consumer (it also proves the queues exist).</summary>
+    private IEnumerable<string> AllConsumedQueues =>
+        [_settings.QueueName, .. BatchQueues.For(_settings).Select(r => r.Queue), _settings.GameAnalyzedQueue];
+
+    /// <summary>Waits until every consumed queue has a consumer (it also proves the queues exist).</summary>
     private async Task WaitForConsumersAsync(TimeSpan timeout) =>
         await WaitUntilAsync(async () =>
         {
             try
             {
                 await using var connection = await ConnectAsync();
-                foreach (var queue in new[] { _settings.QueueName, _settings.QueueNameV2, _settings.GameAnalyzedQueue })
+                foreach (var queue in AllConsumedQueues)
                 {
                     await using var channel = await connection.CreateChannelAsync();
                     if (await channel.ConsumerCountAsync(queue) < 1) return false;
@@ -302,11 +354,7 @@ public sealed class RabbitMqConsumerIntegrationTests(ITestOutputHelper output) :
         {
             await using var connection = await ConnectAsync();
             await using var channel = await connection.CreateChannelAsync();
-            foreach (var queue in new[]
-                     {
-                         _settings.QueueName, _settings.QueueNameV2, _settings.GameAnalyzedQueue,
-                         _settings.DeadLetterQueue
-                     })
+            foreach (var queue in AllConsumedQueues.Append(_settings.DeadLetterQueue))
                 await channel.QueueDeleteAsync(queue);
             await channel.ExchangeDeleteAsync(_settings.ExchangeName);
             await channel.ExchangeDeleteAsync(_settings.DeadLetterExchange);
