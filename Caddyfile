@@ -8,6 +8,22 @@ catoptricgames.duckdns.org {
 		dns duckdns {$DUCKDNS_TOKEN}
 	}
 
+	# Every write through the site needs the CATO admin password (user "cato"): schedule
+	# edits, run now, pause, the test alert, the Steamworks login form, uploads and game
+	# edits. Reads stay open. Matched before handle_path strips "/api", so the frontend's
+	# "/api/api/..." requests are covered. The collector's jobs and agents call the API on
+	# localhost:5039, not through Caddy; the API port is not open on the tailnet.
+	# CATO_ADMIN_HASH (in .env, set by scripts/set-admin-password.sh) is the base64 of a
+	# bcrypt hash. docker-compose.yml defaults it to the hash of a random string nobody
+	# kept, so writes stay locked until a password is set.
+	@admin_writes {
+		not method GET HEAD OPTIONS
+		path /api/*
+	}
+	basic_auth @admin_writes {
+		cato {$CATO_ADMIN_HASH}
+	}
+
 	handle_path /api/* {
 		reverse_proxy api:8080
 	}
