@@ -20,22 +20,37 @@ var secretKeys = Cato.Infrastructure.Secrets.SecretConfiguration.AddCatoSecrets(
 var role = CatoRoles.Parse(builder.Configuration[CatoRoles.ConfigurationKey]);
 
 // ── Serilog ──
-// Sinks + minimum levels are configured entirely via the "Serilog" section in
-// appsettings.json (ReadFrom.Configuration), so log hygiene and the Seq sink can
-// be tuned without code changes. Enrichers/console are declared there too.
-Log.Logger = new LoggerConfiguration()
+// Minimum levels, enrichers and the console sink come from the "Serilog" section in
+// appsettings.json (ReadFrom.Configuration). The Seq sink is added only when the
+// environment names a server (Seq:ServerUrl; compose sets http://seq:80).
+var seqUrl = builder.Configuration["Seq:ServerUrl"];
+var logConfig = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
-    .Enrich.WithProperty("Role", role.ToString().ToLowerInvariant())
-    .CreateLogger();
+    .Enrich.WithProperty("Role", role.ToString().ToLowerInvariant());
+if (!string.IsNullOrWhiteSpace(seqUrl))
+    logConfig.WriteTo.Seq(seqUrl);
+Log.Logger = logConfig.CreateLogger();
 
 builder.Host.UseSerilog();
 if (secretKeys.Count > 0)
     Log.Information("Configuration: {Count} keys from {SecretId}: {Keys}",
         secretKeys.Count, Cato.Infrastructure.Secrets.SecretConfiguration.BackendConfigId, secretKeys);
 
+// Development checked scopes and the whole DI graph at start; Production does not by
+// default. Keep both, so a wrong lifetime in the api or worker role stops the start.
+builder.Host.UseDefaultServiceProvider(options =>
+{
+    options.ValidateScopes = true;
+    options.ValidateOnBuild = true;
+});
+
 // ── Database ──
-builder.Services.AddDbContext<CatoDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+// Each role gets its own pool limit (Database:MaxPoolSize, else the role's default).
+var database = new Npgsql.NpgsqlConnectionStringBuilder(builder.Configuration.GetConnectionString("DefaultConnection"))
+{
+    MaxPoolSize = builder.Configuration.GetValue<int?>("Database:MaxPoolSize") ?? role.DefaultMaxPoolSize(),
+};
+builder.Services.AddDbContext<CatoDbContext>(options => options.UseNpgsql(database.ConnectionString));
 
 // ── MediatR ──
 builder.Services.AddMediatR(cfg =>
@@ -169,18 +184,12 @@ builder.Services.AddScoped<Cato.API.Services.IMarketingTargetService, Cato.API.S
 builder.Services.AddScoped<Cato.API.Services.IMarketingActionService, Cato.API.Services.MarketingActionService>();
 
 // ── CORS ──
+// Browser origins from Cors:AllowedOrigins: the local dev servers in Development, the
+// site in compose. The deployed frontend calls its own origin, so it needs no entry.
+var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 builder.Services.AddCors(options =>
-{
     options.AddPolicy("AllowFrontend", policy =>
-    {
-        if (builder.Environment.IsDevelopment())
-            policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
-        else
-            policy.WithOrigins("https://your-prod-origin.com")
-                  .AllowAnyHeader()
-                  .AllowAnyMethod();
-    });
-});
+        policy.WithOrigins(corsOrigins).AllowAnyHeader().AllowAnyMethod()));
 
 // ── Output cache (catalog feed for sibling services) ──
 // Backed by the existing Redis so cached catalog responses are shared across
@@ -241,7 +250,8 @@ if (role == CatoRole.Migrate || role.MigratesOnStartup())
 }
 
 // ── Middleware ──
-if (app.Environment.IsDevelopment())
+var swagger = app.Configuration.GetValue<bool>("Swagger:Enabled");
+if (swagger)
 {
     app.UseSwagger();
     app.UseSwaggerUI();
@@ -261,5 +271,8 @@ app.MapCatoHealthChecks();
 app.MapControllers();
 
 Log.Information("cato_started role={Role}", role);
+Log.Information("Configuration: environment {Environment}, pool limit {MaxPoolSize}, Seq {Seq}, swagger {Swagger}, CORS origins {Origins}",
+    app.Environment.EnvironmentName, database.MaxPoolSize, string.IsNullOrWhiteSpace(seqUrl) ? "off" : seqUrl,
+    swagger ? "on" : "off", corsOrigins);
 await app.RunAsync();
 return 0;

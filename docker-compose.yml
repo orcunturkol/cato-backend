@@ -31,7 +31,7 @@ services:
       # password on write actions; a tailnet port here would go around that.
       - "127.0.0.1:5039:8080"
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__DefaultConnection: "Host=${RDS_HOST:-postgres};Port=${RDS_PORT:-5432};Database=cato;Username=cato_user;Password=${RDS_DB_PASSWORD:-cato_dev_password}"
       RabbitMQ__HostName: rabbitmq
       RabbitMQ__Port: "5672"
@@ -49,8 +49,12 @@ services:
       # The SteamKit login token: Secrets Manager when .env sets SECRETS_BACKEND=aws (the
       # server), else a file inside the container.
       Secrets__Backend: "${SECRETS_BACKEND:-file}"
-      # Ship structured logs to the Seq container (overrides appsettings serverUrl; index 1 = the Seq sink)
-      Serilog__WriteTo__1__Args__serverUrl: "http://seq:80"
+      # Structured logs also go to the Seq container; without this line the API logs to the console only.
+      Seq__ServerUrl: "http://seq:80"
+      # People open the site at this origin; the frontend there calls the same origin anyway.
+      Cors__AllowedOrigins__0: "https://catoptricgames.duckdns.org"
+      # /swagger stays on the private server, as it was in Development.
+      Swagger__Enabled: "true"
     volumes:
       # Mount the collector's data dir at the SAME absolute path inside the
       # container, so the absolute file paths the collector puts in ingestion
