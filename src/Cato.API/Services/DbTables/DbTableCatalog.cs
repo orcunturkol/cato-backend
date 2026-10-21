@@ -680,6 +680,12 @@ public static class DbTableCatalog
             ["The agent id is <group>@<host>; the group must be light, events, steamdb or steamworks."],
             ["A silent agent stays in the table; the agent_offline alert reports it after 10 min."]),
 
+        new("worker_state", DataCollection.Internal,
+            "Small values a background service needs after a restart: the PICS change numbers of the two PICS watchers.",
+            [new(DataSite.Cato, "PICS watchers", null, "SteamPicsWatcherService and SteamPicsChangeHistoryService after each poll", BackendJobNames.SteamPicsWatcher, Backend)],
+            ["One row per key; a change number is written only when it is not 0."],
+            ["A missing row falls back to the container file of the old build once, then to change 0 (all changes again)."]),
+
         new("alert_incident", DataCollection.Internal,
             "One row per alert: a rule firing for a job, an agent or a queue, from open to resolved, with the channels that sent each message.",
             [new(DataSite.Cato, "Alert monitor", null, "AlertMonitorService every 60 s (worker)")],

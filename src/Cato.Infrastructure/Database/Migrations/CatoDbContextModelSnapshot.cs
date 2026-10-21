@@ -2909,6 +2909,24 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.ToTable("wishlist_insight", (string)null);
                 });
 
+            modelBuilder.Entity("Cato.Domain.Entities.WorkerState", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("worker_state", (string)null);
+                });
+
             modelBuilder.Entity("Cato.Domain.Entities.ActionImpact", b =>
                 {
                     b.HasOne("Cato.Domain.Entities.MarketingAction", "Action")
