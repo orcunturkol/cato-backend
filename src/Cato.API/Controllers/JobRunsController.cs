@@ -59,4 +59,21 @@ public class JobRunsController : ControllerBase
         var result = await _mediator.Send(new GetJobRunsOverviewQuery(recentRuns ?? 5), ct);
         return Results.Ok(result);
     }
+
+    /// <summary>
+    /// The newest data each job wrote and whether it is older than the job's limit. The
+    /// results are at most 10 minutes old; the alert monitor uses the same ones.
+    /// </summary>
+    [HttpGet("freshness")]
+    [ProducesResponseType(typeof(JobFreshnessResponse), StatusCodes.Status200OK)]
+    public async Task<JobFreshnessResponse> Freshness(
+        [FromServices] Cato.API.Services.JobRuns.IJobFreshnessSource freshness,
+        [FromServices] TimeProvider time,
+        CancellationToken ct)
+    {
+        var (checkedAt, results) = await freshness.GetAsync(time.GetUtcNow().UtcDateTime, ct);
+        return new JobFreshnessResponse(DateTime.SpecifyKind(checkedAt, DateTimeKind.Utc), results);
+    }
 }
+
+public record JobFreshnessResponse(DateTime CheckedAt, List<Cato.API.Services.JobRuns.JobFreshnessDto> Jobs);

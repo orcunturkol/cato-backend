@@ -1,4 +1,5 @@
 using Cato.API.Services.Alerts;
+using Cato.API.Services.JobRuns;
 using Cato.Domain.Entities;
 using Cato.Infrastructure.Database;
 using Cato.Infrastructure.Jobs;
@@ -16,10 +17,11 @@ public class AlertServiceTests : JobRunsDbTestBase
     private readonly FakeNotifier _discord = new("discord");
     private readonly FakeQueues _queues = new();
     private readonly QueueProgressTracker _progress = new();
+    private IJobFreshnessSource _freshness = new FakeFreshness([]);
 
     private AlertService Service(CatoDbContext db) => new(
         db, NewCatalog(db), Process, [_email, _discord], _queues, _progress,
-        Options.Create(new AlertSettings()), Options.Create(new RabbitMqSettings()),
+        Options.Create(new AlertSettings()), Options.Create(new RabbitMqSettings()), _freshness,
         NullLogger<AlertService>.Instance);
 
     private async Task<AlertCycleResult> CycleAsync(DateTime now)
@@ -299,6 +301,29 @@ public class AlertServiceTests : JobRunsDbTestBase
             Sent.Add(message);
             return Task.CompletedTask;
         }
+    }
+
+    [Fact]
+    public async Task Stale_data_of_an_enabled_job_alerts_and_fresh_data_resolves_it()
+    {
+        var stale = new JobFreshnessDto("ccu", "external-collector", "ccu_history", "Timestamp",
+            Now.AddHours(-6), 4.5, 6, Stale: true, Enabled: true, Error: null);
+        _freshness = new FakeFreshness([stale, stale with { JobName = "financial", Enabled = false, Stale = false }]);
+        await CycleAsync(Now);
+
+        var incident = Assert.Single(Incidents());
+        Assert.Equal(("ccu", AlertRules.StaleData), (incident.JobName, incident.Rule));
+        Assert.Contains("6 h old; the limit is 4.5 h", incident.Message);
+
+        _freshness = new FakeFreshness([stale with { NewestAt = Now, AgeHours = 0, Stale = false }]);
+        await CycleAsync(Now.AddMinutes(10));
+        Assert.NotNull(Assert.Single(Incidents()).ResolvedAt);
+    }
+
+    private sealed class FakeFreshness(List<JobFreshnessDto> results) : IJobFreshnessSource
+    {
+        public Task<(DateTime CheckedAt, List<JobFreshnessDto> Results)> GetAsync(DateTime nowUtc, CancellationToken ct) =>
+            Task.FromResult((nowUtc, results));
     }
 
     private sealed class FakeQueues : IQueueStatsReader
