@@ -22,10 +22,10 @@ services:
     mem_limit: 4g
     memswap_limit: 4g
     ports:
-      # Loopback binding so host-side collectors (job-run reporter) can reach the
-      # API at localhost:5039, matching how postgres/redis/rabbitmq are exposed.
+      # Loopback only: the collector's jobs and agents call localhost:5039. People reach the
+      # API through Caddy (https://catoptricgames.duckdns.org/api), which asks for the admin
+      # password on write actions; a tailnet port here would go around that.
       - "127.0.0.1:5039:8080"
-      - "${TAILSCALE_IP}:5039:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__DefaultConnection: "Host=${RDS_HOST:-postgres};Port=${RDS_PORT:-5432};Database=cato;Username=cato_user;Password=${RDS_DB_PASSWORD:-cato_dev_password}"
@@ -196,6 +196,9 @@ services:
     environment:
       DUCKDNS_TOKEN: ${DUCKDNS_TOKEN}
       ACME_EMAIL: ${ACME_EMAIL:-ofturkol@proton.me}
+      # Write-action password (Caddyfile). The default is the hash of a random string nobody
+      # kept: writes stay locked until scripts/set-admin-password.sh sets CATO_ADMIN_HASH.
+      CATO_ADMIN_HASH: ${CATO_ADMIN_HASH:-JDJhJDE0JDVnQkpvR2svVHhWL09yQ2Zjc3piMHV3TUdLS1dGTVc5d2JvZkpuSlVmdHRXVmNLNmFST0cy}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - cato_caddy_data:/data

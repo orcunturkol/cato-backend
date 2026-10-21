@@ -110,6 +110,8 @@ builder.Services.AddSingleton<Cato.Infrastructure.Secrets.ISecretStore>(sp =>
         : new Cato.Infrastructure.Secrets.FileSecretStore(secrets.FileDirectory);
 });
 
+builder.Services.AddScoped<Cato.API.Services.Credentials.SteamworksLoginService>();
+
 builder.Services.AddSingleton<SteamKitService>();
 builder.Services.AddSingleton<ISteamKitService>(sp => sp.GetRequiredService<SteamKitService>());
 
