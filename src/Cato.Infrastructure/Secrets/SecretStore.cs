@@ -32,6 +32,10 @@ public interface ISecretStore
 public static class SecretIds
 {
     public const string SteamKitAuth = "cato/steam/steamkit-auth";
+    /// <summary>Steamworks refresh cookie (JSON {name: value}); the collector's jobs read it.</summary>
+    public const string SteamworksRefresh = "cato/steamworks/refresh";
+    /// <summary>Steamworks partner-site cookies (JSON {name: value}), rewritten by every run.</summary>
+    public const string SteamworksCookies = "cato/steamworks/cookies";
 }
 
 /// <summary>
