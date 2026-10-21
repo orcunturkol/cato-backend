@@ -2,6 +2,7 @@ using System.Text.Json;
 using Cato.Domain.Entities;
 using Cato.Infrastructure.Database;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Cato.Infrastructure.Jobs;
@@ -15,11 +16,14 @@ public sealed class JobRunTracker : IJobRunTracker
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<JobRunTracker> _logger;
+    private readonly CancellationToken _appStopping;
 
-    public JobRunTracker(IServiceScopeFactory scopeFactory, ILogger<JobRunTracker> logger)
+    public JobRunTracker(
+        IServiceScopeFactory scopeFactory, ILogger<JobRunTracker> logger, IHostApplicationLifetime? lifetime = null)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _appStopping = lifetime?.ApplicationStopping ?? CancellationToken.None;
     }
 
     public async Task<IJobRunScope> StartAsync(
@@ -41,7 +45,7 @@ public sealed class JobRunTracker : IJobRunTracker
             };
             db.JobRuns.Add(run);
             await db.SaveChangesAsync(ct);
-            return new JobRunScope(scope, db, run, _logger);
+            return new JobRunScope(scope, db, run, _logger, _appStopping);
         }
         catch
         {
@@ -56,6 +60,7 @@ public sealed class JobRunTracker : IJobRunTracker
         private readonly CatoDbContext _db;
         private readonly JobRun _run;
         private readonly ILogger _logger;
+        private readonly CancellationToken _appStopping;
         private readonly Dictionary<string, long> _metrics = new();
 
         private bool _failed;
@@ -63,12 +68,13 @@ public sealed class JobRunTracker : IJobRunTracker
         private bool _partial;
         private bool _disposed;
 
-        public JobRunScope(IServiceScope scope, CatoDbContext db, JobRun run, ILogger logger)
+        public JobRunScope(IServiceScope scope, CatoDbContext db, JobRun run, ILogger logger, CancellationToken appStopping)
         {
             _scope = scope;
             _db = db;
             _run = run;
             _logger = logger;
+            _appStopping = appStopping;
         }
 
         public void Set(string key, long value) => _metrics[key] = value;
@@ -91,9 +97,16 @@ public sealed class JobRunTracker : IJobRunTracker
 
             try
             {
-                var status = _failed
-                    ? JobRunStatus.Failed
-                    : _partial ? JobRunStatus.PartialSuccess : JobRunStatus.Succeeded;
+                // Every watcher catches all exceptions, so a deploy's cancellation arrives
+                // here as a failure. A run that fails while the app stops was interrupted.
+                var interrupted = _failed && _appStopping.IsCancellationRequested;
+                var status = interrupted
+                    ? JobRunStatus.Interrupted
+                    : _failed
+                        ? JobRunStatus.Failed
+                        : _partial ? JobRunStatus.PartialSuccess : JobRunStatus.Succeeded;
+                if (interrupted)
+                    _failMessage = $"stopped with the app: {_failMessage}";
 
                 var end = DateTime.UtcNow;
                 _run.EndTime = end;
