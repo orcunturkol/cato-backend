@@ -60,6 +60,7 @@ public class CatoDbContext : DbContext
     public DbSet<JobDispatch> JobDispatches => Set<JobDispatch>();
     public DbSet<JobAgent> JobAgents => Set<JobAgent>();
     public DbSet<AlertIncident> AlertIncidents => Set<AlertIncident>();
+    public DbSet<WorkerState> WorkerStates => Set<WorkerState>();
     public DbSet<SteamSpecialEvent> SteamSpecialEvents => Set<SteamSpecialEvent>();
     public DbSet<SteamSpecialEventGame> SteamSpecialEventGames => Set<SteamSpecialEventGame>();
 
@@ -274,6 +275,10 @@ public class CatoDbContext : DbContext
                 .HasDatabaseName("unique_group_member_count_snapshot");
             entity.HasIndex(e => e.SnapshotDate).HasDatabaseName("idx_group_member_count_date");
             entity.HasIndex(e => e.Source).HasDatabaseName("idx_group_member_count_source");
+            // The freshness checks take MAX(SnapshotDate) per source of 3.8M rows.
+            entity.HasIndex(e => new { e.Source, e.SnapshotDate })
+                .HasDatabaseName("idx_group_member_count_source_date")
+                .IsCreatedConcurrently();
 
             entity.HasOne(e => e.Game)
                 .WithMany(g => g.GroupMemberCountSnapshots)
@@ -753,6 +758,15 @@ public class CatoDbContext : DbContext
                 .HasDatabaseName("ux_job_dispatch_job_slot");
             entity.HasIndex(e => new { e.AgentGroup, e.Status, e.ScheduledAt })
                 .HasDatabaseName("idx_job_dispatch_group_status");
+        });
+
+        // ── WorkerState ──
+        modelBuilder.Entity<WorkerState>(entity =>
+        {
+            entity.ToTable("worker_state");
+            entity.HasKey(e => e.Key);
+            entity.Property(e => e.Key).HasMaxLength(100);
+            entity.Property(e => e.Value).HasColumnType("text").IsRequired();
         });
 
         // ── AlertIncident ──

@@ -149,7 +149,7 @@ public sealed class SteamPicsChangeHistoryService : BackgroundService
         await using var job = await _jobRunTracker.StartAsync(BackendJobNames.SteamPicsChangeHistory, ct: ct);
         try
         {
-        var lastChangeNumber = LoadLastChangeNumber();
+        var lastChangeNumber = await LoadLastChangeNumberAsync(ct);
         var (changedAppIds, latestChangeNumber) = await _steamKit.GetChangedAppIdsSinceAsync(lastChangeNumber, ct);
 
         if (changedAppIds.Count == 0)
@@ -158,7 +158,7 @@ public sealed class SteamPicsChangeHistoryService : BackgroundService
             job.Set("relevantAppIds", 0);
             job.Set("changeRecords", 0);
             _logger.LogDebug("PicsChangeHistory: No changes since change #{ChangeNumber}", lastChangeNumber);
-            SaveLastChangeNumber(latestChangeNumber);
+            await SaveLastChangeNumberAsync(latestChangeNumber, ct);
             return;
         }
 
@@ -186,7 +186,7 @@ public sealed class SteamPicsChangeHistoryService : BackgroundService
             job.Set("relevantAppIds", 0);
             job.Set("changeRecords", 0);
             _logger.LogDebug("PicsChangeHistory: {Total} apps changed but none are tracked", changedAppIds.Count);
-            SaveLastChangeNumber(latestChangeNumber);
+            await SaveLastChangeNumberAsync(latestChangeNumber, ct);
             return;
         }
 
@@ -294,7 +294,7 @@ public sealed class SteamPicsChangeHistoryService : BackgroundService
         }
 
         await db.SaveChangesAsync(ct);
-        SaveLastChangeNumber(latestChangeNumber);
+        await SaveLastChangeNumberAsync(latestChangeNumber, ct);
 
         job.Set("changedAppIds", changedAppIds.Count);
         job.Set("relevantAppIds", relevantAppIds.Count);
@@ -351,17 +351,22 @@ public sealed class SteamPicsChangeHistoryService : BackgroundService
         };
     }
 
-    private uint LoadLastChangeNumber()
+    // In worker_state, so a re-created container goes on from where it stopped. The file is
+    // the store before 2026-10, read once while the row does not exist yet.
+    private async Task<uint> LoadLastChangeNumberAsync(CancellationToken ct)
     {
+        var stored = await WorkerStateStore.GetAsync(_scopeFactory, WorkerStateKeys.PicsHistoryChangeNumber, ct);
+        if (uint.TryParse(stored, out var n))
+            return n;
         if (File.Exists(_changeNumberFile) &&
-            uint.TryParse(File.ReadAllText(_changeNumberFile).Trim(), out var n))
+            uint.TryParse(File.ReadAllText(_changeNumberFile).Trim(), out n))
             return n;
         return 0;
     }
 
-    private void SaveLastChangeNumber(uint changeNumber)
+    private async Task SaveLastChangeNumberAsync(uint changeNumber, CancellationToken ct)
     {
         if (changeNumber == 0) return;
-        File.WriteAllText(_changeNumberFile, changeNumber.ToString());
+        await WorkerStateStore.SetAsync(_scopeFactory, WorkerStateKeys.PicsHistoryChangeNumber, changeNumber.ToString(), ct);
     }
 }

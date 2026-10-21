@@ -90,7 +90,7 @@ public sealed class SteamPicsWatcherService : BackgroundService
         await using var job = await _jobRunTracker.StartAsync(BackendJobNames.SteamPicsWatcher, ct: ct);
         try
         {
-        var lastChangeNumber = LoadLastChangeNumber();
+        var lastChangeNumber = await LoadLastChangeNumberAsync(ct);
 
         var (changedAppIds, latestChangeNumber) = await _steamKit.GetChangedAppIdsSinceAsync(lastChangeNumber, ct);
 
@@ -99,7 +99,7 @@ public sealed class SteamPicsWatcherService : BackgroundService
             job.Set("changedAppIds", 0);
             job.Set("discovered", 0);
             _logger.LogDebug("SteamPicsWatcher: No changes since change #{ChangeNumber}", lastChangeNumber);
-            SaveLastChangeNumber(latestChangeNumber);
+            await SaveLastChangeNumberAsync(latestChangeNumber, ct);
             return;
         }
 
@@ -203,7 +203,7 @@ public sealed class SteamPicsWatcherService : BackgroundService
                 enriched, newGameIds.Count);
         }
 
-        SaveLastChangeNumber(latestChangeNumber);
+        await SaveLastChangeNumberAsync(latestChangeNumber, ct);
 
         job.Set("changedAppIds", changedAppIds.Count);
         job.Set("discovered", discovered);
@@ -241,19 +241,22 @@ public sealed class SteamPicsWatcherService : BackgroundService
             appId, name, decision.Reason);
     }
 
-    private uint LoadLastChangeNumber()
+    // In worker_state, so a re-created container goes on from where it stopped. The file is
+    // the store before 2026-10, read once while the row does not exist yet.
+    private async Task<uint> LoadLastChangeNumberAsync(CancellationToken ct)
     {
-        if (File.Exists(_changeNumberFile) &&
-            uint.TryParse(File.ReadAllText(_changeNumberFile).Trim(), out var n))
+        var stored = await WorkerStateStore.GetAsync(_scopeFactory, WorkerStateKeys.PicsWatcherChangeNumber, ct);
+        if (uint.TryParse(stored, out var n))
             return n;
-
-        // If no file exists, start from a sentinel that fetches only very recent changes
+        if (File.Exists(_changeNumberFile) &&
+            uint.TryParse(File.ReadAllText(_changeNumberFile).Trim(), out n))
+            return n;
         return 0;
     }
 
-    private void SaveLastChangeNumber(uint changeNumber)
+    private async Task SaveLastChangeNumberAsync(uint changeNumber, CancellationToken ct)
     {
         if (changeNumber == 0) return;
-        File.WriteAllText(_changeNumberFile, changeNumber.ToString());
+        await WorkerStateStore.SetAsync(_scopeFactory, WorkerStateKeys.PicsWatcherChangeNumber, changeNumber.ToString(), ct);
     }
 }

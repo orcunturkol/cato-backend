@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Cato.Infrastructure.Secrets;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -15,7 +16,9 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
 {
     private readonly SteamSettings _settings;
     private readonly ILogger<SteamKitService> _logger;
-    private readonly string _authStateFile = Path.Combine(AppContext.BaseDirectory, "steam_auth_state.json");
+    private readonly ISecretStore _secrets;
+    // Where the login lived before 2026-10; read once, while the secret has no value yet.
+    private readonly string _legacyAuthStateFile = Path.Combine(AppContext.BaseDirectory, "steam_auth_state.json");
 
     private SteamClient _steamClient = null!;
     private CallbackManager _callbackManager = null!;
@@ -36,10 +39,11 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
 
     public bool IsConnected => _isLoggedOn;
 
-    public SteamKitService(IOptions<SteamSettings> settings, ILogger<SteamKitService> logger)
+    public SteamKitService(IOptions<SteamSettings> settings, ILogger<SteamKitService> logger, ISecretStore secrets)
     {
         _settings = settings.Value;
         _logger = logger;
+        _secrets = secrets;
     }
 
     // ── IHostedService ────────────────────────────────────────────────────────
@@ -123,7 +127,7 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
     {
         try
         {
-            var stored = LoadStoredAuth();
+            var stored = await LoadStoredAuthAsync();
             string accountName;
             string logOnToken;
 
@@ -150,7 +154,7 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
 
                 accountName = pollResponse.AccountName;
                 logOnToken = pollResponse.RefreshToken;
-                SaveStoredAuth(new StoredSteamAuth(accountName, pollResponse.RefreshToken, pollResponse.NewGuardData));
+                await SaveStoredAuthAsync(new StoredSteamAuth(accountName, pollResponse.RefreshToken, pollResponse.NewGuardData));
             }
 
             _steamUser.LogOn(new SteamUser.LogOnDetails
@@ -212,7 +216,7 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
             if (_usedStoredRefreshToken)
             {
                 _logger.LogWarning("SteamKit2: Stored refresh token was rejected; will re-authenticate with credentials on next attempt.");
-                ClearStoredAuth();
+                _ = ClearStoredAuthAsync();
             }
 
             _loginTcs?.TrySetException(new InvalidOperationException($"Steam login failed: {cb.Result}"));
@@ -234,13 +238,28 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
     }
 
     // ── Persisted auth state ──────────────────────────────────────────────────
+    // The refresh token lives in the secret store (Secrets Manager on the server), so a
+    // re-created container logs in with it instead of with the password. Any store error
+    // means a full credential login, as before: a stale token is never worse than that.
 
-    private StoredSteamAuth? LoadStoredAuth()
+    private async Task<StoredSteamAuth?> LoadStoredAuthAsync()
     {
         try
         {
-            if (!File.Exists(_authStateFile)) return null;
-            return JsonSerializer.Deserialize<StoredSteamAuth>(File.ReadAllText(_authStateFile));
+            var json = await _secrets.GetAsync(SecretIds.SteamKitAuth, CancellationToken.None);
+            if (json is not null)
+                return Usable(JsonSerializer.Deserialize<StoredSteamAuth>(json));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("SteamKit2: Cannot read the stored login ({Error}); logging in with credentials.", ex.Message);
+            return null;
+        }
+
+        try
+        {
+            if (!File.Exists(_legacyAuthStateFile)) return null;
+            return Usable(JsonSerializer.Deserialize<StoredSteamAuth>(File.ReadAllText(_legacyAuthStateFile)));
         }
         catch (Exception ex)
         {
@@ -249,27 +268,33 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
         }
     }
 
-    private void SaveStoredAuth(StoredSteamAuth auth)
+    private static StoredSteamAuth? Usable(StoredSteamAuth? auth) =>
+        string.IsNullOrEmpty(auth?.RefreshToken) || string.IsNullOrEmpty(auth.AccountName) ? null : auth;
+
+    private async Task SaveStoredAuthAsync(StoredSteamAuth auth)
     {
         try
         {
-            File.WriteAllText(_authStateFile, JsonSerializer.Serialize(auth));
+            await _secrets.PutAsync(SecretIds.SteamKitAuth, JsonSerializer.Serialize(auth), CancellationToken.None);
+            _logger.LogInformation("SteamKit2: Stored the new refresh token in the secret store.");
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "SteamKit2: Failed to persist auth state.");
+            _logger.LogWarning("SteamKit2: Failed to store the refresh token ({Error}); the next start logs in with credentials.", ex.Message);
         }
     }
 
-    private void ClearStoredAuth()
+    private async Task ClearStoredAuthAsync()
     {
         try
         {
-            if (File.Exists(_authStateFile)) File.Delete(_authStateFile);
+            // A secret cannot be emptied, only overwritten; "{}" reads as no login.
+            await _secrets.PutAsync(SecretIds.SteamKitAuth, "{}", CancellationToken.None);
+            if (File.Exists(_legacyAuthStateFile)) File.Delete(_legacyAuthStateFile);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "SteamKit2: Failed to clear stored auth state.");
+            _logger.LogWarning("SteamKit2: Failed to clear the stored login: {Error}", ex.Message);
         }
     }
 

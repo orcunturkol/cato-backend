@@ -9,7 +9,6 @@
 
     <PackageReference Include="AWSSDK.CloudWatch" Version="4.0.107" />
 
-    <PackageReference Include="AWSSDK.SecretsManager" Version="4.0.100.20" />
 
     <PackageReference Include="AWSSDK.SimpleNotificationService" Version="4.0.100.20" />
 

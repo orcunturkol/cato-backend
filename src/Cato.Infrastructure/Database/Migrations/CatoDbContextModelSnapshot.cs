@@ -933,6 +933,10 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.HasIndex("Source")
                         .HasDatabaseName("idx_group_member_count_source");
 
+                    b.HasIndex("Source", "SnapshotDate")
+                        .HasDatabaseName("idx_group_member_count_source_date")
+                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
+
                     b.HasIndex("GameId", "SnapshotDate", "Source")
                         .IsUnique()
                         .HasDatabaseName("unique_group_member_count_snapshot");
@@ -2907,6 +2911,24 @@ namespace Cato.Infrastructure.Database.Migrations
                         .HasDatabaseName("unique_wishlist_insight");
 
                     b.ToTable("wishlist_insight", (string)null);
+                });
+
+            modelBuilder.Entity("Cato.Domain.Entities.WorkerState", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("worker_state", (string)null);
                 });
 
             modelBuilder.Entity("Cato.Domain.Entities.ActionImpact", b =>

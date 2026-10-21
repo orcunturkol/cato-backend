@@ -93,6 +93,17 @@ builder.Services.Configure<NewsSettings>(builder.Configuration.GetSection(NewsSe
 // Registered in every role: an unstarted SteamKitService answers "not logged in" and
 // does nothing, so the api role can still construct services that depend on it.
 builder.Services.Configure<SteamSettings>(builder.Configuration.GetSection("SteamKit"));
+// ── Secret store (rotating credentials: Secrets Manager on the server, files in development) ──
+builder.Services.Configure<Cato.Infrastructure.Secrets.SecretStoreSettings>(
+    builder.Configuration.GetSection(Cato.Infrastructure.Secrets.SecretStoreSettings.SectionName));
+builder.Services.AddSingleton<Cato.Infrastructure.Secrets.ISecretStore>(sp =>
+{
+    var secrets = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Cato.Infrastructure.Secrets.SecretStoreSettings>>().Value;
+    return secrets.Backend == "aws"
+        ? Cato.Infrastructure.Secrets.AwsSecretStore.Create(secrets)
+        : new Cato.Infrastructure.Secrets.FileSecretStore(secrets.FileDirectory);
+});
+
 builder.Services.AddSingleton<SteamKitService>();
 builder.Services.AddSingleton<ISteamKitService>(sp => sp.GetRequiredService<SteamKitService>());
 
