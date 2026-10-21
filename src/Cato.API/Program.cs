@@ -13,6 +13,9 @@ using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ── Static secrets (Secrets Manager on the server; see Infrastructure/Secrets) ──
+var secretKeys = Cato.Infrastructure.Secrets.SecretConfiguration.AddCatoSecrets(builder.Configuration);
+
 // ── Process role (CATO_ROLE: all | api | worker | migrate; see Hosting/CatoRole.cs) ──
 var role = CatoRoles.Parse(builder.Configuration[CatoRoles.ConfigurationKey]);
 
@@ -26,6 +29,9 @@ Log.Logger = new LoggerConfiguration()
     .CreateLogger();
 
 builder.Host.UseSerilog();
+if (secretKeys.Count > 0)
+    Log.Information("Configuration: {Count} keys from {SecretId}: {Keys}",
+        secretKeys.Count, Cato.Infrastructure.Secrets.SecretConfiguration.BackendConfigId, secretKeys);
 
 // ── Database ──
 builder.Services.AddDbContext<CatoDbContext>(options =>
