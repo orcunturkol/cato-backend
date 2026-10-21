@@ -76,21 +76,38 @@ resource "aws_secretsmanager_secret" "runtime" {
 }
 
 # Watches the watcher: the worker's alert monitor sends CATO/WorkerHeartbeat every minute.
-# Five silent minutes (worker, host or AWS access down) e-mail the topic; ok_actions
-# says when it is back. Missing data counts as breaching, because silence is the failure.
+# Five minutes without one (worker, host or AWS access down) e-mail the topic; ok_actions
+# says when it is back. The plain metric alarm with missing data = breaching did not fire
+# on 2026-10-21 when the worker was down 7 minutes (older data points were in range), so
+# the gaps are filled with 0 by metric math: a missing minute is a real 0 below the
+# threshold. With no data at all in range, missing data = breaching still applies.
 resource "aws_cloudwatch_metric_alarm" "worker_heartbeat" {
   alarm_name          = "cato-worker-heartbeat"
   alarm_description   = "The CATO worker sent no heartbeat for 5 minutes: the worker, its host or its AWS access is down."
-  namespace           = "CATO"
-  metric_name         = "WorkerHeartbeat"
-  statistic           = "SampleCount"
-  period              = 60
-  evaluation_periods  = 5
-  threshold           = 1
   comparison_operator = "LessThanThreshold"
+  threshold           = 1
+  evaluation_periods  = 5
+  datapoints_to_alarm = 5
   treat_missing_data  = "breaching"
   alarm_actions       = [aws_sns_topic.alerts.arn]
   ok_actions          = [aws_sns_topic.alerts.arn]
+
+  metric_query {
+    id          = "filled"
+    expression  = "FILL(beat, 0)"
+    label       = "Worker heartbeats per minute (0 when missing)"
+    return_data = true
+  }
+
+  metric_query {
+    id = "beat"
+    metric {
+      namespace   = "CATO"
+      metric_name = "WorkerHeartbeat"
+      period      = 60
+      stat        = "SampleCount"
+    }
+  }
 }
 
 # ── Role for today's EC2 host ──
