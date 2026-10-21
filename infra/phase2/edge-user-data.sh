@@ -1,0 +1,31 @@
+#!/bin/bash
+# Boot of the edge node (ECS-optimized Amazon Linux 2023). Rendered by Terraform.
+set -euo pipefail
+
+cat >> /etc/ecs/ecs.config <<EOF
+ECS_CLUSTER=${cluster}
+ECS_INSTANCE_ATTRIBUTES={"cato-role":"edge"}
+EOF
+
+# Host directories of the edge services. uid 1000 is the collector image's user.
+install -d -o 1000 -g 1000 /srv/cato/chrome-profile /srv/cato/steamdb-historical
+install -d /srv/cato/caddy-data /srv/cato/caddy-config /srv/cato/seq
+
+command -v aws >/dev/null || dnf install -y awscli-2
+
+# The fixed public IP: the Steamworks partner login has only ever seen one address.
+IMDS=http://169.254.169.254/latest
+TOKEN=$(curl -fsS -X PUT "$IMDS/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+INSTANCE_ID=$(curl -fsS -H "X-aws-ec2-metadata-token: $TOKEN" "$IMDS/meta-data/instance-id")
+aws ec2 associate-address --region ${region} --instance-id "$INSTANCE_ID" \
+  --allocation-id ${eip_allocation_id} --allow-reassociation
+
+# Tailscale: people reach Caddy here, and the node routes the VPC into the tailnet (the gate
+# tool and SSM-free debugging). Machines never use a Tailscale IP to reach each other.
+curl -fsSL https://tailscale.com/install.sh | sh
+echo 'net.ipv4.ip_forward = 1' > /etc/sysctl.d/99-tailscale.conf
+sysctl -p /etc/sysctl.d/99-tailscale.conf
+AUTHKEY=$(aws secretsmanager get-secret-value --region ${region} --secret-id ${tailscale_secret} \
+  --query SecretString --output text)
+tailscale up --authkey="$AUTHKEY" --hostname=cato-edge --advertise-routes=${vpc_cidr} --accept-dns=false
+unset AUTHKEY

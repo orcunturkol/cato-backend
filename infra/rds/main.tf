@@ -1,15 +1,21 @@
 terraform {
-  required_version = ">= 1.5"
+  required_version = ">= 1.10"
 
   required_providers {
     aws = {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.6"
-    }
+  }
+
+  # Created in August 2026 with local state that no longer exists; imports.tf brings the
+  # live resources into this state (Phase 2 step 1).
+  backend "s3" {
+    bucket       = "cato-terraform-state-657566734223"
+    key          = "rds/terraform.tfstate"
+    region       = "eu-central-1"
+    encrypt      = true
+    use_lockfile = true
   }
 }
 
@@ -31,29 +37,27 @@ resource "aws_security_group" "rds" {
   description = "Allow Postgres access from the CATO EC2 instance only"
   vpc_id      = var.vpc_id
 
-  ingress {
-    description     = "Postgres from the CATO EC2 instance"
-    from_port       = 5432
-    to_port         = 5432
-    protocol        = "tcp"
-    security_groups = [var.ec2_security_group_id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+  # Rules are separate resources: infra/phase2 adds the ECS tasks' rules to this group, and
+  # inline rules here would remove them on the next apply.
 
   tags = {
     Name = "cato-rds-sg"
   }
 }
 
-resource "random_password" "db" {
-  length  = 32
-  special = false
+resource "aws_vpc_security_group_ingress_rule" "rds_from_ec2" {
+  security_group_id            = aws_security_group.rds.id
+  description                  = "Postgres from the CATO EC2 instance"
+  ip_protocol                  = "tcp"
+  from_port                    = 5432
+  to_port                      = 5432
+  referenced_security_group_id = var.ec2_security_group_id
+}
+
+resource "aws_vpc_security_group_egress_rule" "rds_all" {
+  security_group_id = aws_security_group.rds.id
+  ip_protocol       = "-1"
+  cidr_ipv4         = "0.0.0.0/0"
 }
 
 resource "aws_db_instance" "cato" {
@@ -69,8 +73,10 @@ resource "aws_db_instance" "cato" {
 
   db_name  = var.db_name
   username = var.db_username
-  password = random_password.db.result
-  port     = 5432
+  # No password here: the instance exists, and its password lives in the secret
+  # cato/backend/config (connection string). The SSM parameter /cato/rds/db_password from
+  # the first apply is a leftover copy and is not managed here.
+  port = 5432
 
   db_subnet_group_name   = aws_db_subnet_group.cato.name
   vpc_security_group_ids = [aws_security_group.rds.id]
@@ -89,16 +95,5 @@ resource "aws_db_instance" "cato" {
 
   tags = {
     Name = "cato-postgres"
-  }
-}
-
-resource "aws_ssm_parameter" "db_password" {
-  name        = "/cato/rds/db_password"
-  description = "Master password for the cato-postgres RDS instance"
-  type        = "SecureString"
-  value       = random_password.db.result
-
-  tags = {
-    Name = "cato-rds-db-password"
   }
 }
