@@ -654,11 +654,12 @@ public static class DbTableCatalog
             ["Each publish replaces the whole list."]),
 
         new("scheduled_job", DataCollection.Internal,
-            "One row per collector job: schedule, time limit, agent group, alert threshold, and whether cron or the dispatcher starts it.",
+            "One row per job: a collector job (cron, time limit, agent group; the crontab or the dispatcher starts it) or a backend watcher (interval, switch), with its alert threshold.",
             [new(DataSite.Cato, "Seed from the 2026-10-20 crontab", null, "AddScheduledJobs migration"),
+             new(DataSite.Cato, "Watcher settings", null, "Each backend watcher writes its row from its settings on its first cycle (WatcherSchedule)"),
              new(DataSite.Cato, "Jobs page edits", null, "PUT /api/scheduled-jobs/{name}, POST /api/scheduled-jobs/groups/{group}/managed-by")],
             ["Cron is checked with Cronos; the interval between runs must be longer than the time limit; overlaps in one agent group give warnings.",
-             "Only dispatcher-managed jobs can be edited."],
+             "Only dispatcher-managed jobs and watchers can be edited; a watcher's interval is 1 minute to 7 days."],
             ["No automatic source: rows change only through the API, and every change is logged in scheduled_job_change."]),
 
         new("scheduled_job_change", DataCollection.Internal,

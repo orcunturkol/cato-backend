@@ -27,19 +27,20 @@ public class GameNewsWatcherService : BackgroundService
         _settings = settings.Value;
     }
 
+    // The first value of this watcher's scheduled_job row; the Jobs page owns it after that.
+    private WatcherDefaults Defaults => new("Owned game news fetch", TimeSpan.FromMinutes(_settings.IntervalMinutes), _settings.Enabled);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!_settings.Enabled)
-        {
-            _logger.LogInformation("Game news watcher disabled via News:Enabled");
-            return;
-        }
-
         // Brief startup delay to let the database finish migrating.
         await Task.Delay(TimeSpan.FromSeconds(20), stoppingToken);
 
+        DateTime? previousEnd = null;
         while (!stoppingToken.IsCancellationRequested)
         {
+            await WatcherSchedule.WaitForNextRunAsync(
+                _scopeFactory, BackendJobNames.GameNewsWatcher, Defaults, previousEnd, _logger, stoppingToken);
+
             try
             {
                 await RunCycleAsync(stoppingToken);
@@ -53,7 +54,7 @@ public class GameNewsWatcherService : BackgroundService
                 _logger.LogError(ex, "Game news cycle failed");
             }
 
-            await Task.Delay(TimeSpan.FromMinutes(_settings.IntervalMinutes), stoppingToken);
+            previousEnd = DateTime.UtcNow;
         }
     }
 

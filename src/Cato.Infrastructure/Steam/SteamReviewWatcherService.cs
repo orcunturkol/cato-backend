@@ -28,13 +28,20 @@ public class SteamReviewWatcherService : BackgroundService
         _settings = settings.Value;
     }
 
+    // The first value of this watcher's scheduled_job row; the Jobs page owns it after that.
+    private WatcherDefaults Defaults => new("Store review sync", TimeSpan.FromHours(_settings.ReviewCheckIntervalHours), true);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // Brief startup delay to let the database finish migrating.
         await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
 
+        DateTime? previousEnd = null;
         while (!stoppingToken.IsCancellationRequested)
         {
+            await WatcherSchedule.WaitForNextRunAsync(
+                _scopeFactory, BackendJobNames.SteamReviewWatcher, Defaults, previousEnd, _logger, stoppingToken);
+
             try
             {
                 await RunReviewSyncAsync(stoppingToken);
@@ -48,9 +55,7 @@ public class SteamReviewWatcherService : BackgroundService
                 _logger.LogError(ex, "Steam review sync cycle failed");
             }
 
-            await Task.Delay(
-                TimeSpan.FromHours(_settings.ReviewCheckIntervalHours),
-                stoppingToken);
+            previousEnd = DateTime.UtcNow;
         }
     }
 

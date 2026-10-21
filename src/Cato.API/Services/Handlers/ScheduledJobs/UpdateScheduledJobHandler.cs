@@ -29,7 +29,8 @@ public class UpdateScheduledJobHandler : IRequestHandler<UpdateScheduledJobComma
         if (job is null)
             return Result<ScheduledJobUpdateResult>.Failure(NotFound);
 
-        if (job.ManagedBy != ScheduledJobManagedBy.Dispatcher)
+        var watcher = job.ManagedBy == ScheduledJobManagedBy.Worker;
+        if (!watcher && job.ManagedBy != ScheduledJobManagedBy.Dispatcher)
         {
             return Result<ScheduledJobUpdateResult>.Failure(
                 $"'{job.Name}' still runs from the host crontab, which ignores this edit. " +
@@ -37,14 +38,18 @@ public class UpdateScheduledJobHandler : IRequestHandler<UpdateScheduledJobComma
         }
 
         var request = command.Request;
-        var settings = new ScheduleSettings(
-            ScheduledJobRules.JoinCron(ScheduledJobRules.SplitCron(request.Cron)),
-            request.Enabled,
-            request.TimeoutSeconds,
-            request.AlertFailedRatio,
-            request.AlertMinItems);
+        // A watcher reads its row before each cycle: it has an interval, no cron, no time limit.
+        var settings = watcher
+            ? new ScheduleSettings(null, request.Enabled, job.TimeoutSeconds,
+                request.AlertFailedRatio, request.AlertMinItems, request.IntervalMinutes)
+            : new ScheduleSettings(
+                ScheduledJobRules.JoinCron(ScheduledJobRules.SplitCron(request.Cron)),
+                request.Enabled,
+                request.TimeoutSeconds,
+                request.AlertFailedRatio,
+                request.AlertMinItems);
 
-        var errors = ScheduledJobRules.Validate(settings, now);
+        var errors = watcher ? ScheduledJobRules.ValidateWatcher(settings) : ScheduledJobRules.Validate(settings, now);
         if (errors.Count > 0)
             return Result<ScheduledJobUpdateResult>.Failure(string.Join(" ", errors));
 
@@ -54,6 +59,7 @@ public class UpdateScheduledJobHandler : IRequestHandler<UpdateScheduledJobComma
         job.TimeoutSeconds = settings.TimeoutSeconds;
         job.AlertFailedRatio = settings.AlertFailedRatio;
         job.AlertMinItems = settings.AlertMinItems;
+        job.IntervalMinutes = settings.IntervalMinutes;
         job.UpdatedAt = now;
         job.UpdatedBy = request.ChangedBy;
 
@@ -69,10 +75,14 @@ public class UpdateScheduledJobHandler : IRequestHandler<UpdateScheduledJobComma
         });
         await _db.SaveChangesAsync(ct);
 
-        var others = await _db.ScheduledJobs.AsNoTracking()
-            .Where(j => j.AgentGroup == job.AgentGroup && j.Name != job.Name)
-            .ToListAsync(ct);
-        var warnings = ScheduledJobRules.OverlapWarnings(job, settings, others, now);
+        var warnings = new List<string>();
+        if (!watcher)
+        {
+            var others = await _db.ScheduledJobs.AsNoTracking()
+                .Where(j => j.AgentGroup == job.AgentGroup && j.Name != job.Name)
+                .ToListAsync(ct);
+            warnings = ScheduledJobRules.OverlapWarnings(job, settings, others, now);
+        }
 
         return Result<ScheduledJobUpdateResult>.Success(
             new ScheduledJobUpdateResult(ScheduledJobMapping.ToDto(job, now), warnings));

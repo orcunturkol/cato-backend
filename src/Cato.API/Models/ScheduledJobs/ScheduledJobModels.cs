@@ -23,13 +23,15 @@ public record ScheduledJobDto(
     bool Editable,
     List<DateTime> NextRuns,
     DateTime UpdatedAt,
-    string? UpdatedBy);
+    string? UpdatedBy,
+    int? IntervalMinutes = null);
 
 public record GetScheduledJobsQuery : IRequest<List<ScheduledJobDto>>;
 
 /// <summary>
 /// Body of PUT /api/scheduled-jobs/{name}. <see cref="Cron"/> is UTC; several expressions are
-/// separated by "|"; empty means the job runs on request only.
+/// separated by "|"; empty means the job runs on request only. A backend watcher takes
+/// <see cref="IntervalMinutes"/> instead of a cron and a time limit.
 /// </summary>
 public record UpdateScheduledJobRequest(
     string? Cron,
@@ -38,7 +40,8 @@ public record UpdateScheduledJobRequest(
     decimal AlertFailedRatio,
     int AlertMinItems,
     string? Reason,
-    string? ChangedBy);
+    string? ChangedBy,
+    int? IntervalMinutes = null);
 
 public record UpdateScheduledJobCommand(string Name, UpdateScheduledJobRequest Request)
     : IRequest<Result<ScheduledJobUpdateResult>>;

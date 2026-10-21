@@ -21,10 +21,11 @@ internal static class ScheduledJobMapping
         job.AlertFailedRatio,
         job.AlertMinItems,
         job.ManagedBy,
-        Editable: job.ManagedBy == ScheduledJobManagedBy.Dispatcher,
+        Editable: job.ManagedBy is ScheduledJobManagedBy.Dispatcher or ScheduledJobManagedBy.Worker,
         job.Enabled ? ScheduledJobRules.NextRuns(job.Cron, nowUtc) : [],
         DateTime.SpecifyKind(job.UpdatedAt, DateTimeKind.Utc),
-        job.UpdatedBy);
+        job.UpdatedBy,
+        job.IntervalMinutes);
 
     public static string ToJson(ScheduleSettings settings) => JsonSerializer.Serialize(settings, Json);
 }

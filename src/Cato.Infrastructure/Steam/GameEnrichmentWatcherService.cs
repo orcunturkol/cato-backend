@@ -39,14 +39,11 @@ public sealed class GameEnrichmentWatcherService : BackgroundService
         _settings = settings.Value;
     }
 
+    // The first value of this watcher's scheduled_job row; the Jobs page owns it after that.
+    private WatcherDefaults Defaults => new("Store enrichment sweep", TimeSpan.FromMinutes(_settings.IntervalMinutes), _settings.Enabled);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!_settings.Enabled)
-        {
-            _logger.LogInformation("GameEnrichmentWatcher: disabled by configuration");
-            return;
-        }
-
         _logger.LogInformation(
             "GameEnrichmentWatcher: starting — every {Minutes} min, {BatchSize} games per cycle",
             _settings.IntervalMinutes, _settings.BatchSize);
@@ -55,8 +52,12 @@ public sealed class GameEnrichmentWatcherService : BackgroundService
         // watchers so a restart does not put four of them on the throttle at once.
         await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
 
+        DateTime? previousEnd = null;
         while (!stoppingToken.IsCancellationRequested)
         {
+            await WatcherSchedule.WaitForNextRunAsync(
+                _scopeFactory, BackendJobNames.GameEnrichmentWatcher, Defaults, previousEnd, _logger, stoppingToken);
+
             try
             {
                 await RunCycleAsync(stoppingToken);
@@ -70,7 +71,7 @@ public sealed class GameEnrichmentWatcherService : BackgroundService
                 _logger.LogError(ex, "GameEnrichmentWatcher: cycle failed");
             }
 
-            await Task.Delay(TimeSpan.FromMinutes(_settings.IntervalMinutes), stoppingToken);
+            previousEnd = DateTime.UtcNow;
         }
     }
 

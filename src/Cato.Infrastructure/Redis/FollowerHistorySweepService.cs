@@ -32,20 +32,21 @@ public sealed class FollowerHistorySweepService : BackgroundService
         _settings = settings.Value;
     }
 
+    // The first value of this watcher's scheduled_job row; the Jobs page owns it after that.
+    private WatcherDefaults Defaults => new("Follower history queue sweep", TimeSpan.FromMinutes(_settings.IntervalMinutes), _settings.Enabled);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!_settings.Enabled)
-        {
-            _logger.LogInformation("FollowerHistorySweep: disabled by configuration");
-            return;
-        }
-
         _logger.LogInformation("FollowerHistorySweep: starting — every {Minutes} min", _settings.IntervalMinutes);
 
         await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
 
+        DateTime? previousEnd = null;
         while (!stoppingToken.IsCancellationRequested)
         {
+            await WatcherSchedule.WaitForNextRunAsync(
+                _scopeFactory, BackendJobNames.FollowerHistorySweep, Defaults, previousEnd, _logger, stoppingToken);
+
             try
             {
                 await RunCycleAsync(stoppingToken);
@@ -59,7 +60,7 @@ public sealed class FollowerHistorySweepService : BackgroundService
                 _logger.LogError(ex, "FollowerHistorySweep: cycle failed");
             }
 
-            await Task.Delay(TimeSpan.FromMinutes(_settings.IntervalMinutes), stoppingToken);
+            previousEnd = DateTime.UtcNow;
         }
     }
 
