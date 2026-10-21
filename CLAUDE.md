@@ -361,6 +361,15 @@ channel and `GET /api/alerts` lists incidents. A collector run reports
 
 Settings are in `src/Cato.API/appsettings.json`. Key sections: `ConnectionStrings:DefaultConnection`, `RabbitMQ`, `SteamKit`, `Ingestion:DataPath`.
 
+**Secrets are not in appsettings.** With `Secrets:Backend = aws` (`SECRETS_BACKEND=aws` in the
+server's `.env`) the API reads the Secrets Manager secret `cato/backend/config` at start: a
+JSON object of configuration keys (`ConnectionStrings:DefaultConnection`,
+`SteamKit:Username`, `SteamKit:Password`, `SteamWebApi:ApiKey`), added last so it wins over
+appsettings and the environment; the log names the keys, never the values. The SteamKit
+refresh token is the rotating secret `cato/steam/steamkit-auth`. For local development set
+the Steam account with `dotnet user-secrets` or `SteamKit__Username` / `SteamKit__Password`.
+The Steam password was in git history until 2026-10-21; rotate it.
+
 CORS allows `localhost:5173` and `localhost:3000` (frontend dev servers).
 
 # Agent Guidance: dotnet-skills
