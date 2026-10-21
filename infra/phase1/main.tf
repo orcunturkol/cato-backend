@@ -54,6 +54,27 @@ resource "aws_secretsmanager_secret" "discord_webhook" {
   recovery_window_in_days = 7
 }
 
+# Credentials the jobs and the worker read and rotate at runtime, and the static secrets of
+# each side. Terraform creates only the empty secrets: the instance role may read and write
+# values but not create secrets. Values are set from the host (README.md), never from state.
+locals {
+  runtime_secrets = {
+    "cato/steam/steamkit-auth" = "SteamKit refresh token and guard data of the worker's Steam account (rotated by the worker)."
+    "cato/steamworks/refresh"  = "Steamworks steamRefresh_partner cookie (~207-day login)."
+    "cato/steamworks/cookies"  = "Steamworks partner-site cookies, rewritten by every Steamworks job run."
+    "cato/steamdb/cookies"     = "SteamDB login cookies (__Host-steamdb list) of the SteamDB jobs."
+    "cato/backend/config"      = "Static backend secrets as JSON configuration keys (database, Steam account, Web API key)."
+    "cato/collector/config"    = "Static collector secrets as JSON environment variables (API keys, Webshare, RabbitMQ)."
+  }
+}
+
+resource "aws_secretsmanager_secret" "runtime" {
+  for_each                = local.runtime_secrets
+  name                    = each.key
+  description             = each.value
+  recovery_window_in_days = 7
+}
+
 # Watches the watcher: the worker's alert monitor sends CATO/WorkerHeartbeat every minute.
 # Five silent minutes (worker, host or AWS access down) e-mail the topic; ok_actions
 # says when it is back. Missing data counts as breaching, because silence is the failure.
