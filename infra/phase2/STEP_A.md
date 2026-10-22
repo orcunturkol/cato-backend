@@ -5,7 +5,7 @@ the worker, the API, the frontends and OGT run on ECS, Redis is Valkey and Rabbi
 The four job agents stay on today's host until Steps B-D2 and point at the new endpoints.
 
 **Done 2026-10-22, 15:37-15:55 UTC** (image `876ff4f`). Afterwards `variables.tf` holds the
-live task counts, so a plan with `-var image_tag=<deployed tag>` shows no changes.
+live task counts, and `images.auto.tfvars` the deployed image tags: a plain plan shows no changes.
 
 ```
 before:  host ── api · worker · frontend · ogt-* · redis · rabbitmq · caddy · seq · 4 agents

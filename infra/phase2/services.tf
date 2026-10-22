@@ -163,7 +163,7 @@ resource "aws_ecs_task_definition" "this" {
 
   container_definitions = jsonencode([{
     name      = each.key
-    image     = each.value.image == null ? "datalust/seq:2025.2" : "${local.ecr}/${each.value.image}:${var.image_tag}"
+    image     = each.value.image == null ? "datalust/seq:2025.2" : "${local.ecr}/${each.value.image}:${lookup(var.image_tags, each.value.image, var.image_tag)}"
     essential = true
     cpu       = each.value.edge ? each.value.cpu : null
     memory    = each.value.edge ? each.value.memory : null # hard limit: a leak kills only this task

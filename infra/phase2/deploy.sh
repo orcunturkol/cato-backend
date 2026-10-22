@@ -39,7 +39,7 @@ build "$OGT_FRONTEND_DIR" ogt-frontend Dockerfile --build-arg VITE_API_URL=
 
 cd "$HERE"
 # The migrate task definition first, so it carries the new image.
-terraform apply -input=false -auto-approve -var "image_tag=$TAG" -target=aws_ecs_task_definition.migrate
+terraform apply -input=false -auto-approve -var "image_tag=$TAG" -var 'image_tags={}' -target=aws_ecs_task_definition.migrate
 
 SUBNETS=$(terraform output -json subnet_ids | python3 -c 'import json,sys; print(",".join(json.load(sys.stdin)))')
 MIGRATE_SG=$(terraform output -json service_security_groups | python3 -c 'import json,sys; print(json.load(sys.stdin)["migrate"])')
@@ -55,5 +55,6 @@ if [ "$EXIT" != "0" ]; then
 fi
 
 # Every service to the new tag. The worker and the agents stop their old task first.
-terraform apply -input=false -auto-approve -var "image_tag=$TAG"
-echo "deployed $TAG"
+terraform apply -input=false -auto-approve -var "image_tag=$TAG" -var 'image_tags={}'
+sed -i -E -e "s|^image_tag  = .*|image_tag  = \"$TAG\"|" -e 's|^image_tags = .*|image_tags = {}|' images.auto.tfvars
+echo "deployed $TAG; commit infra/phase2/images.auto.tfvars"
