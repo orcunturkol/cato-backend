@@ -167,6 +167,9 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
         catch (Exception ex)
         {
             _logger.LogError(ex, "SteamKit2: Authentication failed.");
+            // A throttle answered at the credential step waits like a rate-limit log-off.
+            if (ex is SteamKit2.Authentication.AuthenticationException auth)
+                _reconnectPolicy.NoteLogOff(auth.Result);
             _steamClient.Disconnect();
         }
     }
