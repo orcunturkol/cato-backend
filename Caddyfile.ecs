@@ -1,0 +1,78 @@
+# The Caddyfile of the ECS edge node (Step D3); Dockerfile.caddy copies it into the image.
+# Today's host mounts ./Caddyfile over it, so the host does not use this file.
+#
+# Listener: no bind directive, so Caddy listens on :443 on every interface of the edge node
+# (host network). Only the tailnet reaches it: cato-edge-sg has no inbound rule, so the
+# Elastic IP and the private IP drop all inbound traffic; Tailscale traffic arrives inside
+# the node on tailscale0, behind the security group. The node's Tailscale IP changes when
+# the instance is replaced, so a fixed bind address would need a manual edit each time.
+# Never add an inbound rule for 443 to cato-edge-sg.
+#
+# Upstreams: Cloud Map A records (*.cato.internal, TTL 10 s) through the VPC resolver
+# (the node runs tailscale up --accept-dns=false). Caddy looks the names up again every
+# 10 s, so it follows task IP changes. Keep the names in step with local.namespace and
+# aws_service_discovery_service in infra/phase2/network.tf.
+{
+	email {$ACME_EMAIL}
+	auto_https disable_redirects
+}
+
+catoptricgames.duckdns.org {
+	tls {
+		dns duckdns {$DUCKDNS_TOKEN}
+	}
+
+	# Every write through the site needs the CATO admin password (user "cato"): schedule
+	# edits, run now, pause, the test alert, the Steamworks login form, uploads and game
+	# edits. Reads stay open. Matched before handle_path strips "/api", so the frontend's
+	# "/api/api/..." requests are covered. The agents call api.cato.internal:8080 directly,
+	# not through Caddy.
+	# CATO_ADMIN_HASH (ECS secret cato/caddy/admin-hash) is the base64 of a bcrypt hash, the
+	# same value as on today's host. The task does not start until the secret has a value.
+	@admin_writes {
+		not method GET HEAD OPTIONS
+		path /api/*
+	}
+	basic_auth @admin_writes {
+		cato {$CATO_ADMIN_HASH}
+	}
+
+	handle_path /api/* {
+		reverse_proxy {
+			dynamic a api.cato.internal 8080 {
+				refresh 10s
+			}
+		}
+	}
+
+	handle {
+		reverse_proxy {
+			dynamic a frontend.cato.internal 80 {
+				refresh 10s
+			}
+		}
+	}
+}
+
+ogt.catoptricgames.duckdns.org {
+	tls {
+		dns duckdns {$DUCKDNS_TOKEN}
+	}
+
+	# OGT API routes already carry the /api prefix, so no handle_path strip here.
+	handle /api/* {
+		reverse_proxy {
+			dynamic a ogt-api.cato.internal 8080 {
+				refresh 10s
+			}
+		}
+	}
+
+	handle {
+		reverse_proxy {
+			dynamic a ogt-frontend.cato.internal 80 {
+				refresh 10s
+			}
+		}
+	}
+}
