@@ -86,8 +86,10 @@ resource "aws_db_instance" "cato" {
 
   auto_minor_version_upgrade = true
   backup_retention_period    = 7
-  backup_window              = "03:00-04:00"
-  maintenance_window         = "mon:04:30-mon:05:30"
+  # Outside the job windows: nothing runs 02:00-02:45 UTC; Sunday 07:05 is between two
+  # follower runs (a minor-version upgrade restarts the database).
+  backup_window      = "02:00-02:30"
+  maintenance_window = "sun:07:05-sun:07:40"
 
   deletion_protection       = true
   skip_final_snapshot       = false

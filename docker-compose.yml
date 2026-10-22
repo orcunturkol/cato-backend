@@ -160,6 +160,9 @@ services:
     ports:
       - "127.0.0.1:5341:80"
       - "${TAILSCALE_IP}:5341:80"
+      # The ECS tasks log here through seq.cato.internal until Step D3 moves Seq to the edge
+      # node; the host's security group opens 5341 only to the ECS groups (infra/phase2).
+      - "${HOST_PRIVATE_IP:-127.0.0.1}:5341:80"
     # SEQ_FIRSTRUN_ADMINPASSWORD (used only when the store is new; username "admin").
     # Secrets come from Secrets Manager (cato/server/compose-env) through a file in memory,
     # written at boot by cato-compose-secrets.service (infra/phase1/systemd).

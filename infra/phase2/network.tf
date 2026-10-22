@@ -39,6 +39,9 @@ locals {
     ["cache", 6379, "old-host"],
   ]
 
+  # Seq on today's host (5341 on its private IP) until Step D3 moves Seq to the edge node.
+  seq_clients = ["api", "worker", "migrate", "agents", "edge"]
+
   # Postgres in the existing cato-rds-sg (infra/rds keeps its rules as separate resources).
   rds_clients = ["api", "worker", "migrate", "ogt-api"]
 }
@@ -68,6 +71,16 @@ resource "aws_vpc_security_group_ingress_rule" "this" {
   to_port                      = each.value[1]
   referenced_security_group_id = each.value[2] == "old-host" ? var.old_host_security_group_id : aws_security_group.this[each.value[2]].id
   description                  = "from ${each.value[2]}"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "seq_on_old_host" {
+  for_each                     = toset(local.seq_clients)
+  security_group_id            = var.old_host_security_group_id
+  ip_protocol                  = "tcp"
+  from_port                    = 5341
+  to_port                      = 5341
+  referenced_security_group_id = aws_security_group.this[each.key].id
+  description                  = "Seq from ${each.key} (until Step D3)"
 }
 
 resource "aws_vpc_security_group_ingress_rule" "rds" {
