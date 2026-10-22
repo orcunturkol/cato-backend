@@ -12,7 +12,7 @@ output "edge_public_ip" {
 }
 
 output "mq_endpoint" {
-  value = aws_mq_broker.cato.instances[0].endpoints[0]
+  value = local.mq_amqps
 }
 
 output "mq_console" {

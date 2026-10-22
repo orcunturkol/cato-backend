@@ -104,13 +104,27 @@ resource "aws_service_discovery_service" "this" {
   }
 }
 
-# Seq stays on today's host until Step D3, then this record moves to the edge node.
+# Seq stays on today's host until Step D3; then this instance moves to the edge node. Cloud Map
+# owns the zone, so seq is a Cloud Map service with a fixed address, not a Route 53 record.
 # Note: the host binds Seq to 127.0.0.1 and its Tailscale IP only; Step A must also bind it
 # to the private IP (and open 5341 from the ECS groups) before ECS tasks can log there.
-resource "aws_route53_record" "seq" {
-  zone_id = aws_service_discovery_private_dns_namespace.cato.hosted_zone
-  name    = "seq.${local.namespace}"
-  type    = "A"
-  ttl     = 60
-  records = [var.old_host_private_ip]
+resource "aws_service_discovery_service" "seq" {
+  name = "seq"
+
+  dns_config {
+    namespace_id   = aws_service_discovery_private_dns_namespace.cato.id
+    routing_policy = "MULTIVALUE"
+    dns_records {
+      type = "A"
+      ttl  = 60
+    }
+  }
+}
+
+resource "aws_service_discovery_instance" "seq" {
+  instance_id = "old-host"
+  service_id  = aws_service_discovery_service.seq.id
+  attributes = {
+    AWS_INSTANCE_IPV4 = var.old_host_private_ip
+  }
 }
