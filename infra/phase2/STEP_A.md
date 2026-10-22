@@ -4,6 +4,9 @@ One maintenance window, about an hour; nobody uses CATO until the split is done.
 the worker, the API, the frontends and OGT run on ECS, Redis is Valkey and RabbitMQ is Amazon MQ.
 The four job agents stay on today's host until Steps B-D2 and point at the new endpoints.
 
+**Done 2026-10-22, 15:37-15:55 UTC** (image `876ff4f`). Afterwards `variables.tf` holds the
+live task counts, so a plan with `-var image_tag=<deployed tag>` shows no changes.
+
 ```
 before:  host ── api · worker · frontend · ogt-* · redis · rabbitmq · caddy · seq · 4 agents
 after:   ECS  ── api · worker (exactly 1) · frontend · ogt-api · ogt-frontend
@@ -17,12 +20,12 @@ after:   ECS  ── api · worker (exactly 1) · frontend · ogt-api · ogt-fro
       2026-10-22), not the `ogt_dpkeys` volume, so Fargate restarts keep the logins.
 - [x] `cato/ogt/config` holds ogt-api's five settings, copied from `cato/server/compose-env`
       "ogt-api" (2026-10-22). A later OGT setting goes into both until the host's ogt-api is gone.
-- [ ] Images in ECR for the commit to deploy: `cato-backend`, `cato-frontend`, `ogt-api`,
+- [x] Images in ECR for the commit to deploy: `cato-backend`, `cato-frontend`, `ogt-api`,
       `ogt-frontend` (deploy.sh builds them; OGT from its own main checkout).
-- [ ] `cato/collector/config` gets two new keys, written in the window (step 6), not before:
+- [x] `cato/collector/config` gets two new keys, written in the window (step 6), not before:
       `REDIS_URL` = the `collector` value of `cato/cache/connection`, `RABBITMQ_URI` = the `uri`
       value of `cato/mq/app-user`. Until then the jobs use the host's Redis and RabbitMQ.
-- [ ] The Phase 2 gate passed; the host Seq answers on its private IP (done 2026-10-22).
+- [x] The Phase 2 gate passed; the host Seq answers on its private IP (done 2026-10-22).
 
 ## In the window
 
@@ -50,8 +53,12 @@ after:   ECS  ── api · worker (exactly 1) · frontend · ogt-api · ogt-fro
    once). The host resolves `*.cato.internal` (VPC DNS) and its security group reaches the API.
 7. **Point the host's Caddy at ECS:** in `Caddyfile`, `api:8080` → `api.cato.internal:8080`,
    `frontend:80` → `frontend.cato.internal:80`, `ogt-api:8080` → `ogt-api.cato.internal:8080`,
-   `ogt-frontend:80` → `ogt-frontend.cato.internal:80` (use `dynamic a` as in `Caddyfile.ecs`);
-   `docker compose up -d --no-deps caddy` (no `--build`: xcaddy takes 10+ minutes).
+   `ogt-frontend:80` → `ogt-frontend.cato.internal:80` (use `dynamic a` as in `Caddyfile.ecs`,
+   plus `resolvers 172.31.0.2`: this container's DNS servers are public, for the DuckDNS
+   challenge); validate in the running container first (`docker cp` the file in, `caddy
+   validate`), then `docker compose up -d --no-deps --force-recreate caddy`. A reload is not
+   enough: the Caddyfile is a single-file bind mount, and `git pull` writes a new file, so the
+   container keeps the old one. No `--build` (xcaddy takes 10+ minutes).
 8. **Resume** the jobs (step 1 in reverse). Run now: `ccu` (light), one follower request, and
    `steamworks_navstats` (short). Check runs, batches on Amazon MQ (one consumer each), DLQ 0.
 9. **Stop the old containers**, keep their volumes for rollback:
