@@ -107,8 +107,8 @@ variable "desired_counts" {
   default = {
     api                = 1
     frontend           = 1
-    "ogt-api"          = 1
-    "ogt-frontend"     = 1
+    "ogt-api"          = 0 # Step A: its WatchlistCheckService must not run twice against one database
+    "ogt-frontend"     = 0 # Step A, with ogt-api
     worker             = 0 # Step A: exactly one, after the host's api stops
     "agent-light"      = 0 # Step B
     "agent-events"     = 0 # Step C
