@@ -1161,33 +1161,6 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.ToTable("job_run", (string)null);
                 });
 
-            modelBuilder.Entity("Cato.Domain.Entities.JobScheduleSnapshot", b =>
-                {
-                    b.Property<string>("Producer")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("EntriesJson")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
-
-                    b.Property<DateTime>("PublishedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Source")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("SourceHost")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.HasKey("Producer");
-
-                    b.ToTable("job_schedule", (string)null);
-                });
-
             modelBuilder.Entity("Cato.Domain.Entities.LegalEntity", b =>
                 {
                     b.Property<Guid>("Id")

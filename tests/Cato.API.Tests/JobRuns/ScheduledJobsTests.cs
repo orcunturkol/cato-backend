@@ -1,9 +1,9 @@
 using System.Text.Json;
-using Cato.API.Models.JobRuns;
 using Cato.API.Models.ScheduledJobs;
 using Cato.API.Services.Handlers.ScheduledJobs;
 using Cato.API.Services.JobRuns;
 using Cato.Domain.Entities;
+using Cato.Infrastructure.Jobs;
 
 namespace Cato.API.Tests.JobRuns;
 
@@ -123,23 +123,13 @@ public class ScheduledJobsTests : JobRunsDbTestBase
     }
 
     [Fact]
-    public async Task The_catalog_takes_a_dispatched_job_from_the_table_and_a_cron_job_from_the_crontab()
+    public async Task The_catalog_takes_every_collector_job_from_the_table()
     {
         await using (var db = NewContext())
         {
-            db.JobScheduleSnapshots.Add(new JobScheduleSnapshot
-            {
-                Producer = JobRunProducer.ExternalCollector,
-                Source = "crontab",
-                EntriesJson = JsonSerializer.Serialize(new[]
-                {
-                    new JobScheduleEntryDto("ccu", "CCU", "0 */4 * * *", true, null, null),
-                    new JobScheduleEntryDto("steamworks_traffic", "Traffic", "0 11 * * *", true, 2700, null),
-                }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
-                PublishedAt = Now,
-            });
             db.ScheduledJobs.Add(Job("steamworks_traffic", ScheduledJobManagedBy.Dispatcher, "0 14 * * *"));
             db.ScheduledJobs.Add(Job("ccu", ScheduledJobManagedBy.Cron, "0 */2 * * *", 3600, JobAgentGroups.Light));
+            db.ScheduledJobs.Add(Job(BackendJobNames.SteamPriceWatcher, ScheduledJobManagedBy.Worker, null, 0, JobAgentGroups.Worker));
             await db.SaveChangesAsync();
         }
 
@@ -147,9 +137,9 @@ public class ScheduledJobsTests : JobRunsDbTestBase
         var catalog = await NewCatalog(read).LoadAsync(default);
 
         Assert.Equal(["0 14 * * *"], catalog.Find(JobRunProducer.ExternalCollector, "steamworks_traffic")!.CronExpressions);
-        Assert.Equal(["0 */4 * * *"], catalog.Find(JobRunProducer.ExternalCollector, "ccu")!.CronExpressions);
-        Assert.Single(catalog.Jobs, j => j.JobName == "steamworks_traffic");
-        Assert.Contains(catalog.Sources, s => s.Source == "dispatcher" && s.EntryCount == 1);
+        Assert.Equal(["0 */2 * * *"], catalog.Find(JobRunProducer.ExternalCollector, "ccu")!.CronExpressions);
+        Assert.Null(catalog.Find(JobRunProducer.ExternalCollector, BackendJobNames.SteamPriceWatcher));
+        Assert.Contains(catalog.Sources, s => s.Source == "dispatcher" && s.EntryCount == 2);
     }
 
     [Fact]

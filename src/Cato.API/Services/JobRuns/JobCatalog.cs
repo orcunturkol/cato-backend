@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Cato.API.Models.JobRuns;
 using Cato.Domain.Entities;
 using Cato.Infrastructure.Database;
@@ -28,13 +27,11 @@ public interface IJobCatalog
 }
 
 /// <summary>
-/// Every known job: backend watchers from this API's own settings, external jobs
-/// from the schedule their producer last published.
+/// Every known job: backend watchers from this API's own settings, collector jobs
+/// from their scheduled_job rows.
 /// </summary>
 public sealed class JobCatalog : IJobCatalog
 {
-    internal static readonly JsonSerializerOptions EntryJson = new(JsonSerializerDefaults.Web);
-
     private readonly CatoDbContext _db;
     private readonly SteamSettings _steam;
     private readonly GameEnrichmentSettings _enrichment;
@@ -74,31 +71,17 @@ public sealed class JobCatalog : IJobCatalog
         var jobs = new List<JobDefinition>(BackendJobs());
         var sources = new List<JobScheduleSourceDto>();
 
-        var snapshots = await _db.JobScheduleSnapshots.AsNoTracking()
-            .OrderBy(s => s.Producer)
-            .ToListAsync(ct);
-
-        foreach (var snapshot in snapshots)
-        {
-            var entries = ParseEntries(snapshot.EntriesJson);
-            sources.Add(new JobScheduleSourceDto(
-                snapshot.Producer, snapshot.Source, snapshot.SourceHost, snapshot.PublishedAt, entries.Count));
-            jobs.AddRange(FromEntries(snapshot.Producer, entries));
-        }
-
-        // A job the dispatcher starts takes its schedule from scheduled_job, not the crontab.
-        var dispatched = await _db.ScheduledJobs.AsNoTracking()
-            .Where(j => j.ManagedBy == ScheduledJobManagedBy.Dispatcher)
+        // Every collector job takes its schedule from scheduled_job, also a cron-managed one.
+        var collector = await _db.ScheduledJobs.AsNoTracking()
+            .Where(j => j.ManagedBy != ScheduledJobManagedBy.Worker)
             .OrderBy(j => j.Name)
             .ToListAsync(ct);
-        if (dispatched.Count > 0)
+        if (collector.Count > 0)
         {
-            var names = dispatched.Select(j => j.Name).ToHashSet();
-            jobs.RemoveAll(j => j.Producer == JobRunProducer.ExternalCollector && names.Contains(j.JobName));
-            jobs.AddRange(dispatched.Select(FromScheduledJob));
+            jobs.AddRange(collector.Select(FromScheduledJob));
             sources.Add(new JobScheduleSourceDto(
                 JobRunProducer.ExternalCollector, "dispatcher", null,
-                DateTime.SpecifyKind(dispatched.Max(j => j.UpdatedAt), DateTimeKind.Utc), dispatched.Count));
+                DateTime.SpecifyKind(collector.Max(j => j.UpdatedAt), DateTimeKind.Utc), collector.Count));
         }
 
         return new JobCatalogSnapshot(jobs, sources);
@@ -180,42 +163,4 @@ public sealed class JobCatalog : IJobCatalog
             JobRunRules.ForInterval(TimeSpan.FromMinutes(Math.Max(intervalMinutes, 1))), initialDelay);
     }
 
-    internal static List<JobScheduleEntryDto> ParseEntries(string json)
-    {
-        try
-        {
-            return JsonSerializer.Deserialize<List<JobScheduleEntryDto>>(json, EntryJson) ?? [];
-        }
-        catch (JsonException)
-        {
-            return [];
-        }
-    }
-
-    /// <summary>One definition per job name; several cron lines for one job merge.</summary>
-    internal static IEnumerable<JobDefinition> FromEntries(string producer, IEnumerable<JobScheduleEntryDto> entries)
-    {
-        foreach (var group in entries.GroupBy(e => e.JobName))
-        {
-            var all = group.ToList();
-            var active = all.Where(e => e.Enabled && !string.IsNullOrWhiteSpace(e.Cron)).ToList();
-            var shown = active.Count > 0 ? active : all.Where(e => !string.IsNullOrWhiteSpace(e.Cron)).ToList();
-            var timeout = all.Select(e => e.TimeoutSeconds).FirstOrDefault(t => t is > 0);
-
-            yield return new JobDefinition(
-                group.Key,
-                producer,
-                all.Select(e => e.Label).FirstOrDefault(l => !string.IsNullOrWhiteSpace(l)),
-                JobScheduleKind.Cron,
-                shown.Select(e => e.Cron!.Trim()).Distinct().ToList(),
-                IntervalMinutes: null,
-                Enabled: active.Count > 0,
-                DisabledReason: active.Count > 0
-                    ? null
-                    : all.Select(e => e.Note).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n)) ?? "not scheduled",
-                timeout,
-                JobRunRules.ForTimeout(timeout),
-                TimeSpan.Zero);
-        }
-    }
 }

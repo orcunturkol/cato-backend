@@ -350,8 +350,10 @@ them on the wrong date.
 
 One row per job. A collector job has a cron, a time limit and an agent group; the job
 dispatcher (worker) turns its slots into `job_dispatch` rows and the collector's
-`cato-agent@<group>` claims them (`ManagedBy` `dispatcher`; `cron` while the host
-crontab still starts it). A backend watcher has `ManagedBy` `worker` and an
+`cato-agent@<group>` claims them (`ManagedBy` `dispatcher`). The Jobs page and the
+alerts read every collector job from this table; a `cron` row (a rollback to the host
+crontab, which has no job lines since 2026-10-21) still shows, but nothing dispatches
+it. A backend watcher has `ManagedBy` `worker` and an
 `IntervalMinutes` instead: before every cycle it calls
 `WatcherSchedule.WaitForNextRunAsync`, which reads its row once a minute and returns when
 the row is enabled and the interval has passed since the last cycle ended. The first read
