@@ -260,11 +260,8 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - cato_caddy_data:/data
       - cato_caddy_config:/config
-    depends_on:
-      - api
-      - frontend
-      - ogt-api
-      - ogt-frontend
+    # No depends_on: since Step A the upstreams run on ECS, and `up -d caddy` must never start
+    # the old api/worker again (a second worker is a second Steam login and dispatcher).
 
   # ── EF Migration Helper (run with: docker compose run --rm ef-migration) ──
   ef-migration:
