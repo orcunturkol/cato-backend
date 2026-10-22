@@ -15,7 +15,8 @@ locals {
     Alerts__HeartbeatEnabled       = "true"
     Alerts__SnsTopicArn            = data.aws_sns_topic.alerts.arn
     Alerts__DiscordWebhookSecretId = "cato/alerts/discord-webhook"
-    # No Seq__ServerUrl until Step A binds the host's Seq to its private IP: CloudWatch only.
+    # Also to Seq on today's host until Step D3 (seq.cato.internal, port published on its private IP).
+    Seq__ServerUrl = "http://seq.${local.namespace}:5341"
   }
   backend_secrets = {
     RabbitMQ__Uri           = local.mq_uri
