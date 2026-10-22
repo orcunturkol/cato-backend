@@ -59,13 +59,12 @@ locals {
     "ogt-api" = {
       image = "ogt-api", cpu = 256, memory = 512, port = 8080, edge = false
       env = {
-        ASPNETCORE_ENVIRONMENT = "Production"
-        Cato__BaseUrl          = "http://api.${local.namespace}:8080"
+        ASPNETCORE_ENVIRONMENT               = "Production"
+        Cato__BaseUrl                        = "http://api.${local.namespace}:8080"
+        Serilog__WriteTo__1__Args__serverUrl = "http://seq.${local.namespace}:5341"
       }
-      secrets = {
-        ConnectionStrings__DefaultConnection = aws_secretsmanager_secret.flat["cato/ogt/db-connection"].arn
-        Auth__InviteCode                     = aws_secretsmanager_secret.flat["cato/ogt/invite-code"].arn
-      }
+      secrets = { for k in ["ConnectionStrings__DefaultConnection", "Auth__InviteCode", "Notifications__DiscordWebhookUrl",
+      "Ogt__ScreenerEmails__0", "Ogt__PublicBaseUrl"] : k => "${aws_secretsmanager_secret.ogt_config.arn}:${k}::" }
       health = null, min_healthy = 100, max_percent = 200
     }
     "ogt-frontend" = {

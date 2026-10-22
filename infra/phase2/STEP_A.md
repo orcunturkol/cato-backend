@@ -13,10 +13,10 @@ after:   ECS  ── api · worker (exactly 1) · frontend · ogt-api · ogt-fro
 
 ## Before the window
 
-- [ ] OGT keeps its data-protection keys in its database or Redis (not the `ogt_dpkeys`
-      volume), merged and deployed; otherwise every ogt-api restart on Fargate ends all logins.
-- [ ] Flat secrets set (set_secret.py, user approval): `cato/ogt/db-connection`,
-      `cato/ogt/invite-code`, plus any new OGT keys (OGT's PR notes).
+- [x] OGT keeps its data-protection keys in its database (ogt-backend `0311015`, deployed
+      2026-10-22), not the `ogt_dpkeys` volume, so Fargate restarts keep the logins.
+- [x] `cato/ogt/config` holds ogt-api's five settings, copied from `cato/server/compose-env`
+      "ogt-api" (2026-10-22). A later OGT setting goes into both until the host's ogt-api is gone.
 - [ ] Images in ECR for the commit to deploy: `cato-backend`, `cato-frontend`, `ogt-api`,
       `ogt-frontend` (deploy.sh builds them; OGT from its own main checkout).
 - [ ] `cato/collector/config` gets two new keys, written in the window (step 6), not before:

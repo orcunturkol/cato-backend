@@ -11,8 +11,6 @@ resource "aws_secretsmanager_secret" "flat" {
     "cato/edge/tailscale-auth-key" = "Tagged, reusable Tailscale auth key of the edge node (no key expiry)."
     "cato/caddy/duckdns-token"     = "DuckDNS token for Caddy's DNS-01 challenge (same value as cato/server/compose-env caddy/DUCKDNS_TOKEN)."
     "cato/caddy/admin-hash"        = "Base64 of the bcrypt hash of the CATO admin password (user cato) for Caddy's basic_auth on writes. Same value as CATO_ADMIN_HASH in the host's .env (scripts/set-admin-password.sh), not in cato/server/compose-env."
-    "cato/ogt/db-connection"       = "ogt-api connection string (same value as cato/server/compose-env ogt-api/ConnectionStrings__DefaultConnection)."
-    "cato/ogt/invite-code"         = "OGT registration invite code (same value as cato/server/compose-env ogt-api/Auth__InviteCode)."
     "cato/seq/admin-password"      = "Seq first-run admin password on the edge node (same value as cato/server/compose-env seq/SEQ_FIRSTRUN_ADMINPASSWORD)."
   }
   name                    = each.key
@@ -36,6 +34,14 @@ locals {
   mq_amqps   = one([for e in aws_mq_broker.cato.instances[0].endpoints : e if startswith(e, "amqps://")])
   mq_host    = trimsuffix(trimprefix(local.mq_amqps, "amqps://"), ":5671")
   cache_host = aws_elasticache_replication_group.cato.primary_endpoint_address
+}
+
+# ogt-api's settings as one JSON object (the same keys as cato/server/compose-env "ogt-api"),
+# injected key by key. Set from the host with a copy script (user approval), never from state.
+resource "aws_secretsmanager_secret" "ogt_config" {
+  name                    = "cato/ogt/config"
+  description             = "ogt-api settings as JSON: connection string, invite code, Discord webhook, screener e-mails, public URL."
+  recovery_window_in_days = 7
 }
 
 resource "aws_secretsmanager_secret" "mq" {
@@ -99,7 +105,7 @@ resource "aws_iam_role_policy" "execution_secrets" {
     Statement = [{
       Effect   = "Allow"
       Action   = ["secretsmanager:GetSecretValue"]
-      Resource = concat([for s in aws_secretsmanager_secret.flat : s.arn], [aws_secretsmanager_secret.mq.arn, aws_secretsmanager_secret.cache.arn])
+      Resource = concat([for s in aws_secretsmanager_secret.flat : s.arn], [aws_secretsmanager_secret.mq.arn, aws_secretsmanager_secret.cache.arn, aws_secretsmanager_secret.ogt_config.arn])
     }]
   })
 }

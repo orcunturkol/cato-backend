@@ -44,7 +44,7 @@ locals {
   ]
 
   # Seq on today's host (5341 on its private IP) until Step D3 moves Seq to the edge node.
-  seq_clients = ["api", "worker", "migrate", "agents", "edge"]
+  seq_clients = ["api", "worker", "migrate", "agents", "edge", "ogt-api"]
 
   # Postgres in the existing cato-rds-sg (infra/rds keeps its rules as separate resources).
   rds_clients = ["api", "worker", "migrate", "ogt-api"]
