@@ -53,6 +53,12 @@ variable "image_tag" {
   default     = "latest"
 }
 
+variable "image_tags" {
+  description = "Tag per ECR repo deployed on its own (deploy-collector.sh); other repos use image_tag"
+  type        = map(string)
+  default     = {}
+}
+
 variable "edge_instance_type" {
   description = "x86_64: Chrome has no Linux ARM64 build"
   type        = string

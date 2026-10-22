@@ -2,4 +2,6 @@
 *.tfstate
 *.tfstate.*
 *.tfvars
+# Image tags only, no secrets: the record of what runs (deploy.sh rewrites it).
+!images.auto.tfvars
 crash.log
