@@ -10,7 +10,7 @@ approves the cost below (plan "Phase 2", step 5).
 |---|---|
 | Network | 10 security groups (inbound only from other CATO groups), Postgres rules in `cato-rds-sg`, Cloud Map namespace `cato.internal` with `api`, `worker`, `frontend`, `ogt-api`, `ogt-frontend` and a `seq` record (today's host until Step D3) |
 | Images and logs | ECR: `cato-backend`, `cato-frontend`, `cato-collector`, `cato-caddy`, `ogt-api`, `ogt-frontend` (newest 20 kept); log groups `/cato/<service>`, 30 days |
-| Secrets and IAM | empty flat secrets for ECS injection (`cato/edge/tailscale-auth-key`, `cato/caddy/duckdns-token`, `cato/ogt/db-connection`, `cato/ogt/invite-code`, `cato/seq/admin-password`); generated `cato/mq/app-user` and `cato/cache/connection`; one task role per service with only its own secrets; the edge node role |
+| Secrets and IAM | empty flat secrets for ECS injection (`cato/edge/tailscale-auth-key`, `cato/caddy/duckdns-token`, `cato/caddy/admin-hash`, `cato/ogt/db-connection`, `cato/ogt/invite-code`, `cato/seq/admin-password`); generated `cato/mq/app-user` and `cato/cache/connection`; one task role per service with only its own secrets; the edge node role |
 | Data stores | Amazon MQ RabbitMQ 4.3, `mq.m7g.medium`, single instance, private; ElastiCache Valkey 8.1 `cache.t4g.micro`, TLS + auth token; maintenance Sunday 07:00 UTC |
 | Compute | ECS cluster `cato` (Fargate + the edge capacity provider); edge node: one `t3.large` in an ECS-managed group (min = max = 1), Elastic IP, Tailscale subnet router (`edge-user-data.sh`); 11 services and the `cato-migrate` task definition |
 
@@ -30,7 +30,7 @@ dispatches from the host's agents, and a second worker is a second Steam login a
 | + worker 1/4, agent-light 0.25/1, agent-events 0.5/2 | | | $141 |
 | Public IPv4 ($0.005/h): Phase 2 two tasks + EIP; Phase 3 seven tasks + EIP | | $11 | $29 |
 | ElastiCache Valkey `cache.t4g.micro` | $0.0144/h | $11 | $11 |
-| Secrets Manager (7 new × $0.40), Route 53 zone, ECR, CloudWatch Logs | | ~$6 | ~$12 |
+| Secrets Manager (8 new × $0.40), Route 53 zone, ECR, CloudWatch Logs | | ~$6 | ~$12 |
 | **Total** | | **~$257** | **~$389** |
 
 RDS (`db.t4g.medium`, ~$54) and today's host (~$70 with disk and IP) are extra until the host
@@ -71,5 +71,8 @@ is stopped (two quiet weeks after Phase 3).
   and open 5341 from the ECS groups, or ECS logs go to CloudWatch only until Step D3.
 - OGT keeps its data-protection keys in a container volume; on Fargate they are lost at every
   restart (logins end). Move them to the database or Redis (plan item 1d, Phase 3 part).
-- The `cato-caddy` image needs a Caddyfile with `*.cato.internal` upstreams (Step D3).
+- The `cato-caddy` image carries `Caddyfile.ecs` (`*.cato.internal` upstreams, `:443` on all
+  interfaces of the edge node; `cato-edge-sg` has no inbound rule, so only the tailnet reaches
+  it). Before Step D3, put the host's `CATO_ADMIN_HASH` (from `.env`, not compose-env) into
+  `cato/caddy/admin-hash` with set_secret.py; the caddy task does not start without it.
 - RDS backups run 03:00-04:00 UTC, inside the night jobs; consider moving the window.

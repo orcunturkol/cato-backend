@@ -10,6 +10,7 @@ resource "aws_secretsmanager_secret" "flat" {
   for_each = {
     "cato/edge/tailscale-auth-key" = "Tagged, reusable Tailscale auth key of the edge node (no key expiry)."
     "cato/caddy/duckdns-token"     = "DuckDNS token for Caddy's DNS-01 challenge (same value as cato/server/compose-env caddy/DUCKDNS_TOKEN)."
+    "cato/caddy/admin-hash"        = "Base64 of the bcrypt hash of the CATO admin password (user cato) for Caddy's basic_auth on writes. Same value as CATO_ADMIN_HASH in the host's .env (scripts/set-admin-password.sh), not in cato/server/compose-env."
     "cato/ogt/db-connection"       = "ogt-api connection string (same value as cato/server/compose-env ogt-api/ConnectionStrings__DefaultConnection)."
     "cato/ogt/invite-code"         = "OGT registration invite code (same value as cato/server/compose-env ogt-api/Auth__InviteCode)."
     "cato/seq/admin-password"      = "Seq first-run admin password on the edge node (same value as cato/server/compose-env seq/SEQ_FIRSTRUN_ADMINPASSWORD)."

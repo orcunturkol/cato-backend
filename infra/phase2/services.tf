@@ -95,11 +95,15 @@ locals {
       secrets = local.collector_secrets, health = null, min_healthy = 0, max_percent = 100
     }
     caddy = {
-      # The image must carry a Caddyfile with *.cato.internal upstreams (Step D3).
-      image   = "cato-caddy", cpu = 256, memory = 256, port = null, edge = true
-      env     = { ACME_EMAIL = "ofturkol@proton.me" }
-      secrets = { DUCKDNS_TOKEN = aws_secretsmanager_secret.flat["cato/caddy/duckdns-token"].arn }
-      health  = null, min_healthy = 0, max_percent = 100
+      # The image carries Caddyfile.ecs (*.cato.internal upstreams, :443 on all interfaces;
+      # only the tailnet reaches it). The task does not start until both secrets have a value.
+      image = "cato-caddy", cpu = 256, memory = 256, port = null, edge = true
+      env   = { ACME_EMAIL = "ofturkol@proton.me" }
+      secrets = {
+        DUCKDNS_TOKEN   = aws_secretsmanager_secret.flat["cato/caddy/duckdns-token"].arn
+        CATO_ADMIN_HASH = aws_secretsmanager_secret.flat["cato/caddy/admin-hash"].arn
+      }
+      health = null, min_healthy = 0, max_percent = 100
     }
     seq = {
       image   = null, cpu = 256, memory = 1024, port = null, edge = true

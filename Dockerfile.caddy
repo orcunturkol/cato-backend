@@ -4,3 +4,5 @@ RUN xcaddy build \
 
 FROM caddy:2-alpine
 COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+# The ECS edge node's Caddyfile. Today's host mounts ./Caddyfile over this path (compose).
+COPY Caddyfile.ecs /etc/caddy/Caddyfile
