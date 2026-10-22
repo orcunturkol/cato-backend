@@ -102,14 +102,14 @@ variable "cache_snapshot_window" {
 }
 
 variable "desired_counts" {
-  description = "Phase 2 runs only what takes no work from today's host; Phase 3 raises the rest"
+  description = "Tasks per service; each Phase 3 step raises its own (Step A done 2026-10-22)"
   type        = map(number)
   default = {
     api                = 1
     frontend           = 1
-    "ogt-api"          = 0 # Step A: its WatchlistCheckService must not run twice against one database
-    "ogt-frontend"     = 0 # Step A, with ogt-api
-    worker             = 0 # Step A: exactly one, after the host's api stops
+    "ogt-api"          = 1 # never 2, and never with the host's ogt-api: its WatchlistCheckService must run once
+    "ogt-frontend"     = 1
+    worker             = 1 # exactly one: two are two Steam logins and two dispatchers
     "agent-light"      = 0 # Step B
     "agent-events"     = 0 # Step C
     "agent-steamworks" = 0 # Step D1
