@@ -508,6 +508,9 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("DemoAppId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("DetailedDescription")
                         .HasColumnType("text");
 

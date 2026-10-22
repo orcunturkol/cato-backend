@@ -144,6 +144,7 @@ public class SteamGameEnrichmentService : ISteamGameEnrichmentService
         game.TrailerUrl = trailer?.Mp4?.Max ?? trailer?.Mp4?.Sd ?? trailer?.Webm?.Max
             ?? trailer?.Webm?.Sd ?? trailer?.HlsH264;
         game.TrailerThumbnailUrl = trailer?.Thumbnail;
+        game.DemoAppId = steamData.Demos?.FirstOrDefault()?.AppId;
         game.Website = steamData.Website;
         game.SupportedLanguages = steamData.SupportedLanguages;
 

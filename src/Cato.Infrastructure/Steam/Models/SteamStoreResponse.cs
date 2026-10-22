@@ -78,6 +78,19 @@ public class SteamAppData
 
     [JsonPropertyName("movies")]
     public List<SteamMovie>? Movies { get; set; }
+
+    /// <summary>The game's demo app(s); absent when the page offers no demo.</summary>
+    [JsonPropertyName("demos")]
+    public List<SteamDemo>? Demos { get; set; }
+}
+
+public class SteamDemo
+{
+    [JsonPropertyName("appid")]
+    public int AppId { get; set; }
+
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
 }
 
 public class SteamScreenshot

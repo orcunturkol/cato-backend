@@ -27,6 +27,9 @@ public class Game
     public List<string> ScreenshotUrls { get; set; } = [];
     public string? TrailerUrl { get; set; }
     public string? TrailerThumbnailUrl { get; set; }
+
+    /// <summary>The demo app the store page links to (Steam's <c>demos</c> list); null without a demo.</summary>
+    public int? DemoAppId { get; set; }
     public string? ShortDescription { get; set; }
     public string? DetailedDescription { get; set; }
     public string? Website { get; set; }

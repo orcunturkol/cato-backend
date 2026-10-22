@@ -29,7 +29,8 @@ public record GameDto(
     DateTime UpdatedAt,
     string? ReleaseDateRaw = null, // the store's own text, e.g. "Q4 2026" or "To be announced"
     string? Website = null,
-    DateTime? LastEnrichedAt = null
+    DateTime? LastEnrichedAt = null,
+    int? DemoAppId = null
 );
 
 public record GenreDto(string Name, string Type, string Source);
@@ -92,6 +93,7 @@ public static class GameMappings
         UpdatedAt: game.UpdatedAt,
         ReleaseDateRaw: game.ReleaseDateRaw,
         Website: game.Website,
-        LastEnrichedAt: game.LastEnrichedAt
+        LastEnrichedAt: game.LastEnrichedAt,
+        DemoAppId: game.DemoAppId
     );
 }
