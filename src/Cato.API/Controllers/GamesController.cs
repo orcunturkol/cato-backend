@@ -90,6 +90,32 @@ public class GamesController : ControllerBase
         return Results.Ok(result);
     }
 
+    /// <summary>
+    /// Follower series, latest SteamDB list ranks and CCU of up to 100 games in one call
+    /// (OGT's evaluation list). Unknown AppIds are left out. Output-cached.
+    /// </summary>
+    [HttpGet("metrics")]
+    [OutputCache(PolicyName = "GamesCatalog")]
+    [ProducesResponseType(typeof(List<GameMetricsDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> GameMetrics([FromQuery] string? appIds, [FromQuery] int? days)
+    {
+        var ids = new List<int>();
+        foreach (var part in (appIds ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (!int.TryParse(part, out var id))
+                return Results.BadRequest(new { error = $"appIds contains a non-integer value: '{part}'." });
+            ids.Add(id);
+        }
+
+        if (ids.Count is 0 or > 100)
+            return Results.BadRequest(new { error = "Pass 1 to 100 appIds." });
+        if (days is < 1 or > 120)
+            return Results.BadRequest(new { error = "days must be between 1 and 120." });
+
+        return Results.Ok(await _mediator.Send(new GetGameMetricsQuery(ids, days ?? 30)));
+    }
+
     /// <summary>Enrich a game from Steam by its AppId (for sibling services keyed on AppId).</summary>
     [HttpPost("by-appid/{appId:int}/enrich")]
     [ProducesResponseType(typeof(GameDto), StatusCodes.Status200OK)]
