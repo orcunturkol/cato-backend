@@ -113,15 +113,17 @@ public class SteamReconnectPolicyTests
         Assert.Equal(TimeSpan.FromMinutes(10), delay);
     }
 
-    [Fact]
-    public void RateLimitLogOff_ImposesCooldown()
+    [Theory]
+    [InlineData(EResult.RateLimitExceeded)]
+    [InlineData(EResult.AccountLoginDeniedThrottle)]
+    public void LoginThrottle_ImposesTheLongCooldown(EResult result)
     {
         var policy = CreatePolicy();
 
-        policy.NoteLogOff(EResult.RateLimitExceeded);
+        policy.NoteLogOff(result);
         policy.TryBeginReconnect(out var delay);
 
-        Assert.Equal(TimeSpan.FromMinutes(10), delay);
+        Assert.Equal(TimeSpan.FromMinutes(30), delay);
     }
 
     [Fact]

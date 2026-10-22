@@ -14,6 +14,10 @@ public sealed class SteamReconnectPolicy
     private static readonly TimeSpan MaxDelay = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan ChurnWindow = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan LogOffCooldown = TimeSpan.FromMinutes(10);
+    // Steam's login throttle (after failed logins) lifts only after a quiet spell, and every
+    // attempt in it can extend it: on 2026-10-22, after a password change, the worker retried
+    // the old password, then got RateLimitExceeded and AccountLoginDeniedThrottle every few minutes.
+    private static readonly TimeSpan ThrottleCooldown = TimeSpan.FromMinutes(30);
 
     private readonly TimeProvider _time;
     private readonly object _gate = new();
@@ -74,9 +78,12 @@ public sealed class SteamReconnectPolicy
             or EResult.RateLimitExceeded or EResult.AccountLoginDeniedThrottle))
             return;
 
+        var cooldown = result is EResult.RateLimitExceeded or EResult.AccountLoginDeniedThrottle
+            ? ThrottleCooldown
+            : LogOffCooldown;
         lock (_gate)
         {
-            var until = _time.GetUtcNow() + LogOffCooldown;
+            var until = _time.GetUtcNow() + cooldown;
             if (until > _cooldownUntil)
                 _cooldownUntil = until;
         }
