@@ -58,6 +58,8 @@ is stopped (two quiet weeks after Phase 3).
 
 ## Phase 3 prerequisites (found while writing this)
 
+Status 2026-10-22: done except OGT's data-protection keys and the Caddy image. Step A: `STEP_A.md`.
+
 - Collector branches to merge after the gate: `feat/collector-amqps` (RABBITMQ_URI, AMQPS with
   certificate and host-name checks), `feat/collector-state-in-redis` (financial and sale
   highwatermarks, proxy scoreboard in Redis; seeds from the files once),

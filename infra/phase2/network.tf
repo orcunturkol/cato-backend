@@ -26,6 +26,10 @@ locals {
     ["frontend", 80, "edge"],
     ["ogt-api", 8080, "edge"],
     ["ogt-frontend", 80, "edge"],
+    # Steps A-D2: today's Caddy proxies to the ECS frontends and OGT. Remove at decommission.
+    ["frontend", 80, "old-host"],
+    ["ogt-api", 8080, "old-host"],
+    ["ogt-frontend", 80, "old-host"],
     ["mq", 5671, "worker"],
     ["mq", 5671, "api"],
     ["mq", 5671, "agents"],
