@@ -1,6 +1,17 @@
 # Hourly cost starts here (README.md "Cost"). Both are private, in the RDS AZ, with their
 # maintenance outside the job windows.
 
+# RabbitMQ 4 on Amazon MQ refuses a message over 512 KiB by default ("message size ... is larger
+# than configured max size 524288"). A follower batch (10 games' whole series) reaches ~700 KB and
+# Steamworks batches carry whole histories; today's host broker (RabbitMQ 3) took up to 128 MiB, the
+# Amazon MQ maximum. A new revision needs a broker reboot (apply_immediately below).
+resource "aws_mq_configuration" "cato" {
+  name           = "cato"
+  engine_type    = "RabbitMQ"
+  engine_version = var.mq_engine_version
+  data           = "max_message_size = 134217728\n"
+}
+
 resource "aws_mq_broker" "cato" {
   broker_name                = "cato"
   engine_type                = "RabbitMQ"
@@ -16,6 +27,12 @@ resource "aws_mq_broker" "cato" {
     username = "cato"
     password = random_password.mq.result
   }
+
+  configuration {
+    id       = aws_mq_configuration.cato.id
+    revision = aws_mq_configuration.cato.latest_revision
+  }
+  apply_immediately = true
 
   maintenance_window_start_time {
     day_of_week = var.mq_maintenance.day
