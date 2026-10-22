@@ -31,7 +31,9 @@ resource "random_password" "cache" {
 }
 
 locals {
-  mq_host    = trimsuffix(trimprefix(aws_mq_broker.cato.instances[0].endpoints[0], "amqps://"), ":5671")
+  # RabbitMQ 4.x lists an https endpoint first; take the AMQPS one.
+  mq_amqps   = one([for e in aws_mq_broker.cato.instances[0].endpoints : e if startswith(e, "amqps://")])
+  mq_host    = trimsuffix(trimprefix(local.mq_amqps, "amqps://"), ":5671")
   cache_host = aws_elasticache_replication_group.cato.primary_endpoint_address
 }
 

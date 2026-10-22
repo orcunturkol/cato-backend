@@ -239,7 +239,6 @@ resource "aws_ecs_service" "this" {
   desired_count                      = var.desired_counts[each.key]
   deployment_minimum_healthy_percent = each.value.min_healthy
   deployment_maximum_percent         = each.value.max_percent
-  enable_execute_command             = true
 
   capacity_provider_strategy {
     capacity_provider = each.value.edge ? aws_ecs_capacity_provider.edge.name : "FARGATE"
