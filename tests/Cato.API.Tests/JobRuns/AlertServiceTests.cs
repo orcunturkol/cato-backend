@@ -215,7 +215,7 @@ public class AlertServiceTests : JobRunsDbTestBase
         });
 
         await CycleAsync(Now);
-        Assert.Equal("agent:steamdb@host", Assert.Single(Incidents()).JobName);
+        Assert.Equal("agent:steamdb", Assert.Single(Incidents()).JobName);
 
         await using (var db = NewContext())
         {
@@ -225,6 +225,53 @@ public class AlertServiceTests : JobRunsDbTestBase
         await CycleAsync(Now.AddMinutes(1));
 
         Assert.NotNull(Assert.Single(Incidents()).ResolvedAt);
+    }
+
+    private static JobAgent Agent(string group, string host, DateTime lastSeen) => new()
+    {
+        AgentId = $"{group}@{host}", AgentGroup = group, Host = host,
+        FirstSeenAt = Now.AddDays(-1), LastSeenAt = lastSeen,
+    };
+
+    [Fact]
+    public async Task A_replaced_agent_does_not_alert_while_its_group_calls()
+    {
+        // A new ECS task has a new host: the old id stays in the table, silent.
+        Add(Agent(JobAgentGroups.SteamDb, "ip-old", Now.AddHours(-2)), Agent(JobAgentGroups.SteamDb, "ip-new", Now.AddMinutes(-1)));
+
+        await CycleAsync(Now);
+
+        Assert.Empty(Incidents());
+    }
+
+    [Fact]
+    public async Task A_silent_group_opens_one_incident()
+    {
+        Add(Agent(JobAgentGroups.SteamDb, "ip-old", Now.AddHours(-2)), Agent(JobAgentGroups.SteamDb, "ip-new", Now.AddMinutes(-12)),
+            Agent(JobAgentGroups.Light, "ip-light", Now.AddMinutes(-1)));
+
+        await CycleAsync(Now);
+
+        var incident = Assert.Single(Incidents());
+        Assert.Equal(("agent:steamdb", "agent:steamdb|agent_offline"), (incident.JobName, incident.OpenKey));
+        Assert.Contains("steamdb@ip-new", incident.Message);
+    }
+
+    [Fact]
+    public async Task An_incident_keyed_by_agent_id_resolves()
+    {
+        Add(Agent(JobAgentGroups.SteamDb, "ip-new", Now.AddMinutes(-1)), new AlertIncident
+        {
+            Id = Guid.NewGuid(), JobName = "agent:steamdb@ip-old", Rule = AlertRules.AgentOffline,
+            OpenKey = "agent:steamdb@ip-old|agent_offline", Message = "silent", OpenedAt = Now.AddHours(-1),
+            LastSeenAt = Now.AddMinutes(-1), OpenSentTo = "discord,sns",
+        });
+
+        await CycleAsync(Now);
+
+        var incident = Assert.Single(Incidents());
+        Assert.Equal((Now, null), (incident.ResolvedAt, incident.OpenKey));
+        Assert.Equal("discord,sns", incident.ResolveSentTo);
     }
 
     [Fact]

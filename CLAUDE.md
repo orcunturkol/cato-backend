@@ -375,7 +375,7 @@ state and returns firing / not firing; firing opens one incident per job and rul
 | `run_failed` | the newest finished run is `Failed`, or `Lost` (for watchers only a hang: no finish within the limit) | the newest finished run succeeded |
 | `items_failed` | `items_failed / items_total` >= the job's `AlertFailedRatio` and >= `AlertMinItems` | a newer run is below that |
 | `missed_run` | a dispatch is pending > 5 min with its agent group idle, or expired | the newest dispatch is claimed or finished |
-| `agent_offline` | an agent seen this week is silent > 10 min | it calls again |
+| `agent_offline` | no agent of a group seen this week has called for > 10 min (one incident per group, `agent:<group>`) | any agent of the group calls again |
 | `dlq_not_empty` | `cato-ingestion-dlq` has messages | it is empty |
 | `queue_stuck` | a queue has messages and the count has not dropped for 30 min | the count drops |
 | `stale_data` | the newest data of an enabled job is older than its limit | newer data arrives |

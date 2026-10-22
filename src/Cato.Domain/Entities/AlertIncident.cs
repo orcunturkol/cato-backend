@@ -10,7 +10,7 @@ public class AlertIncident
 {
     public Guid Id { get; set; }
 
-    /// <summary>A job name ("ccu"), "agent:&lt;agent id&gt;" or "queue:&lt;queue name&gt;".</summary>
+    /// <summary>A job name ("ccu"), "agent:&lt;agent group&gt;" or "queue:&lt;queue name&gt;".</summary>
     public string JobName { get; set; } = string.Empty;
 
     /// <summary>One of <see cref="AlertRules"/>.</summary>

@@ -672,7 +672,7 @@ public static class DbTableCatalog
             "One row per job agent process (cato-agent@<group>): when it was last heard and what it runs now.",
             [new(DataSite.Cato, "Agent claims and heartbeats", null, "POST /api/job-agents/{group}/claim and /heartbeat")],
             ["The agent id is <group>@<host>; the group must be light, events, steamdb or steamworks."],
-            ["A silent agent stays in the table; the agent_offline alert reports it after 10 min."]),
+            ["A silent agent stays in the table; the agent_offline alert reports its group after 10 min with no agent of the group calling."]),
 
         new("worker_state", DataCollection.Internal,
             "Small values a background service needs after a restart: the PICS change numbers of the two PICS watchers.",
