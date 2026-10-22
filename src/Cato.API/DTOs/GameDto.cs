@@ -26,7 +26,10 @@ public record GameDto(
     List<GenreDto> Genres,
     List<TagDto> Tags,
     DateTime CreatedAt,
-    DateTime UpdatedAt
+    DateTime UpdatedAt,
+    string? ReleaseDateRaw = null, // the store's own text, e.g. "Q4 2026" or "To be announced"
+    string? Website = null,
+    DateTime? LastEnrichedAt = null
 );
 
 public record GenreDto(string Name, string Type, string Source);
@@ -86,6 +89,9 @@ public static class GameMappings
         Genres: game.Genres.Select(g => new GenreDto(g.GenreName, g.GenreType, g.Source)).ToList(),
         Tags: game.Tags.Select(t => new TagDto(t.TagName, t.TagType, t.Weight, t.Source)).ToList(),
         CreatedAt: game.CreatedAt,
-        UpdatedAt: game.UpdatedAt
+        UpdatedAt: game.UpdatedAt,
+        ReleaseDateRaw: game.ReleaseDateRaw,
+        Website: game.Website,
+        LastEnrichedAt: game.LastEnrichedAt
     );
 }
