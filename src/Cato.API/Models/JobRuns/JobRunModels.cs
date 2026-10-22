@@ -75,25 +75,3 @@ public record JobScheduleSourceDto(
     string? SourceHost,
     DateTime PublishedAt,
     int EntryCount);
-
-/// <summary>One scheduled job as a producer publishes it. Cron times are UTC.</summary>
-public record JobScheduleEntryDto(
-    string JobName,
-    string? Label,
-    string? Cron,
-    bool Enabled,
-    int? TimeoutSeconds,
-    string? Note);
-
-/// <summary>Body of PUT /api/job-schedules/{producer}.</summary>
-public record PublishJobScheduleRequest(
-    string? Source,
-    string? SourceHost,
-    List<JobScheduleEntryDto>? Entries);
-
-/// <summary>Replace the whole schedule a producer published before.</summary>
-public record PublishJobScheduleCommand(
-    string Producer,
-    string Source,
-    string? SourceHost,
-    List<JobScheduleEntryDto> Entries) : IRequest<JobScheduleSourceDto>;

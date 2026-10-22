@@ -1,7 +1,6 @@
 using Cato.API.Models.JobRuns;
 using Cato.API.Services.Handlers.JobRuns;
 using Cato.API.Services.JobRuns;
-using Cato.API.Validators.JobRuns;
 using Cato.Domain.Entities;
 using Cato.Infrastructure.Jobs;
 
@@ -11,20 +10,29 @@ public class JobRunsOverviewTests : JobRunsDbTestBase
 {
     private const string Collector = JobRunProducer.ExternalCollector;
 
-    private static readonly List<JobScheduleEntryDto> CollectorSchedule =
+    // Time limit 0: no limit, so the default stale window applies.
+    private static ScheduledJob[] CollectorSchedule() =>
     [
-        new("ccu", "CCU", "0 */4 * * *", true, null, null),
-        new("steamdb", "SteamDB rankings", "30 3 * * *", true, 3600, null),
-        new("financial", "Partner financials", "0 4 * * *", false, null, "commented out in crontab"),
-        new("steamdb_followers", "SteamDB followers", "0 6 * * *", true, 7200, null),
-        new("steamdb_followers_priority", "SteamDB followers, priority", "15 * * * *", true, 7200, null),
+        CollectorJob("ccu", "CCU", "0 */4 * * *"),
+        CollectorJob("steamdb", "SteamDB rankings", "30 3 * * *", 3600),
+        CollectorJob("financial", "Partner financials", "0 4 * * *", enabled: false),
+        CollectorJob("steamdb_followers", "SteamDB followers", "0 6 * * *", 7200),
+        CollectorJob("steamdb_followers_priority", "SteamDB followers, priority", "15 * * * *", 7200),
     ];
 
-    private async Task PublishAsync(List<JobScheduleEntryDto> entries)
+    private static ScheduledJob CollectorJob(
+        string name, string label, string cron, int timeoutSeconds = 0, bool enabled = true) => new()
+    {
+        Name = name, Label = label, AgentGroup = JobAgentGroups.Light, Module = $"orchestrators.run_{name}",
+        Cron = cron, Enabled = enabled, TimeoutSeconds = timeoutSeconds,
+        ManagedBy = ScheduledJobManagedBy.Dispatcher, UpdatedAt = Now, UpdatedBy = "seed",
+    };
+
+    private async Task SeedScheduleAsync()
     {
         await using var db = NewContext();
-        await new PublishJobScheduleHandler(db, Clock).Handle(
-            new PublishJobScheduleCommand(Collector, "crontab", "catoptric", entries), CancellationToken.None);
+        db.ScheduledJobs.AddRange(CollectorSchedule());
+        await db.SaveChangesAsync();
     }
 
     private async Task SeedAsync(params JobRun[] runs)
@@ -127,16 +135,16 @@ public class JobRunsOverviewTests : JobRunsDbTestBase
     }
 
     [Fact]
-    public async Task Overview_lists_backend_and_published_collector_jobs()
+    public async Task Overview_lists_backend_and_scheduled_collector_jobs()
     {
-        await PublishAsync(CollectorSchedule);
+        await SeedScheduleAsync();
 
         var overview = await OverviewAsync();
 
-        Assert.Equal(10 + CollectorSchedule.Count, overview.Jobs.Count);
+        Assert.Equal(10 + CollectorSchedule().Length, overview.Jobs.Count);
         var source = Assert.Single(overview.ScheduleSources);
-        Assert.Equal("catoptric", source.SourceHost);
-        Assert.Equal(CollectorSchedule.Count, source.EntryCount);
+        Assert.Equal(Collector, source.Producer);
+        Assert.Equal(CollectorSchedule().Length, source.EntryCount);
 
         var ccu = overview.Jobs.Single(j => j.JobName == "ccu");
         Assert.Equal(new DateTime(2026, 10, 6, 16, 0, 0), ccu.NextRunAt);
@@ -144,7 +152,7 @@ public class JobRunsOverviewTests : JobRunsDbTestBase
         var financial = overview.Jobs.Single(j => j.JobName == "financial");
         Assert.False(financial.Enabled);
         Assert.Null(financial.NextRunAt);
-        Assert.Equal("commented out in crontab", financial.NextRunNote);
+        Assert.Equal("paused on the Jobs page", financial.NextRunNote);
         Assert.Equal("0 4 * * *", financial.CronExpression);
 
         var steamdb = overview.Jobs.Single(j => j.JobName == "steamdb");
@@ -155,7 +163,7 @@ public class JobRunsOverviewTests : JobRunsDbTestBase
     [Fact]
     public async Task Running_section_drops_lost_rows()
     {
-        await PublishAsync(CollectorSchedule);
+        await SeedScheduleAsync();
         await SeedAsync(
             // live: started 20 min ago, limit 1h10m
             Run("steamdb", JobRunStatus.Running, Now.AddMinutes(-20)),
@@ -198,7 +206,7 @@ public class JobRunsOverviewTests : JobRunsDbTestBase
     [Fact]
     public async Task Skipped_run_does_not_hide_the_last_real_run()
     {
-        await PublishAsync(CollectorSchedule);
+        await SeedScheduleAsync();
         await SeedAsync(
             Run("steamdb_followers_priority", JobRunStatus.Succeeded, Now.AddMinutes(-66), Now.AddMinutes(-65)),
             Run("steamdb_followers_priority", JobRunStatus.Skipped, Now.AddMinutes(-6), Now.AddMinutes(-6)));
@@ -224,19 +232,6 @@ public class JobRunsOverviewTests : JobRunsDbTestBase
     }
 
     [Fact]
-    public async Task Publishing_again_replaces_the_schedule()
-    {
-        await PublishAsync(CollectorSchedule);
-        await PublishAsync([new("ccu", "CCU", "0 */2 * * *", true, null, null)]);
-
-        var overview = await OverviewAsync();
-
-        Assert.Equal(1, overview.ScheduleSources.Single().EntryCount);
-        Assert.DoesNotContain(overview.Jobs, j => j.JobName == "steamdb");
-        Assert.Equal("0 */2 * * *", overview.Jobs.Single(j => j.JobName == "ccu").CronExpression);
-    }
-
-    [Fact]
     public async Task Missing_web_api_key_disables_the_key_based_watchers()
     {
         await using var db = NewContext();
@@ -252,7 +247,7 @@ public class JobRunsOverviewTests : JobRunsDbTestBase
     [Fact]
     public async Task List_endpoint_marks_dead_running_rows_as_lost()
     {
-        await PublishAsync(CollectorSchedule);
+        await SeedScheduleAsync();
         var older = Run("ccu", JobRunStatus.Running, Now.AddHours(-8));
         var newer = Run("ccu", JobRunStatus.Running, Now.AddMinutes(-2));
         await SeedAsync(older, newer);
@@ -265,20 +260,5 @@ public class JobRunsOverviewTests : JobRunsDbTestBase
         var lost = runs.Single(r => r.Id == older.Id);
         Assert.Equal(JobRunStatus.Lost, lost.EffectiveStatus);
         Assert.Equal(JobRunStatusEvaluator.ReasonNewerRun, lost.LostReason);
-    }
-
-    [Theory]
-    [InlineData("external-collector", "0 3 * * *", true, null, true)]
-    [InlineData("cato-backend", "0 3 * * *", true, null, false)]
-    [InlineData("external-collector", "every day", true, null, false)]
-    [InlineData("external-collector", null, true, null, false)]
-    [InlineData("external-collector", null, false, null, true)]
-    [InlineData("external-collector", "0 3 * * *", true, 0, false)]
-    public void Schedule_validator(string producer, string? cron, bool enabled, int? timeout, bool valid)
-    {
-        var command = new PublishJobScheduleCommand(
-            producer, "crontab", null, [new JobScheduleEntryDto("ccu", null, cron, enabled, timeout, null)]);
-
-        Assert.Equal(valid, new PublishJobScheduleValidator().Validate(command).IsValid);
     }
 }

@@ -647,12 +647,6 @@ public static class DbTableCatalog
             ["Status must be reportable; EndTime is required unless Running and must not be before StartTime; metrics must be a JSON object."],
             ["Reporting is best effort: the collector never fails a job because the report failed. A killed job leaves a Running row that reads Lost."]),
 
-        new("job_schedule", DataCollection.Internal,
-            "The collector's published cron schedule.",
-            [new(DataSite.Cato, "Collector crontab", null, "PUT /api/job-schedules/{producer} on every collector run")],
-            ["Producer is not cato-backend; at most 200 entries; cron has 5 fields; enabled entries need a cron."],
-            ["Each publish replaces the whole list."]),
-
         new("scheduled_job", DataCollection.Internal,
             "One row per job: a collector job (cron, time limit, agent group; the crontab or the dispatcher starts it) or a backend watcher (interval, switch), with its alert threshold.",
             [new(DataSite.Cato, "Seed from the 2026-10-20 crontab", null, "AddScheduledJobs migration"),

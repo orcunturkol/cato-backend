@@ -54,7 +54,6 @@ public class CatoDbContext : DbContext
     public DbSet<SteamPlayerAchievement> SteamPlayerAchievements => Set<SteamPlayerAchievement>();
     public DbSet<SteamPlayerAchievementFetch> SteamPlayerAchievementFetches => Set<SteamPlayerAchievementFetch>();
     public DbSet<JobRun> JobRuns => Set<JobRun>();
-    public DbSet<JobScheduleSnapshot> JobScheduleSnapshots => Set<JobScheduleSnapshot>();
     public DbSet<ScheduledJob> ScheduledJobs => Set<ScheduledJob>();
     public DbSet<ScheduledJobChange> ScheduledJobChanges => Set<ScheduledJobChange>();
     public DbSet<JobDispatch> JobDispatches => Set<JobDispatch>();
@@ -694,18 +693,6 @@ public class CatoDbContext : DbContext
             entity.HasIndex(e => new { e.JobName, e.StartTime })
                 .IsDescending(false, true)
                 .HasDatabaseName("idx_job_run_job_started");
-        });
-
-        // ── JobScheduleSnapshot ──
-        modelBuilder.Entity<JobScheduleSnapshot>(entity =>
-        {
-            entity.ToTable("job_schedule");
-            entity.HasKey(e => e.Producer);
-
-            entity.Property(e => e.Producer).HasMaxLength(50);
-            entity.Property(e => e.Source).HasMaxLength(50).IsRequired();
-            entity.Property(e => e.SourceHost).HasMaxLength(255);
-            entity.Property(e => e.EntriesJson).HasColumnType("jsonb").IsRequired();
         });
 
         // ── ScheduledJob ──
