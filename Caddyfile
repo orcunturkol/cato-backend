@@ -1,3 +1,6 @@
+# Steps A-D2 (since 2026-10-22): the services run on ECS; this Caddy on today's host still
+# terminates TLS and proxies to them by their Cloud Map names. The container uses public DNS
+# servers (compose `dns:`, for the DuckDNS challenge), so the upstreams ask the VPC resolver.
 {
 	email {$ACME_EMAIL}
 	auto_https disable_redirects
@@ -25,11 +28,21 @@ catoptricgames.duckdns.org {
 	}
 
 	handle_path /api/* {
-		reverse_proxy api:8080
+		reverse_proxy {
+			dynamic a api.cato.internal 8080 {
+				refresh 10s
+				resolvers 172.31.0.2
+			}
+		}
 	}
 
 	handle {
-		reverse_proxy frontend:80
+		reverse_proxy {
+			dynamic a frontend.cato.internal 80 {
+				refresh 10s
+				resolvers 172.31.0.2
+			}
+		}
 	}
 }
 
@@ -40,10 +53,20 @@ ogt.catoptricgames.duckdns.org {
 
 	# OGT API routes already carry the /api prefix, so no handle_path strip here.
 	handle /api/* {
-		reverse_proxy ogt-api:8080
+		reverse_proxy {
+			dynamic a ogt-api.cato.internal 8080 {
+				refresh 10s
+				resolvers 172.31.0.2
+			}
+		}
 	}
 
 	handle {
-		reverse_proxy ogt-frontend:80
+		reverse_proxy {
+			dynamic a ogt-frontend.cato.internal 80 {
+				refresh 10s
+				resolvers 172.31.0.2
+			}
+		}
 	}
 }
