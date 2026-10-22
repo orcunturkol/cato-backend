@@ -201,20 +201,33 @@ public sealed class AlertService
         return checks;
     }
 
-    /// <summary>agent_offline: an agent seen this week has stopped calling the API.</summary>
+    /// <summary>
+    /// agent_offline: no agent of a group seen this week calls the API. A new host gives an
+    /// agent a new id, so the group, not the id, is the subject.
+    /// </summary>
     public async Task<List<AlertCheck>> CheckAgentsAsync(DateTime nowUtc, CancellationToken ct)
     {
         var since = nowUtc - AgentWindow;
         var agents = await _db.JobAgents.AsNoTracking().Where(a => a.LastSeenAt >= since).ToListAsync(ct);
         var limit = TimeSpan.FromMinutes(_settings.AgentOfflineMinutes);
-        return agents.Select(a =>
+        var checks = agents.GroupBy(a => a.AgentGroup).Select(g =>
         {
-            var silent = nowUtc - AsUtc(a.LastSeenAt);
+            var last = g.MaxBy(a => a.LastSeenAt)!;
+            var silent = nowUtc - AsUtc(last.LastSeenAt);
             return silent > limit
-                ? new AlertCheck($"agent:{a.AgentId}", AlertRules.AgentOffline, true,
-                    $"{a.AgentId} last called the API {(int)silent.TotalMinutes} min ago ({Stamp(a.LastSeenAt)} UTC)")
-                : new AlertCheck($"agent:{a.AgentId}", AlertRules.AgentOffline, false);
+                ? new AlertCheck($"agent:{g.Key}", AlertRules.AgentOffline, true,
+                    $"no agent of group {g.Key} called the API for {(int)silent.TotalMinutes} min; the last was {last.AgentId} ({Stamp(last.LastSeenAt)} UTC)")
+                : new AlertCheck($"agent:{g.Key}", AlertRules.AgentOffline, false);
         }).ToList();
+
+        // Incidents opened per agent id, before the rule judged groups: no check names them, so resolve them here.
+        var groupSubjects = JobAgentGroups.All.Select(g => $"agent:{g}").ToList();
+        var legacy = await _db.AlertIncidents.AsNoTracking()
+            .Where(i => i.ResolvedAt == null && i.Rule == AlertRules.AgentOffline && !groupSubjects.Contains(i.JobName))
+            .Select(i => i.JobName)
+            .ToListAsync(ct);
+        checks.AddRange(legacy.Select(subject => new AlertCheck(subject, AlertRules.AgentOffline, false)));
+        return checks;
     }
 
     /// <summary>dlq_not_empty and queue_stuck. A broker that cannot be read decides nothing.</summary>
