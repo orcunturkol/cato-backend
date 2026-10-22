@@ -73,6 +73,26 @@ public class SteamGameEnrichmentServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task The_demo_the_store_page_links_to_is_kept_and_cleared_when_it_goes()
+    {
+        var gameId = await SeedAsync(300);
+        var withDemo = StoreData("With Demo", "Simulation");
+        withDemo.Demos = [new SteamDemo { AppId = 301, Description = "" }];
+        _steam.Data[300] = withDemo;
+
+        await using (var db = NewContext())
+            Assert.True(await NewService(db).EnrichGameAsync(gameId));
+        await using (var check = NewContext())
+            Assert.Equal(301, (await check.Games.SingleAsync(g => g.Id == gameId)).DemoAppId);
+
+        _steam.Data[300] = StoreData("With Demo", "Simulation");
+        await using (var db = NewContext())
+            Assert.True(await NewService(db).EnrichGameAsync(gameId));
+        await using (var check = NewContext())
+            Assert.Null((await check.Games.SingleAsync(g => g.Id == gameId)).DemoAppId);
+    }
+
+    [Fact]
     public async Task Failed_save_does_not_fail_the_next_game_on_the_same_context()
     {
         var poisonId = await SeedAsync(100);
