@@ -22,7 +22,11 @@ aws ec2 associate-address --region ${region} --instance-id "$INSTANCE_ID" \
 
 # Tailscale: people reach Caddy here, and the node routes the VPC into the tailnet (the gate
 # tool and SSM-free debugging). Machines never use a Tailscale IP to reach each other.
-curl -fsSL https://tailscale.com/install.sh | sh
+# Tailscale's install.sh does not support Amazon Linux 2023 ("isn't supported by this script
+# yet", 2026-10-22, and set -e stopped the boot here); its package repository does.
+curl -fsSL https://pkgs.tailscale.com/stable/amazon-linux/2023/tailscale.repo -o /etc/yum.repos.d/tailscale.repo
+dnf install -y tailscale
+systemctl enable --now tailscaled
 echo 'net.ipv4.ip_forward = 1' > /etc/sysctl.d/99-tailscale.conf
 sysctl -p /etc/sysctl.d/99-tailscale.conf
 AUTHKEY=$(aws secretsmanager get-secret-value --region ${region} --secret-id ${tailscale_secret} \
