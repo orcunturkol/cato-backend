@@ -132,5 +132,7 @@ variable "collector_env" {
     STEAM_API_RATE_LIMIT_DELAY = "0.2"
     STEAMDB_HEADLESS           = "0"
     WEBSHARE_PROXY_COUNTRY     = "GB"
+    # A 3 GB/month plan over 30 days; no cap until WEBSHARE_API_KEY is in cato/collector/config.
+    WEBSHARE_DAILY_BUDGET_MB = "100"
   }
 }
