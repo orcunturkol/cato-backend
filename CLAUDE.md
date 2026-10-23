@@ -325,14 +325,18 @@ bands (`FollowerHistoryQueue`); the collector mirrors `RequestBandMax`:
 |---|---|---|
 | < -1e9 (`-epoch`) | requested, newest first | `POST /api/games/{appId}/follower-history/fetch`, old `game.analyzed` path |
 | -2e6 | Owned game: refreshed after 20 h when it is in no SteamDB list, else after 30 days | `FollowerHistorySweepService` |
-| -1e6 + rank | SteamDB list game, best rank first, refreshed after 30 days | `FollowerHistorySweepService` |
+| -1e6 + rank | Sourcing, Owned or Competitor game in a SteamDB list, best rank first, refreshed after 30 days | `FollowerHistorySweepService` |
 | 0 | seeded Sourcing/Owned, never fetched | `RedisAppIdSyncService` |
 | > 0 | last successful fetch | collector `mark_success` |
 
 The collector fetches every score <= 0 and fetches a negative score fresh from SteamDB;
 it never revisits the positive band on its own. The hourly sweep reads Owned games and
-every game with a `steamdb_snapshot` row in the last 7 days (the list scrape misses
-days), skips requested and quarantined games, and writes only changed scores. A request
+every Sourcing, Owned or Competitor game (`FollowerHistoryQueue.TrackedTypes`) with a
+`steamdb_snapshot` row in the last 7 days (the list scrape misses days), skips requested
+and quarantined games, and writes only changed scores. It also takes every other game out
+of the list band (`listed_dropped`): until 2026-10-23 all ~13k list games were queued, most
+of them tracked by nobody, and they cost the paid proxy its traffic. A request still works
+for any game. A request
 always writes, and clears quarantine and the failure count: someone asked for that game.
 Each sweep also writes the backfill state as counters of its own `job_run` row
 (`owned_done`, `owned_waiting`, `listed_done`, `listed_waiting`, `requests_waiting`);

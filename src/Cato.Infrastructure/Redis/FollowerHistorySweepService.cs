@@ -9,9 +9,10 @@ namespace Cato.Infrastructure.Redis;
 
 /// <summary>
 /// Queues follower-history fetches for the games CATO follows automatically: every
-/// Owned game (refreshed daily when it is in no list) and every game in a SteamDB
-/// list — most wished or wishlist activity — in rank order. The collector's follower job does the fetching;
-/// this only writes scores. See <see cref="FollowerHistoryQueue"/> for the bands.
+/// Owned game (refreshed daily when it is in no list) and every Sourcing, Owned or
+/// Competitor game in a SteamDB list — most wished or wishlist activity — in rank order.
+/// The collector's follower job does the fetching; this only writes scores. See
+/// <see cref="FollowerHistoryQueue"/> for the bands.
 /// </summary>
 public sealed class FollowerHistorySweepService : BackgroundService
 {
@@ -83,6 +84,12 @@ public sealed class FollowerHistorySweepService : BackgroundService
             var writes = FollowerHistoryQueue.Plan(candidates, scores, quarantined, now, _settings);
             await _queue.SetScoresAsync(writes, ct);
 
+            // A list game of another type leaves the queue, or the collector would still fetch the
+            // ones queued before 2026-10-23. A request (below the list band) is not touched.
+            var tracked = await FollowerHistoryQueue.LoadTrackedAsync(db, ct);
+            var dropped = (await _queue.GetListBandAsync(ct)).Where(id => !tracked.Contains(id)).ToList();
+            await _queue.RemoveAsync(dropped, ct);
+
             foreach (var (appId, score) in writes)
                 scores[appId] = score;
             var progress = FollowerHistoryQueue.Progress(candidates, scores, quarantined);
@@ -93,6 +100,7 @@ public sealed class FollowerHistorySweepService : BackgroundService
             job.Set("quarantined", quarantined.Count);
             job.Set("owned_queued", ownedQueued);
             job.Set("listed_queued", writes.Count - ownedQueued);
+            job.Set("listed_dropped", dropped.Count);
             // Backfill state for the Jobs page.
             job.Set("owned_done", progress.OwnedDone);
             job.Set("owned_waiting", progress.OwnedWaiting);
@@ -101,8 +109,8 @@ public sealed class FollowerHistorySweepService : BackgroundService
             job.Set("requests_waiting", await _queue.CountRequestsAsync(ct));
 
             _logger.LogInformation(
-                "FollowerHistorySweep: queued {Owned} owned and {Listed} listed games ({Candidates} candidates, {Quarantined} quarantined)",
-                ownedQueued, writes.Count - ownedQueued, appIds.Count, quarantined.Count);
+                "FollowerHistorySweep: queued {Owned} owned and {Listed} listed games, dropped {Dropped} untracked ({Candidates} candidates, {Quarantined} quarantined)",
+                ownedQueued, writes.Count - ownedQueued, dropped.Count, appIds.Count, quarantined.Count);
         }
         catch (Exception ex)
         {

@@ -222,19 +222,23 @@ public class FollowerHistoryQueueTests : IDisposable
     };
 
     [Fact]
-    public async Task Candidates_are_owned_games_and_recent_list_games_at_their_best_rank()
+    public async Task Candidates_are_owned_games_and_recent_tracked_list_games_at_their_best_rank()
     {
         await using (var db = NewContext())
         {
             await AddGameAsync(db, 1, "Owned");
             await AddGameAsync(db, 2, "Sourcing");
-            var both = await AddGameAsync(db, 3);
-            var old = await AddGameAsync(db, 4);
+            var both = await AddGameAsync(db, 3, "Sourcing");
+            var old = await AddGameAsync(db, 4, "Sourcing");
+            var untracked = await AddGameAsync(db, 5);
+            var competitor = await AddGameAsync(db, 6, "Competitor");
 
             db.SteamDbSnapshots.AddRange(
                 Listed(both, Today, "steamdb_most_wished", 900),
                 Listed(both, Today.AddDays(-2), "steamdb_wishlist_activity", 40),
-                Listed(old, Today.AddDays(-8), "steamdb_most_wished", 1));
+                Listed(old, Today.AddDays(-8), "steamdb_most_wished", 1),
+                Listed(untracked, Today, "steamdb_most_wished", 5),
+                Listed(competitor, Today, "steamdb_most_wished", 7));
             await db.SaveChangesAsync();
         }
 
@@ -242,7 +246,23 @@ public class FollowerHistoryQueueTests : IDisposable
         var candidates = await FollowerHistoryQueue.LoadCandidatesAsync(read, Settings, Today);
 
         Assert.Equal([1], candidates.Owned);
-        Assert.Equal(new Dictionary<int, int> { [3] = 40 }, candidates.ListRanks);
+        Assert.Equal(new Dictionary<int, int> { [3] = 40, [6] = 7 }, candidates.ListRanks);
+    }
+
+    [Fact]
+    public async Task Tracked_games_are_sourcing_owned_and_competitor()
+    {
+        await using (var db = NewContext())
+        {
+            await AddGameAsync(db, 1, "Owned");
+            await AddGameAsync(db, 2, "Sourcing");
+            await AddGameAsync(db, 3, "Competitor");
+            await AddGameAsync(db, 4);
+        }
+
+        await using var read = NewContext();
+
+        Assert.Equal([1, 2, 3], (await FollowerHistoryQueue.LoadTrackedAsync(read)).Order());
     }
 
     // ── GetFollowerSeriesAsync ──

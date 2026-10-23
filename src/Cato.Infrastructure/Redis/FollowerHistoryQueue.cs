@@ -60,6 +60,13 @@ public static class FollowerHistoryQueue
 
     public const double ListBase = -1_000_000;
 
+    /// <summary>
+    /// Game types whose follower history SteamDB fills from the lists. Until 2026-10-23 every
+    /// list game was queued: ~13k games, most of them tracked by nobody, which cost the paid
+    /// proxy its traffic. A request (button or API) still works for any game.
+    /// </summary>
+    public static readonly string[] TrackedTypes = ["Sourcing", "Owned", "Competitor"];
+
     public static double RequestScore(DateTimeOffset requestedAt) => -requestedAt.ToUnixTimeSeconds();
 
     public static double ListScore(int rank) => ListBase + Math.Clamp(rank, 1, 999_999);
@@ -160,11 +167,18 @@ public static class FollowerHistoryQueue
 
         var since = today.AddDays(-settings.ListLookbackDays);
         var ranks = await db.SteamDbSnapshots.AsNoTracking()
-            .Where(s => s.SnapshotDate >= since)
+            .Where(s => s.SnapshotDate >= since && TrackedTypes.Contains(s.Game.GameType))
             .GroupBy(s => s.Game.AppId)
             .Select(g => new { AppId = g.Key, Rank = g.Min(s => s.Rank) })
             .ToDictionaryAsync(x => x.AppId, x => x.Rank, ct);
 
         return new FollowerHistoryCandidates(owned.ToHashSet(), ranks);
     }
+
+    /// <summary>App ids of every game with a <see cref="TrackedTypes"/> type.</summary>
+    public static async Task<HashSet<int>> LoadTrackedAsync(CatoDbContext db, CancellationToken ct = default) =>
+        (await db.Games.AsNoTracking()
+            .Where(g => TrackedTypes.Contains(g.GameType))
+            .Select(g => g.AppId)
+            .ToListAsync(ct)).ToHashSet();
 }
