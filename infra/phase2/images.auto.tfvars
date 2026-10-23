@@ -3,5 +3,6 @@
 image_tag = "876ff4f"
 image_tags = {
   "cato-backend"   = "fe7cf1c"
+  "cato-caddy"     = "42ac6d2"
   "cato-collector" = "4af8e1d"
 }
