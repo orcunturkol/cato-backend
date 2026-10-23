@@ -45,7 +45,7 @@ public class FollowerHistoryQueueTests : IDisposable
         FollowerHistoryCandidates candidates,
         Dictionary<int, double>? scores = null,
         HashSet<int>? quarantined = null) =>
-        FollowerHistoryQueue.Plan(candidates, scores ?? new(), quarantined ?? [], Now, Settings)
+        FollowerHistoryQueue.Plan(candidates, scores ?? new(), quarantined ?? [])
             .ToDictionary(w => w.Key, w => w.Value);
 
     // ── Plan ──
@@ -103,36 +103,18 @@ public class FollowerHistoryQueueTests : IDisposable
     }
 
     [Fact]
-    public void An_owned_game_in_no_list_is_refreshed_daily()
+    public void A_fetched_game_is_never_queued_again()
     {
         var writes = Plan(
-            Candidates(owned: [1, 2]),
-            scores: new() { [1] = FetchedAgo(TimeSpan.FromHours(10)), [2] = FetchedAgo(TimeSpan.FromHours(21)) });
+            Candidates(owned: [1, 2], ranks: new() { [2] = 6, [3] = 2 }),
+            scores: new()
+            {
+                [1] = FetchedAgo(TimeSpan.FromDays(400)),
+                [2] = FetchedAgo(TimeSpan.FromDays(31)),
+                [3] = FetchedAgo(TimeSpan.FromDays(31)),
+            });
 
-        Assert.False(writes.ContainsKey(1));
-        Assert.Equal(FollowerHistoryQueue.OwnedScore, writes[2]);
-    }
-
-    [Fact]
-    public void A_listed_owned_game_waits_for_the_list_refresh_age_and_keeps_the_owned_band()
-    {
-        var writes = Plan(
-            Candidates(owned: [1, 2], ranks: new() { [1] = 5, [2] = 6 }),
-            scores: new() { [1] = FetchedAgo(TimeSpan.FromHours(21)), [2] = FetchedAgo(TimeSpan.FromDays(31)) });
-
-        Assert.False(writes.ContainsKey(1));
-        Assert.Equal(FollowerHistoryQueue.OwnedScore, writes[2]);
-    }
-
-    [Fact]
-    public void A_list_game_is_refreshed_only_after_its_refresh_age()
-    {
-        var writes = Plan(
-            Candidates(ranks: new() { [1] = 1, [2] = 2 }),
-            scores: new() { [1] = FetchedAgo(TimeSpan.FromDays(10)), [2] = FetchedAgo(TimeSpan.FromDays(31)) });
-
-        Assert.False(writes.ContainsKey(1));
-        Assert.Equal(FollowerHistoryQueue.ListScore(2), writes[2]);
+        Assert.Empty(writes);
     }
 
     [Fact]

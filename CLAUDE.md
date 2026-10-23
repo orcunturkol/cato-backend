@@ -54,7 +54,7 @@ Some older services (`GameService`, `GameDataService`, `IngestionService`, `Stea
 - **Database**: PostgreSQL via EF Core (Npgsql), hosted on AWS RDS. Terraform for the RDS instance lives in `infra/rds/` (state in S3 since Phase 2 prep: `imports.tf` adopts the live database); see `infra/rds/CUTOVER_RUNBOOK.md` for provisioning, data migration, rollback, and cleanup procedures. On the server the connection string comes from the Secrets Manager secret `cato/backend/config` (see Configuration); the `ConnectionStrings__DefaultConnection` line in docker-compose only holds a development placeholder there. All entity table mappings and indexes are configured via Fluent API in `CatoDbContext.OnModelCreating`. Timestamps (CreatedAt/UpdatedAt) are set automatically in `SaveChanges`/`SaveChangesAsync`.
 - **Messaging**: RabbitMQ with `IngestionDispatcher` (producer) and `RabbitMqConsumerService` (hosted service consumer). Exchange: `cato-data` (topic). Queues:
   - `cato-ingestion` — legacy single-item path, routing key `ingestion.*` → `IIngestionDispatcher`
-  - four batch queues → `IBatchIngestionDispatcher`, each source on an explicit key `ingestion.batch.<source>` (`Messaging/BatchQueues.cs`): `cato-ingestion-ccu` (CCU, every 4 h), `cato-ingestion-followers` (SteamDB follower series, hourly), `cato-ingestion-steamworks` (the seven full-history `steamworks_*` sources) and `cato-ingestion-v2` (group members, SteamDB lists, financial). A slow source holds up only its own queue. **A new source needs a handler in `BatchIngestionDispatcher.Handlers` and a queue in `BatchQueues`** (a test checks that the lists match); the collector publishes with `mandatory=True`, so a source without a binding fails as unroutable instead of disappearing. The start-up binds every key before it removes the old wildcard `ingestion.batch.#` from v2. To roll back to a build with the wildcard, delete the three new queues first, or they collect copies with no consumer.
+  - four batch queues → `IBatchIngestionDispatcher`, each source on an explicit key `ingestion.batch.<source>` (`Messaging/BatchQueues.cs`): `cato-ingestion-ccu` (CCU, twice a day), `cato-ingestion-followers` (SteamDB follower series, hourly), `cato-ingestion-steamworks` (the seven full-history `steamworks_*` sources) and `cato-ingestion-v2` (group members, SteamDB lists, financial). A slow source holds up only its own queue. **A new source needs a handler in `BatchIngestionDispatcher.Handlers` and a queue in `BatchQueues`** (a test checks that the lists match); the collector publishes with `mandatory=True`, so a source without a binding fails as unroutable instead of disappearing. The start-up binds every key before it removes the old wildcard `ingestion.batch.#` from v2. To roll back to a build with the wildcard, delete the three new queues first, or they collect copies with no consumer.
   - `cato-game-analyzed` — routing key `game.analyzed.#` → `IGameAnalyzedDispatcher`. Published by the **reddit_metrics** pipeline when Gemini extracts metrics for a game. Stubs the game if unknown, stamps `AnalyzedAt`, then moves its app ID to the front of the follower-history queue. Database and Redis work only — see the enrichment section for why nothing slow may go in here.
 
   **Each queue has its own channel** on one connection, with a dispatch concurrency of
@@ -324,13 +324,15 @@ bands (`FollowerHistoryQueue`); the collector mirrors `RequestBandMax`:
 | Score | Meaning | Written by |
 |---|---|---|
 | < -1e9 (`-epoch`) | requested, newest first | `POST /api/games/{appId}/follower-history/fetch`, old `game.analyzed` path |
-| -2e6 | Owned game: refreshed after 20 h when it is in no SteamDB list, else after 30 days | `FollowerHistorySweepService` |
-| -1e6 + rank | Sourcing, Owned or Competitor game in a SteamDB list, best rank first, refreshed after 30 days | `FollowerHistorySweepService` |
+| -2e6 | Owned game, never fetched | `FollowerHistorySweepService` |
+| -1e6 + rank | Sourcing, Owned or Competitor game in a SteamDB list, never fetched, best rank first | `FollowerHistorySweepService` |
 | 0 | seeded Sourcing/Owned, never fetched | `RedisAppIdSyncService` |
 | > 0 | last successful fetch | collector `mark_success` |
 
 The collector fetches every score <= 0 and fetches a negative score fresh from SteamDB;
-it never revisits the positive band on its own. The hourly sweep reads Owned games and
+it never revisits the positive band on its own, and neither does the sweep since 2026-10-23: a
+game is fetched once, then CATO's own daily Steam group scrape carries it; only a request
+fetches it again. The hourly sweep reads Owned games and
 every Sourcing, Owned or Competitor game (`FollowerHistoryQueue.TrackedTypes`) with a
 `steamdb_snapshot` row in the last 7 days (the list scrape misses days), skips requested
 and quarantined games, and writes only changed scores. It also takes every other game out
@@ -386,7 +388,7 @@ state and returns firing / not firing; firing opens one incident per job and rul
 
 `stale_data` reads `JobFreshnessChecks` (`Services/JobRuns/JobFreshness.cs`): per job the
 newest value of a date column in the table it writes (`ccu_history.Timestamp` within
-4.5 h, daily tables within 2-3 days of their date's midnight, ...). It finds a job that
+12.5 h, daily tables within 2-3 days of their date's midnight, ...). It finds a job that
 reports `Succeeded` but writes nothing. The checks are typed queries in code, on indexed
 columns or small tables, cached 10 minutes; `GET /api/job-runs/freshness` shows them.
 A new collector job needs an entry there.

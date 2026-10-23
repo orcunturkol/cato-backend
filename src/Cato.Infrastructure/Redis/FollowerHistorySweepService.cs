@@ -81,7 +81,7 @@ public sealed class FollowerHistorySweepService : BackgroundService
             var appIds = candidates.AppIds.ToList();
             var scores = await _queue.GetScoresAsync(appIds, ct);
             var quarantined = await _queue.GetQuarantinedAsync(appIds, ct);
-            var writes = FollowerHistoryQueue.Plan(candidates, scores, quarantined, now, _settings);
+            var writes = FollowerHistoryQueue.Plan(candidates, scores, quarantined);
             await _queue.SetScoresAsync(writes, ct);
 
             // A list game of another type leaves the queue, or the collector would still fetch the
