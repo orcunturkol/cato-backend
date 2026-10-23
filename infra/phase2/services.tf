@@ -219,7 +219,7 @@ resource "aws_ecs_task_definition" "migrate" {
 
   container_definitions = jsonencode([{
     name        = "migrate"
-    image       = "${local.ecr}/cato-backend:${var.image_tag}"
+    image       = "${local.ecr}/cato-backend:${lookup(var.image_tags, "cato-backend", var.image_tag)}"
     essential   = true
     environment = [for k, v in merge(local.backend_env, { CATO_ROLE = "migrate" }) : { name = k, value = v }]
     logConfiguration = {

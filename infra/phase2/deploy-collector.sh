@@ -22,7 +22,11 @@ docker build --platform linux/amd64 -t "$ECR/cato-collector:$TAG" "$COLLECTOR_DI
 docker push "$ECR/cato-collector:$TAG"
 
 cd "$HERE"
-# image_tag comes from images.auto.tfvars, so only the agents' task definitions change.
-terraform apply -input=false -auto-approve -var "image_tags={\"cato-collector\":\"$TAG\"}"
-sed -i -E "s|^image_tags = .*|image_tags = { \"cato-collector\" = \"$TAG\" }|" images.auto.tfvars
+BACKUP=$(mktemp)
+cp images.auto.tfvars "$BACKUP"
+trap 'cp "$BACKUP" images.auto.tfvars' ERR
+python3 scripts/set_image_tag.py cato-collector "$TAG"
+terraform fmt -list=false images.auto.tfvars
+# The other tags come from images.auto.tfvars, so only the agents' task definitions change.
+terraform apply -input=false -auto-approve
 echo "deployed cato-collector:$TAG; commit infra/phase2/images.auto.tfvars"

@@ -41,20 +41,10 @@ cd "$HERE"
 # The migrate task definition first, so it carries the new image.
 terraform apply -input=false -auto-approve -var "image_tag=$TAG" -var 'image_tags={}' -target=aws_ecs_task_definition.migrate
 
-SUBNETS=$(terraform output -json subnet_ids | python3 -c 'import json,sys; print(",".join(json.load(sys.stdin)))')
-MIGRATE_SG=$(terraform output -json service_security_groups | python3 -c 'import json,sys; print(json.load(sys.stdin)["migrate"])')
-TASK=$(aws ecs run-task --region "$REGION" --cluster cato --task-definition cato-migrate --launch-type FARGATE \
-  --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$MIGRATE_SG],assignPublicIp=ENABLED}" \
-  --query 'tasks[0].taskArn' --output text)
-echo "migrate: $TASK"
-aws ecs wait tasks-stopped --region "$REGION" --cluster cato --tasks "$TASK"
-EXIT=$(aws ecs describe-tasks --region "$REGION" --cluster cato --tasks "$TASK" --query 'tasks[0].containers[0].exitCode' --output text)
-if [ "$EXIT" != "0" ]; then
-  echo "migrate exited $EXIT: services not changed (log group /cato/migrate)" >&2
-  exit 1
-fi
+scripts/run-migrate.sh
 
 # Every service to the new tag. The worker and the agents stop their old task first.
 terraform apply -input=false -auto-approve -var "image_tag=$TAG" -var 'image_tags={}'
-sed -i -E -e "s|^image_tag  = .*|image_tag  = \"$TAG\"|" -e 's|^image_tags = .*|image_tags = {}|' images.auto.tfvars
+python3 scripts/set_image_tag.py --all "$TAG"
+terraform fmt -list=false images.auto.tfvars
 echo "deployed $TAG; commit infra/phase2/images.auto.tfvars"
