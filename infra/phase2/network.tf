@@ -87,6 +87,17 @@ resource "aws_vpc_security_group_ingress_rule" "seq_on_old_host" {
   description                  = "Seq from ${each.key} (until Step D3)"
 }
 
+# Seq on the edge node since Step D3 (bridge: host port 5341 -> container 80).
+resource "aws_vpc_security_group_ingress_rule" "seq_on_edge" {
+  for_each                     = toset(local.seq_clients)
+  security_group_id            = aws_security_group.this["edge"].id
+  ip_protocol                  = "tcp"
+  from_port                    = 5341
+  to_port                      = 5341
+  referenced_security_group_id = aws_security_group.this[each.key].id
+  description                  = "Seq from ${each.key}"
+}
+
 resource "aws_vpc_security_group_ingress_rule" "rds" {
   for_each                     = toset(local.rds_clients)
   security_group_id            = var.rds_security_group_id
@@ -121,10 +132,9 @@ resource "aws_service_discovery_service" "this" {
   }
 }
 
-# Seq stays on today's host until Step D3; then this instance moves to the edge node. Cloud Map
-# owns the zone, so seq is a Cloud Map service with a fixed address, not a Route 53 record.
-# Note: the host binds Seq to 127.0.0.1 and its Tailscale IP only; Step A must also bind it
-# to the private IP (and open 5341 from the ECS groups) before ECS tasks can log there.
+# Seq runs on the edge node since Step D3. Cloud Map owns the zone, so seq is a Cloud Map service
+# with a fixed address, not a Route 53 record: the edge node's private IP, read from its Auto
+# Scaling group. A replaced instance has a new IP: apply again after a replacement.
 resource "aws_service_discovery_service" "seq" {
   name = "seq"
 
@@ -138,10 +148,15 @@ resource "aws_service_discovery_service" "seq" {
   }
 }
 
+data "aws_instances" "edge" {
+  instance_tags        = { "aws:autoscaling:groupName" = aws_autoscaling_group.edge.name }
+  instance_state_names = ["running"]
+}
+
 resource "aws_service_discovery_instance" "seq" {
-  instance_id = "old-host"
+  instance_id = "edge-node"
   service_id  = aws_service_discovery_service.seq.id
   attributes = {
-    AWS_INSTANCE_IPV4 = var.old_host_private_ip
+    AWS_INSTANCE_IPV4 = one(data.aws_instances.edge.private_ips)
   }
 }
