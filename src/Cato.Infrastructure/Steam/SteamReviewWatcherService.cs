@@ -100,6 +100,7 @@ public class SteamReviewWatcherService : BackgroundService
         job.Set("games", games.Count);
         job.Set("reviewsInserted", reviewsInserted);
         job.Set("gamesFailed", gamesFailed);
+        job.SetItems(games.Count, gamesFailed, "games");
         if (gamesFailed > 0) job.MarkPartialSuccess();
 
         _logger.LogInformation("Steam review sync cycle complete");

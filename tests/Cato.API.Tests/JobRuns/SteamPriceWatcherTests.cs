@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Cato.Domain.Entities;
 using Cato.Infrastructure.Jobs;
 using Cato.Infrastructure.Steam;
@@ -85,6 +86,21 @@ public class SteamPriceWatcherTests : JobRunsDbTestBase
             .OrderBy(x => x.AppId).Select(x => x.CapturedAt).ToList();
         Assert.All(times, t => Assert.True(t >= before));
         Assert.True(times[1] - times[0] >= TimeSpan.FromMilliseconds(40));
+    }
+
+    [Fact]
+    public async Task A_cycle_reports_its_failed_reads_as_items_for_the_alert()
+    {
+        SeedGames(10, 20, 30);
+        _steam.OnRead = appId => { if (appId == 20) throw new HttpRequestException("Steam answered 502"); };
+
+        await Watcher().CheckPricesAsync(CancellationToken.None, saveEvery: 1);
+
+        using var db = NewContext();
+        using var metrics = JsonDocument.Parse(db.JobRuns.Single(r => r.JobName == BackendJobNames.SteamPriceWatcher).MetricsJson!);
+        Assert.Equal(3, metrics.RootElement.GetProperty("items_total").GetInt64());
+        Assert.Equal(1, metrics.RootElement.GetProperty("items_failed").GetInt64());
+        Assert.Equal("games", metrics.RootElement.GetProperty("items_unit").GetString());
     }
 
     private sealed class FakeSteamApi : ISteamApiService

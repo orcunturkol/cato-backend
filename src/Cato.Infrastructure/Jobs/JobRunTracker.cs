@@ -62,6 +62,7 @@ public sealed class JobRunTracker : IJobRunTracker
         private readonly ILogger _logger;
         private readonly CancellationToken _appStopping;
         private readonly Dictionary<string, long> _metrics = new();
+        private string? _itemsUnit;
 
         private bool _failed;
         private string? _failMessage;
@@ -81,6 +82,13 @@ public sealed class JobRunTracker : IJobRunTracker
 
         public void Increment(string key, long by = 1) =>
             _metrics[key] = _metrics.TryGetValue(key, out var v) ? v + by : by;
+
+        public void SetItems(long total, long failed, string unit)
+        {
+            _metrics["items_total"] = total;
+            _metrics["items_failed"] = failed;
+            _itemsUnit = unit;
+        }
 
         public void Fail(string message)
         {
@@ -113,7 +121,11 @@ public sealed class JobRunTracker : IJobRunTracker
                 _run.DurationMs = (long)(end - _run.StartTime).TotalMilliseconds;
                 _run.Status = status;
                 _run.ErrorMessage = _failMessage;
-                _run.MetricsJson = _metrics.Count > 0 ? JsonSerializer.Serialize(_metrics) : null;
+                _run.MetricsJson = _metrics.Count == 0 ? null
+                    : _itemsUnit is null ? JsonSerializer.Serialize(_metrics)
+                    : JsonSerializer.Serialize(_metrics
+                        .ToDictionary(m => m.Key, m => (object)m.Value)
+                        .Append(new("items_unit", _itemsUnit)).ToDictionary());
 
                 // Not cancelled by the caller's token on purpose — we always want the run recorded.
                 await _db.SaveChangesAsync();

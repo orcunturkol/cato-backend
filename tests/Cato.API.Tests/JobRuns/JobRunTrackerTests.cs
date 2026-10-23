@@ -51,6 +51,18 @@ public class JobRunTrackerTests : JobRunsDbTestBase
         Assert.Equal((JobRunStatus.Failed, "Steam answered 500"), (Row().Status, Row().ErrorMessage));
     }
 
+    [Fact]
+    public async Task Items_are_stored_for_the_items_failed_alert()
+    {
+        await using (var job = await Tracker().StartAsync(BackendJobNames.SteamReviewWatcher))
+        {
+            job.Set("games", 709);
+            job.SetItems(709, 516, "games");
+        }
+
+        Assert.Equal("""{"games":709,"items_total":709,"items_failed":516,"items_unit":"games"}""", Row().MetricsJson);
+    }
+
     private sealed class Lifetime(CancellationToken stopping) : IHostApplicationLifetime
     {
         public CancellationToken ApplicationStarted => CancellationToken.None;

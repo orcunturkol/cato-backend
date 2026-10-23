@@ -128,6 +128,7 @@ public sealed class SteamPriceWatcherService : BackgroundService
         job.Set("updated", counts.Updated);
         job.Set("skipped", counts.Skipped);
         job.Set("failed", counts.Failed);
+        job.SetItems(appIds.Count, counts.Failed, "games");
         if (counts.Failed > 0) job.MarkPartialSuccess();
 
         _logger.LogInformation(

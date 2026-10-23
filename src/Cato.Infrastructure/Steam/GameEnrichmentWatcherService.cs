@@ -124,6 +124,9 @@ public sealed class GameEnrichmentWatcherService : BackgroundService
             job.Set("refreshed", batch.Refresh);
             job.Set("enriched", enriched);
             job.Set("failed", failed);
+            // Most failures are delisted or region-locked apps (success=false): its threshold
+            // on the Jobs page is 60 % and 20 games, so only a broad break alerts.
+            job.SetItems(batch.GameIds.Count, failed, "games");
             if (failed > 0) job.MarkPartialSuccess();
 
             _logger.LogInformation(

@@ -139,6 +139,7 @@ public class GameAchievementSchemaWatcherService : BackgroundService
         job.Set("added", added);
         job.Set("updated", updated);
         job.Set("skipped", skipped);
+        job.SetItems(games.Count, skipped, "games");
         job.Set("percentGames", percentGames);
         job.Set("percentRows", percentRows);
 

@@ -400,6 +400,13 @@ reports `Succeeded` but writes nothing. The checks are typed queries in code, on
 columns or small tables, cached 10 minutes; `GET /api/job-runs/freshness` shows them.
 A new collector job needs an entry there.
 
+Backend watchers report items too (`IJobRunScope.SetItems(total, failed, unit)`, since
+2026-10-23): until then a watcher that failed for most of its items stored only
+`PartialSuccess`, which never alerts (the review sync failed for 516 of 709 games that day
+when Valve switched off its endpoint). Count real failures, not items without data. The
+enrichment watcher's row has its own threshold (60 %, 20 games): delisted apps make about 30 %
+of its items fail on a normal day.
+
 `Skipped` and `Interrupted` runs decide nothing. A time-limit stop is not left as
 `Interrupted`: the job sees only a SIGTERM, but the agent's finish (exit 124/137, note
 `time limit reached`) makes the run `Failed` (`JobDispatchService.FinishAsync`), so it

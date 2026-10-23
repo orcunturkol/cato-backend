@@ -100,6 +100,7 @@ public class SteamPlayerProfileWatcherService : BackgroundService
         var failed = 0;
         var quarantined = 0;
         var skippedChunks = 0;
+        var skippedIds = 0;
 
         foreach (var chunk in ids.Chunk(100))
         {
@@ -111,6 +112,7 @@ public class SteamPlayerProfileWatcherService : BackgroundService
                 // Transient API/network failure — mark nothing, so an outage
                 // can't mass-quarantine valid ids. Retried next cycle.
                 skippedChunks++;
+                skippedIds += chunk.Length;
                 continue;
             }
 
@@ -151,6 +153,7 @@ public class SteamPlayerProfileWatcherService : BackgroundService
         job.Set("failed", failed);
         job.Set("quarantined", quarantined);
         job.Set("skippedChunks", skippedChunks);
+        job.SetItems(ids.Count, failed + skippedIds, "profiles");
         if (failed > 0 || skippedChunks > 0) job.MarkPartialSuccess();
 
         _logger.LogInformation(
