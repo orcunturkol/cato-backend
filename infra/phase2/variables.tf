@@ -119,7 +119,7 @@ variable "desired_counts" {
     "agent-light"      = 1 # Step B (2026-10-22, Ubuntu image d9bd683); host unit cato-agent@light disabled
     "agent-events"     = 1 # Step C (2026-10-23); host unit cato-agent@events disabled
     "agent-steamworks" = 1 # Step D1 (2026-10-23, edge node, EIP); host unit cato-agent@steamworks disabled
-    "agent-steamdb"    = 0 # Step D2
+    "agent-steamdb"    = 1 # Step D2 (2026-10-23, edge node); host unit cato-agent@steamdb disabled
     caddy              = 0 # Step D3
     seq                = 0 # Step D3
   }
