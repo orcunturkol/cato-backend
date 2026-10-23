@@ -15,9 +15,10 @@ public interface ISteamApiService
     Task<List<SteamUserTag>> GetUserTagsAsync(int appId, CancellationToken ct = default);
 
     /// <summary>
-    /// Fetches a page of recent reviews for the given appId from the public Steam appreviews endpoint.
+    /// Fetches a page of recent reviews (all languages) for the given appId from the Web API's
+    /// IUserReviewsService/GetAppReviews, without a key.
     /// Pass cursor="*" for the first page; use the cursor from the previous response for subsequent pages.
-    /// Returns null on failure or when Steam returns success != 1.
+    /// Returns null on an HTTP failure; an empty page ends the list.
     /// </summary>
     Task<SteamAppReviewsResponse?> GetAppReviewsAsync(int appId, string cursor = "*", CancellationToken ct = default);
 

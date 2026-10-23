@@ -73,6 +73,13 @@ Some older services (`GameService`, `GameDataService`, `IngestionService`, `Stea
   **Redis writes belong after `SaveChangesAsync`, never inside a transaction** (`GameService.cs`, `SteamGameEnrichmentService.cs`). This is why `game.analyzed` has its own queue rather than riding the batch path — `BatchIngestionDispatcher` runs every item handler inside one transaction, and a Redis write there would not roll back with it.
 - **Steam Integration**: `SteamApiService` (HTTP client for Steam Web API) and `SteamKitService` (SteamKit2 for PICS change monitoring via `SteamPicsWatcherService` background service).
   - **SteamKit Game Discovery**: `SteamPicsWatcherService` polls Steam's PICS change feed via `PICSGetChangesSince`, which returns all AppIDs with any metadata change since the last known change number (persisted in `pics_change_number.txt`). For each changed AppID, it calls `PICSGetProductInfo` and reads the `common` KeyValue section. It filters by `common["type"] == "game"` (excludes DLCs, tools, demos) and `common["releasestate"] == "released"` (excludes unreleased). Also extracts `common["name"]` and `common["steam_release_date"]` (unix timestamp). Matching games are saved with `GameType = "Sourcing"`.
+- **Reviews**: `SteamReviewWatcherService` reads recent reviews from the Web API's
+  `IUserReviewsService/GetAppReviews` (no key). Valve switched off the store's
+  `appreviews/{appid}?json=1` on 2026-10-22: it redirects to the store home page, so the sync
+  failed with "'<' is an invalid start of a value". The new method's defaults differ (Helpful
+  order over 30 days, English only), and plain query parameters fall back to them: the input
+  goes in `input_json` (`filter` 1 = recent, `languages` ["all"]). The answer sits in
+  `response` and has no `success` field.
 - **Price watcher**: `SteamPriceWatcherService` reads about 33,000 store prices per cycle (about
   18 h behind the shared Steam throttle). It saves every 200 games and keeps the last saved
   app id in `worker_state` (`price_watcher_last_app_id`, 0 when a cycle is complete), so a

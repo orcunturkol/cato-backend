@@ -2,12 +2,16 @@ using System.Text.Json.Serialization;
 
 namespace Cato.Infrastructure.Steam.Models;
 
+/// <summary>IUserReviewsService/GetAppReviews wraps its answer in "response".</summary>
+public class SteamAppReviewsEnvelope
+{
+    [JsonPropertyName("response")]
+    public SteamAppReviewsResponse? Response { get; set; }
+}
+
 public class SteamAppReviewsResponse
 {
-    /// <summary>1 = success, 0 = error.</summary>
-    [JsonPropertyName("success")]
-    public int Success { get; set; }
-
+    /// <summary>Score fields only on the first page (and only for all review types).</summary>
     [JsonPropertyName("query_summary")]
     public SteamReviewQuerySummary QuerySummary { get; set; } = new();
 
