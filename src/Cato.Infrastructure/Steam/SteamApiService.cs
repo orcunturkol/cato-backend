@@ -173,10 +173,22 @@ public class SteamApiService : ISteamApiService
     public async Task<SteamAppReviewsResponse?> GetAppReviewsAsync(
         int appId, string cursor = "*", CancellationToken ct = default)
     {
-        // Steam cursors contain base64 characters including '+' and '/' — must be URL-encoded.
-        var encodedCursor = Uri.EscapeDataString(cursor);
-        var url = $"https://store.steampowered.com/appreviews/{appId}" +
-                  $"?json=1&filter=recent&language=all&num_per_page=100&cursor={encodedCursor}";
+        // IUserReviewsService/GetAppReviews replaced store.steampowered.com/appreviews, which Valve
+        // switched off on 2026-10-22 (it now redirects to the store home page). It needs no key; a
+        // publisher key only raises the rate limit for its own apps. Its defaults differ from the old
+        // endpoint's (Helpful order over 30 days, English only), so filter and languages are set;
+        // purchase_type keeps its default, Steam purchases, as before. Plain query parameters fall
+        // back to the defaults: the input goes in input_json (the cursor's '+' and '/' included).
+        var input = JsonSerializer.Serialize(new
+        {
+            appid = appId,
+            filter = 1, // most recent first
+            languages = new[] { "all" },
+            num_per_page = 100,
+            cursor,
+        });
+        var url = "https://api.steampowered.com/IUserReviewsService/GetAppReviews/v1/?input_json=" +
+                  Uri.EscapeDataString(input);
 
         for (var attempt = 0; attempt <= MaxRetries; attempt++)
         {
@@ -193,23 +205,19 @@ public class SteamApiService : ISteamApiService
                         await Task.Delay(backoff, ct);
                         continue;
                     }
-                    _logger.LogWarning("Steam appreviews rate-limited for AppId {AppId} after {Retries} retries", appId, MaxRetries);
+                    _logger.LogWarning("Steam GetAppReviews rate-limited for AppId {AppId} after {Retries} retries", appId, MaxRetries);
                     return null;
                 }
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    _logger.LogWarning("Steam appreviews returned {Status} for AppId {AppId}", response.StatusCode, appId);
+                    _logger.LogWarning("Steam GetAppReviews returned {Status} for AppId {AppId}", response.StatusCode, appId);
                     return null;
                 }
 
                 var content = await response.Content.ReadAsStringAsync(ct);
-                var result = JsonSerializer.Deserialize<SteamAppReviewsResponse>(content, JsonOptions);
-
-                if (result?.Success != 1)
-                    return null;
-
-                return result;
+                // No success field any more: the HTTP status says it.
+                return JsonSerializer.Deserialize<SteamAppReviewsEnvelope>(content, JsonOptions)?.Response;
             }
             catch (HttpRequestException ex) when (attempt < MaxRetries)
             {

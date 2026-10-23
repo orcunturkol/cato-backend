@@ -95,8 +95,8 @@ public static class DbTableCatalog
         "Backend SteamPriceWatcher, daily", BackendJobNames.SteamPriceWatcher, Backend);
 
     private static readonly DbTableSource StoreReviews = new(
-        DataSite.SteamStore, "App reviews API",
-        "https://store.steampowered.com/appreviews/{appId}?json=1&filter=recent&language=all&num_per_page=100",
+        DataSite.SteamWebApi, "IUserReviewsService/GetAppReviews v1 (no key; until 2026-10-22 the store's appreviews)",
+        "https://api.steampowered.com/IUserReviewsService/GetAppReviews/v1/?input_json={appid, filter: 1, languages: [all], num_per_page: 100, cursor}",
         "Backend SteamReviewWatcher, daily, Sourcing and Owned games", BackendJobNames.SteamReviewWatcher, Backend);
 
     private static readonly DbTableSource PlayerSummaries = new(
