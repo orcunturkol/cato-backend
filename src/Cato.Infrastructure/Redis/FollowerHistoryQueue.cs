@@ -36,7 +36,7 @@ public sealed record FollowerHistoryCandidates(
 ///
 /// <code>
 ///   &lt; -1e9        requested (button or API), at -epoch: newest request first
-///   -2e6          Owned game due (daily when in no list, else every 30 days)
+///   -2e6          Owned game, never fetched
 ///   -1e6 + rank   SteamDB list game, best rank first
 ///   0             seeded by RedisAppIdSyncService, never fetched
 ///   &gt; 0           last successful fetch, epoch seconds (written by the collector)
@@ -86,18 +86,17 @@ public static class FollowerHistoryQueue
     }
 
     /// <summary>
-    /// The score writes one sweep makes. A game is (re)queued when it was never
-    /// fetched or its last fetch is older than its refresh age. Requests and
-    /// quarantined games are left alone, and a score already at its target is not
-    /// written again.
+    /// The score writes one sweep makes. A game is queued until its first fetch, never again:
+    /// after it, CATO's own daily Steam group scrape carries the series (user decision
+    /// 2026-10-23; before, an Owned game was fetched again every 20 h and a list game every 30
+    /// days). Only a request fetches a game again. Requests and quarantined games are left
+    /// alone, and a score already at its target is not written again.
     /// </summary>
     /// <param name="scores">Current scores of the candidates that are in the set.</param>
     public static List<KeyValuePair<int, double>> Plan(
         FollowerHistoryCandidates candidates,
         IReadOnlyDictionary<int, double> scores,
-        IReadOnlySet<int> quarantined,
-        DateTimeOffset now,
-        FollowerHistorySweepSettings settings)
+        IReadOnlySet<int> quarantined)
     {
         var writes = new List<KeyValuePair<int, double>>();
 
@@ -106,24 +105,13 @@ public static class FollowerHistoryQueue
             if (quarantined.Contains(appId))
                 continue;
 
-            var owned = candidates.Owned.Contains(appId);
-            var listed = candidates.ListRanks.TryGetValue(appId, out var rank);
-            var target = owned ? OwnedScore : ListScore(rank);
-            // A listed game gets its daily value from the list; only an Owned game in
-            // no list needs the daily fetch.
-            var refreshAfter = owned && !listed
-                ? TimeSpan.FromHours(settings.OwnedRefreshAfterHours)
-                : TimeSpan.FromDays(settings.ListRefreshAfterDays);
+            candidates.ListRanks.TryGetValue(appId, out var rank);
+            var target = candidates.Owned.Contains(appId) ? OwnedScore : ListScore(rank);
 
-            if (scores.TryGetValue(appId, out var current))
-            {
-                if (current < RequestBandMax)
-                    continue;
-                if (current > 0 && now - DateTimeOffset.FromUnixTimeSeconds((long)current) < refreshAfter)
-                    continue;
-                if (current == target)
-                    continue;
-            }
+            // Below the request band: someone asked. Above 0: fetched once, which is enough.
+            if (scores.TryGetValue(appId, out var current)
+                && (current < RequestBandMax || current > 0 || current == target))
+                continue;
 
             writes.Add(new(appId, target));
         }

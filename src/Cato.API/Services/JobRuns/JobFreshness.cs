@@ -44,8 +44,8 @@ public static class JobFreshnessChecks
 
     public static readonly IReadOnlyList<FreshnessCheck> All =
     [
-        // Every 4 h; a run takes about 2 min.
-        new("ccu", Collector, "ccu_history", "Timestamp", TimeSpan.FromHours(4.5),
+        // Twice a day (00:00 and 12:00 UTC since 2026-10-23; every 4 h before); a run takes ~3 min.
+        new("ccu", Collector, "ccu_history", "Timestamp", TimeSpan.FromHours(12.5),
             async (db, ct) => await db.CcuHistories.MaxAsync(e => (DateTime?)e.Timestamp, ct)),
         // Daily jobs write today's date; two days from its midnight covers one missed run's slack.
         new("group_member_count", Collector, "group_member_count_snapshot", "SnapshotDate (Steam group)", TimeSpan.FromDays(2),
