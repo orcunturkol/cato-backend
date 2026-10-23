@@ -24,9 +24,10 @@ locals {
   }
 
   collector_env = merge(var.collector_env, {
-    CATO_API_BASE_URL = "http://api.${local.namespace}:8080"
-    SECRETS_BACKEND   = "aws"
-    AWS_REGION        = var.aws_region
+    CATO_API_BASE_URL        = "http://api.${local.namespace}:8080"
+    SECRETS_BACKEND          = "aws"
+    AGENT_STOP_GRACE_SECONDS = "90" # below the agents' 120 s stopTimeout
+    AWS_REGION               = var.aws_region
   })
   collector_secrets = {
     REDIS_URL    = local.cache_collector
@@ -186,8 +187,10 @@ resource "aws_ecs_task_definition" "this" {
       startPeriod = 180
     }
 
-    # The .NET host needs up to 30 s to stop its services.
-    stopTimeout = 45
+    # The .NET host needs up to 30 s to stop its services. An agent stops its job, waits up to
+    # AGENT_STOP_GRACE_SECONDS (90) and then reports "agent stopped"; killed before that, its
+    # dispatch stayed claimed and the job's run lock held. 120 is Fargate's maximum.
+    stopTimeout = startswith(each.key, "agent-") ? 120 : 45
 
     logConfiguration = {
       logDriver = "awslogs"
