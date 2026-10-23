@@ -117,7 +117,7 @@ variable "desired_counts" {
     "ogt-frontend"     = 1
     worker             = 1 # exactly one: two are two Steam logins and two dispatchers
     "agent-light"      = 1 # Step B (2026-10-22, Ubuntu image d9bd683); host unit cato-agent@light disabled
-    "agent-events"     = 0 # Step C
+    "agent-events"     = 1 # Step C (2026-10-23); host unit cato-agent@events disabled
     "agent-steamworks" = 0 # Step D1
     "agent-steamdb"    = 0 # Step D2
     caddy              = 0 # Step D3
