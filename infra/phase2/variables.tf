@@ -41,11 +41,6 @@ variable "old_host_security_group_id" {
   default     = "sg-0d8fa8b482fd514d4"
 }
 
-variable "old_host_private_ip" {
-  description = "seq.cato.internal points here until Step D3 moves Seq to the edge node"
-  type        = string
-  default     = "172.31.39.113"
-}
 
 variable "image_tag" {
   description = "Tag of every image in ECR; the deploy script pushes this tag"
@@ -120,8 +115,8 @@ variable "desired_counts" {
     "agent-events"     = 1 # Step C (2026-10-23); host unit cato-agent@events disabled
     "agent-steamworks" = 1 # Step D1 (2026-10-23, edge node, EIP); host unit cato-agent@steamworks disabled
     "agent-steamdb"    = 1 # Step D2 (2026-10-23, edge node); host unit cato-agent@steamdb disabled
-    caddy              = 0 # Step D3
-    seq                = 0 # Step D3
+    caddy              = 1 # Step D3 (2026-10-23)
+    seq                = 1 # Step D3 (2026-10-23)
   }
 }
 
