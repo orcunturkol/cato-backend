@@ -105,7 +105,7 @@ public sealed class SteamPicsWatcherService : BackgroundService
 
         _logger.LogInformation("SteamPicsWatcher: Processing {Count} changed AppIds", changedAppIds.Count);
 
-        int discovered = 0;
+        int discovered = 0, failed = 0;
         var newGameIds = new List<Guid>();
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CatoDbContext>();
@@ -167,6 +167,7 @@ public sealed class SteamPicsWatcherService : BackgroundService
             }
             catch (Exception ex)
             {
+                failed++;
                 _logger.LogWarning(ex, "SteamPicsWatcher: Failed to process AppId {AppId}", appId);
             }
         }
@@ -207,6 +208,7 @@ public sealed class SteamPicsWatcherService : BackgroundService
 
         job.Set("changedAppIds", changedAppIds.Count);
         job.Set("discovered", discovered);
+        job.SetItems(changedAppIds.Count, failed, "apps");
 
         _logger.LogInformation("SteamPicsWatcher: Poll complete — {Discovered} new games discovered (change #{ChangeNumber})",
             discovered, latestChangeNumber);

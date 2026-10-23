@@ -173,6 +173,8 @@ public class PlayerAchievementWatcherService : BackgroundService
         job.Set("noStats", noStats);
         job.Set("notOwned", notOwned);
         job.Set("error", error);
+        // Private profiles, apps without stats and games not owned have no data; they are not failures.
+        job.SetItems(pairs.Count, error, "pairs");
         job.Set("skipped", skipped);
         job.Set("reviewsUpdated", reviewsUpdated);
         if (error > 0) job.MarkPartialSuccess();

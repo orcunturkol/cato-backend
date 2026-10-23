@@ -31,6 +31,14 @@ public interface IJobRunScope : IAsyncDisposable
     /// <summary>Add to a counter, creating it at <paramref name="by"/> if absent.</summary>
     void Increment(string key, long by = 1);
 
+    /// <summary>
+    /// The items this run handled and how many of them failed (<c>items_total</c>,
+    /// <c>items_failed</c>, <c>items_unit</c>), as the collector's <c>run.set_items</c>: the
+    /// items_failed alert compares them with the job's threshold. Count real failures (an error
+    /// or a failed call), not items that simply have no data.
+    /// </summary>
+    void SetItems(long total, long failed, string unit);
+
     /// <summary>Mark the run as failed with a message (final status becomes Failed).</summary>
     void Fail(string message);
 

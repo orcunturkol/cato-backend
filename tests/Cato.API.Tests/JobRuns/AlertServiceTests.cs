@@ -160,6 +160,21 @@ public class AlertServiceTests : JobRunsDbTestBase
     }
 
     [Fact]
+    public async Task A_watcher_run_with_failed_items_alerts()
+    {
+        // 2026-10-23: Valve switched off the review endpoint; the review sync failed for 516 of
+        // 709 games and stored PartialSuccess, but without item counts nothing alerted.
+        Add(Run(BackendJobNames.SteamReviewWatcher, Now.AddMinutes(-20), JobRunStatus.PartialSuccess,
+            Items(709, 516), producer: JobRunProducer.CatoBackend));
+
+        await CycleAsync(Now);
+
+        var incident = Assert.Single(Incidents());
+        Assert.Equal((BackendJobNames.SteamReviewWatcher, AlertRules.ItemsFailed), (incident.JobName, incident.Rule));
+        Assert.StartsWith("516 of 709 games failed", incident.Message);
+    }
+
+    [Fact]
     public async Task A_failed_watcher_run_alerts()
     {
         Add(Run(BackendJobNames.GameEnrichmentWatcher, Now.AddMinutes(-20), JobRunStatus.Failed,

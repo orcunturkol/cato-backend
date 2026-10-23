@@ -96,6 +96,7 @@ public class GameNewsWatcherService : BackgroundService
             job.Set("added", added);
             job.Set("updated", updated);
             job.Set("skipped", skipped);
+            job.SetItems(games.Count, skipped, "games");
             _logger.LogInformation(
                 "Game news cycle complete: games={Games} withNews={WithNews} added={Added} updated={Updated} skipped={Skipped}",
                 games.Count, withNews, added, updated, skipped);

@@ -196,7 +196,7 @@ public sealed class SteamPicsChangeHistoryService : BackgroundService
         // Batch fetch raw app info
         var rawInfos = await _steamKit.GetRawAppInfoBatchAsync(relevantAppIds, ct);
         var now = DateTime.UtcNow;
-        int totalChanges = 0;
+        int totalChanges = 0, failed = 0;
 
         foreach (var raw in rawInfos)
         {
@@ -289,6 +289,7 @@ public sealed class SteamPicsChangeHistoryService : BackgroundService
             }
             catch (Exception ex)
             {
+                failed++;
                 _logger.LogWarning(ex, "PicsChangeHistory: Failed to process AppId {AppId}", raw.AppId);
             }
         }
@@ -300,6 +301,7 @@ public sealed class SteamPicsChangeHistoryService : BackgroundService
         job.Set("relevantAppIds", relevantAppIds.Count);
         job.Set("appsProcessed", rawInfos.Count);
         job.Set("changeRecords", totalChanges);
+        job.SetItems(rawInfos.Count, failed, "apps");
 
         _logger.LogInformation(
             "PicsChangeHistory: Poll complete — {Changes} change records from {Apps} apps (change #{ChangeNumber})",
