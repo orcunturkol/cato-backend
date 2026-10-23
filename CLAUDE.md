@@ -435,9 +435,9 @@ channel and `GET /api/alerts` lists incidents. A collector run reports
 ### Write protection and the Steamworks login form
 
 Every non-GET request through Caddy (`https://catoptricgames.duckdns.org/api/...`) needs
-the admin password, user `cato` (Caddy `basic_auth`, hash `CATO_ADMIN_HASH` in `.env`,
-set with `scripts/set-admin-password.sh`; until then a hash of a thrown-away string keeps
-writes locked). Reads stay open. The API port 5039 is bound to `127.0.0.1` only: the
+the admin password, user `cato` (Caddy `basic_auth`; since Step D3 Caddy runs on the ECS edge
+node and reads the hash from the secret `cato/caddy/admin-hash`; set it with
+`scripts/set-admin-password.sh`, which also restarts the caddy service). Reads stay open. The API port 5039 is bound to `127.0.0.1` only: the
 collector's jobs and agents call `localhost:5039` directly, OGT calls `api:8080` on the
 Docker network, and people go through Caddy. Remember that the frontend's paths are
 `/api/api/...` (Caddy strips the first `/api`).
