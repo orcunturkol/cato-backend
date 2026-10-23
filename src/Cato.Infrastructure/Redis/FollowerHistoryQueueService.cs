@@ -23,6 +23,12 @@ public interface IFollowerHistoryQueueService
 
     /// <summary>Requests not yet fetched, for any app id.</summary>
     Task<long> CountRequestsAsync(CancellationToken ct);
+
+    /// <summary>App ids waiting in the SteamDB-list band (between <c>ListBase</c> and 0).</summary>
+    Task<List<int>> GetListBandAsync(CancellationToken ct);
+
+    /// <summary>Take app ids out of the queue; quarantine and failure counts stay.</summary>
+    Task RemoveAsync(IReadOnlyList<int> appIds, CancellationToken ct);
 }
 
 public sealed class FollowerHistoryQueueService : IFollowerHistoryQueueService
@@ -86,6 +92,23 @@ public sealed class FollowerHistoryQueueService : IFollowerHistoryQueueService
     public Task<long> CountRequestsAsync(CancellationToken ct) =>
         _redis.GetDatabase().SortedSetLengthAsync(
             FollowerHistoryQueue.Key, double.NegativeInfinity, FollowerHistoryQueue.RequestBandMax, Exclude.Stop);
+
+    public async Task<List<int>> GetListBandAsync(CancellationToken ct)
+    {
+        var members = await _redis.GetDatabase().SortedSetRangeByScoreAsync(
+            FollowerHistoryQueue.Key, FollowerHistoryQueue.ListBase, 0, Exclude.Both);
+        return members.Select(m => (int)m).ToList();
+    }
+
+    public async Task RemoveAsync(IReadOnlyList<int> appIds, CancellationToken ct)
+    {
+        var db = _redis.GetDatabase();
+        foreach (var chunk in appIds.Chunk(ChunkSize))
+        {
+            ct.ThrowIfCancellationRequested();
+            await db.SortedSetRemoveAsync(FollowerHistoryQueue.Key, chunk.Select(id => (RedisValue)id).ToArray());
+        }
+    }
 
     private async IAsyncEnumerable<(int AppId, double Score)> ScoresAsync(
         string key, IReadOnlyList<int> appIds, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
