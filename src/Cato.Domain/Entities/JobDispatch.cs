@@ -64,6 +64,7 @@ public static class JobDispatchKind
 {
     public const string Scheduled = "scheduled";
     public const string Manual = "manual";
+    public const string Retry = "retry";
 }
 
 public static class JobDispatchStatus
