@@ -25,16 +25,18 @@ dispatches from the host's agents, and a second worker is a second Steam login a
 | Item | Price | Phase 2 | After Phase 3 |
 |---|---|---|---|
 | Amazon MQ `mq.m7g.medium` single instance (no `t3.micro` for RabbitMQ) | $0.1638/h | $120 | $120 |
+| + its fixed broker storage (~196 GB, measured 2026-10-24; not in the first estimate) | | $23 | $23 |
 | Edge node `t3.large` + 60 GB gp3 | $0.096/h | $76 | $76 |
 | Fargate (vCPU $0.04656/h, GB $0.00511/h): api 0.5/2, frontend 0.25/0.5 (ogt-api and ogt-frontend from Step A) | | $33 | +$22 |
 | + worker 1/4, agent-light 0.25/1, agent-events 0.5/2 | | | $141 |
+| agent-light and agent-events on Fargate Spot since 2026-10-24 (about 70 % less; the price changes) | | | −$25 |
 | Public IPv4 ($0.005/h): Phase 2 two tasks + EIP; Phase 3 seven tasks + EIP | | $11 | $29 |
 | ElastiCache Valkey `cache.t4g.micro` | $0.0144/h | $11 | $11 |
 | Secrets Manager (8 new × $0.40), Route 53 zone, ECR, CloudWatch Logs | | ~$6 | ~$12 |
-| **Total** | | **~$257** | **~$389** |
+| **Total** | | **~$280** | **~$387** |
 
-RDS (`db.t4g.medium`, ~$54) and today's host (~$70 with disk and IP) are extra until the host
-is stopped (two quiet weeks after Phase 3).
+RDS (`db.t4g.medium` with storage and backups, ~$59) is extra. The old host was stopped on
+2026-10-24; its disk and Elastic IP were removed the same day (an AMI keeps the disk, ~$5).
 
 ## Before `apply`
 

@@ -84,7 +84,7 @@ resource "aws_ecs_capacity_provider" "edge" {
 
 resource "aws_ecs_cluster_capacity_providers" "cato" {
   cluster_name       = aws_ecs_cluster.cato.name
-  capacity_providers = ["FARGATE", aws_ecs_capacity_provider.edge.name]
+  capacity_providers = ["FARGATE", "FARGATE_SPOT", aws_ecs_capacity_provider.edge.name]
 
   default_capacity_provider_strategy {
     capacity_provider = "FARGATE"
