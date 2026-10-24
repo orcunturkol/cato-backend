@@ -15,35 +15,28 @@ locals {
     cache        = "ElastiCache Valkey"
   }
 
-  # [target group, port, source group]. "old-host" is today's EC2 host, for the cutover.
+  # [target group, port, source group].
   ingress = [
     ["api", 8080, "edge"],    # Caddy, steamdb/steamworks agents
     ["api", 8080, "agents"],  # light/events agents: claims, job-run reports
     ["api", 8080, "ogt-api"], # OGT's catalog calls
-    ["api", 8080, "old-host"],
-    ["worker", 8080, "api"], # store enrichment (RemoteGameEnrichmentGateway)
+    ["worker", 8080, "api"],  # store enrichment (RemoteGameEnrichmentGateway)
     ["worker", 8080, "edge"],
     ["frontend", 80, "edge"],
     ["ogt-api", 8080, "edge"],
     ["ogt-frontend", 80, "edge"],
-    # Steps A-D2: today's Caddy proxies to the ECS frontends and OGT. Remove at decommission.
-    ["frontend", 80, "old-host"],
-    ["ogt-api", 8080, "old-host"],
-    ["ogt-frontend", 80, "old-host"],
     ["mq", 5671, "worker"],
     ["mq", 5671, "api"],
     ["mq", 5671, "agents"],
     ["mq", 5671, "edge"],
-    ["mq", 5671, "old-host"],
     ["mq", 443, "edge"], # management API (the gate tool's queue check)
     ["cache", 6379, "worker"],
     ["cache", 6379, "api"],
     ["cache", 6379, "agents"],
     ["cache", 6379, "edge"],
-    ["cache", 6379, "old-host"],
   ]
 
-  # Seq on today's host (5341 on its private IP) until Step D3 moves Seq to the edge node.
+  # Seq on the edge node (5341 on its private IP).
   seq_clients = ["api", "worker", "migrate", "agents", "edge", "ogt-api"]
 
   # Postgres in the existing cato-rds-sg (infra/rds keeps its rules as separate resources).
@@ -73,18 +66,8 @@ resource "aws_vpc_security_group_ingress_rule" "this" {
   ip_protocol                  = "tcp"
   from_port                    = each.value[1]
   to_port                      = each.value[1]
-  referenced_security_group_id = each.value[2] == "old-host" ? var.old_host_security_group_id : aws_security_group.this[each.value[2]].id
+  referenced_security_group_id = aws_security_group.this[each.value[2]].id
   description                  = "from ${each.value[2]}"
-}
-
-resource "aws_vpc_security_group_ingress_rule" "seq_on_old_host" {
-  for_each                     = toset(local.seq_clients)
-  security_group_id            = var.old_host_security_group_id
-  ip_protocol                  = "tcp"
-  from_port                    = 5341
-  to_port                      = 5341
-  referenced_security_group_id = aws_security_group.this[each.key].id
-  description                  = "Seq from ${each.key} (until Step D3)"
 }
 
 # Seq on the edge node since Step D3 (bridge: host port 5341 -> container 80).

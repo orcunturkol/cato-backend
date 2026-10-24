@@ -16,11 +16,6 @@ import {
 }
 
 import {
-  to = aws_vpc_security_group_ingress_rule.rds_from_ec2
-  id = "sgr-0cf71f55ad425a8b1"
-}
-
-import {
   to = aws_vpc_security_group_egress_rule.rds_all
   id = "sgr-021bd977ec4b4434f"
 }

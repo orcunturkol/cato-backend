@@ -411,6 +411,10 @@ of its items fail on a normal day.
 `Interrupted`: the job sees only a SIGTERM, but the agent's finish (exit 124/137, note
 `time limit reached`) makes the run `Failed` (`JobDispatchService.FinishAsync`), so it
 alerts. Until 2026-10-21 `steamworks_bundles` hit its limit daily and nobody was told.
+An agent stop (note `agent stopped`: a deploy, or a Fargate Spot interruption of
+agent-light/agent-events) leaves the run `Interrupted` and queues one `retry` dispatch, so a
+daily job does not wait a day. A stopped retry, a paused job and a run that reported its
+own result first are not retried.
 A watcher run lost to a worker restart
 (or replaced by the next cycle after one) does not alert; the heartbeat alarm reports a
 dead worker.

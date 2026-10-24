@@ -55,6 +55,9 @@ public sealed class JobDispatchService
     /// <summary>The agent's finish note when its time limit stopped the run (exit 124 or 137).</summary>
     public const string TimeLimitNote = "time limit reached";
 
+    /// <summary>The agent's finish note when the agent itself was stopping (a deploy, a Fargate Spot interruption).</summary>
+    public const string AgentStoppedNote = "agent stopped";
+
     private readonly CatoDbContext _db;
     private readonly JobDispatcherSettings _settings;
 
@@ -293,6 +296,8 @@ public sealed class JobDispatchService
 
         if (note == TimeLimitNote)
             await FailRunsStoppedByTimeLimitAsync(dispatch, exitCode, nowUtc, ct);
+        else if (note == AgentStoppedNote)
+            await RetryRunStoppedByAgentAsync(dispatch, nowUtc, ct);
 
         await _db.SaveChangesAsync(ct);
         return FinishOutcome.Recorded;
@@ -320,6 +325,37 @@ public sealed class JobDispatchService
             run.EndTime ??= nowUtc;
             run.DurationMs ??= (long)(run.EndTime.Value - run.StartTime).TotalMilliseconds;
         }
+    }
+
+    /// <summary>
+    /// A run that its agent stopped (a deploy, a Fargate Spot interruption) stays Interrupted,
+    /// which never alerts, and a daily job would wait a whole day for its next slot. Queue it
+    /// once more, so the agent that comes up next runs it. A retry that is stopped again, a run
+    /// that reported its own result first, and a paused job are not retried.
+    /// </summary>
+    private async Task RetryRunStoppedByAgentAsync(JobDispatch dispatch, DateTime nowUtc, CancellationToken ct)
+    {
+        if (dispatch.Kind == JobDispatchKind.Retry) return;
+        var job = await _db.ScheduledJobs.AsNoTracking().FirstOrDefaultAsync(j => j.Name == dispatch.JobName, ct);
+        if (job is null || !job.Enabled || job.ManagedBy != ScheduledJobManagedBy.Dispatcher) return;
+
+        var reported = await _db.JobRuns.AnyAsync(r => r.DispatchId == dispatch.Id
+            && r.Status != JobRunStatus.Running && r.Status != JobRunStatus.Interrupted, ct);
+        var active = await _db.JobDispatches.AnyAsync(d => d.JobName == dispatch.JobName && d.Id != dispatch.Id
+            && (d.Status == JobDispatchStatus.Pending || d.Status == JobDispatchStatus.Claimed), ct);
+        if (reported || active) return;
+
+        _db.JobDispatches.Add(new JobDispatch
+        {
+            Id = Guid.NewGuid(),
+            JobName = dispatch.JobName,
+            AgentGroup = dispatch.AgentGroup,
+            ScheduledAt = nowUtc,
+            Kind = JobDispatchKind.Retry,
+            Status = JobDispatchStatus.Pending,
+            Note = $"retry of {dispatch.Id}: the agent stopped the run",
+            CreatedAt = nowUtc,
+        });
     }
 
     /// <summary>

@@ -34,6 +34,10 @@ locals {
     RABBITMQ_URI = local.mq_uri # needs the collector's AMQPS branch (feat/collector-amqps)
   }
 
+  # Fargate Spot (about 70 % cheaper). AWS can stop a Spot task with 2 minutes' notice; the
+  # agent then stops its run, and the dispatcher queues that run once more for the next task.
+  spot_services = ["agent-light", "agent-events"]
+
   # cpu/memory in Fargate units (MB); "edge" = the EC2 node, memory is a hard limit there.
   services = {
     api = {
@@ -248,9 +252,11 @@ resource "aws_ecs_service" "this" {
   deployment_maximum_percent         = each.value.max_percent
 
   capacity_provider_strategy {
-    capacity_provider = each.value.edge ? aws_ecs_capacity_provider.edge.name : "FARGATE"
+    capacity_provider = each.value.edge ? aws_ecs_capacity_provider.edge.name : contains(local.spot_services, each.key) ? "FARGATE_SPOT" : "FARGATE"
     weight            = 1
   }
+  # A capacity provider change is an in-place update only with a new deployment.
+  force_new_deployment = contains(local.spot_services, each.key)
 
   dynamic "placement_constraints" {
     for_each = each.value.edge ? [1] : []

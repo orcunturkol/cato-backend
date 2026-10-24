@@ -180,6 +180,70 @@ public class JobDispatchServiceTests : JobRunsDbTestBase
     }
 
     [Fact]
+    public async Task An_agent_stop_queues_the_run_once_more_but_never_a_second_time()
+    {
+        Seed(Job("ccu", "*/10 * * * *"));
+        await using var db = NewContext();
+        var service = Service(db);
+        await service.DispatchDueAsync(Now, default);
+
+        async Task<ClaimedRun> StopAsync(string agentId, DateTime at)
+        {
+            var claimed = await service.ClaimAsync(JobAgentGroups.Light, agentId, "a", at, default);
+            db.JobRuns.Add(new JobRun
+            {
+                Id = Guid.NewGuid(), JobName = claimed!.JobName, Producer = JobRunProducer.ExternalCollector,
+                StartTime = at, Status = JobRunStatus.Interrupted, DispatchId = claimed.DispatchId,
+            });
+            await db.SaveChangesAsync();
+            await service.FinishAsync(claimed.DispatchId, agentId, 143, JobDispatchService.AgentStoppedNote, at.AddMinutes(1), default);
+            return claimed;
+        }
+
+        var first = await StopAsync("light@a", Now);
+        Assert.Equal(JobDispatchKind.Scheduled, first.Kind);
+
+        // The next agent task claims the retry; when it is stopped too, nothing is queued.
+        var retry = await StopAsync("light@b", Now.AddMinutes(2));
+        Assert.Equal(JobDispatchKind.Retry, retry.Kind);
+        Assert.Equal("ccu", retry.JobName);
+        Assert.Null(await service.ClaimAsync(JobAgentGroups.Light, "light@c", "c", Now.AddMinutes(4), default));
+
+        await using var check = NewContext();
+        Assert.Equal(2, check.JobDispatches.Count());
+    }
+
+    [Fact]
+    public async Task An_agent_stop_is_not_retried_after_a_reported_result_or_for_a_paused_job()
+    {
+        Seed(Job("ccu", "*/10 * * * *"), Job("financial", "*/10 * * * *"));
+        await using var db = NewContext();
+        var service = Service(db);
+        await service.DispatchDueAsync(Now, default);
+
+        // The run reported Succeeded, then the agent stopped while the process still ran.
+        var reported = await service.ClaimAsync(JobAgentGroups.Light, "light@a", "a", Now, default);
+        db.JobRuns.Add(new JobRun
+        {
+            Id = Guid.NewGuid(), JobName = reported!.JobName, Producer = JobRunProducer.ExternalCollector,
+            StartTime = Now, EndTime = Now.AddMinutes(1), Status = JobRunStatus.Succeeded, DispatchId = reported.DispatchId,
+        });
+        await db.SaveChangesAsync();
+        await service.FinishAsync(reported.DispatchId, "light@a", 143, JobDispatchService.AgentStoppedNote, Now.AddMinutes(1), default);
+
+        // The job was paused while it ran (no run row: stopped before it reported).
+        var paused = await service.ClaimAsync(JobAgentGroups.Light, "light@a", "a", Now.AddMinutes(2), default);
+        var job = db.ScheduledJobs.Single(j => j.Name == paused!.JobName);
+        job.Enabled = false;
+        await db.SaveChangesAsync();
+        await service.FinishAsync(paused!.DispatchId, "light@a", 143, JobDispatchService.AgentStoppedNote, Now.AddMinutes(3), default);
+
+        Assert.Null(await service.ClaimAsync(JobAgentGroups.Light, "light@b", "b", Now.AddMinutes(4), default));
+        await using var check = NewContext();
+        Assert.Equal(2, check.JobDispatches.Count());
+    }
+
+    [Fact]
     public async Task Unclaimed_runs_expire_and_silent_claims_are_lost()
     {
         Seed(Job("ccu", "*/10 * * * *"), Job("steamdb", "0 3 * * *", JobAgentGroups.SteamDb, timeoutSeconds: 600));

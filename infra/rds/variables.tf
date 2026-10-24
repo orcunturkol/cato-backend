@@ -20,12 +20,6 @@ variable "subnet_ids" {
   ]
 }
 
-variable "ec2_security_group_id" {
-  description = "Security group ID of the catoptric-games EC2 instance (launch-wizard-1)"
-  type        = string
-  default     = "sg-0d8fa8b482fd514d4"
-}
-
 variable "availability_zone" {
   description = "AZ to place the RDS instance in (co-located with the EC2 instance)"
   type        = string
