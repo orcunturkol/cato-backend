@@ -398,6 +398,21 @@ public class AlertServiceTests : JobRunsDbTestBase
         Assert.NotNull(Assert.Single(Incidents()).ResolvedAt);
     }
 
+    [Fact]
+    public async Task A_stale_data_incident_of_a_job_without_a_check_resolves()
+    {
+        var stale = new JobFreshnessDto("steamdb_followers", "external-collector", "group_member_count_snapshot",
+            "SnapshotDate (SteamDB followers)", Now.AddHours(-56), 48, 56, Stale: true, Enabled: true, Error: null);
+        _freshness = new FakeFreshness([stale]);
+        await CycleAsync(Now);
+        Assert.Null(Assert.Single(Incidents()).ResolvedAt);
+
+        // The check was removed: the open incident must not stay open for ever.
+        _freshness = new FakeFreshness([]);
+        await CycleAsync(Now.AddMinutes(10));
+        Assert.NotNull(Assert.Single(Incidents()).ResolvedAt);
+    }
+
     private sealed class FakeFreshness(List<JobFreshnessDto> results) : IJobFreshnessSource
     {
         public Task<(DateTime CheckedAt, List<JobFreshnessDto> Results)> GetAsync(DateTime nowUtc, CancellationToken ct) =>

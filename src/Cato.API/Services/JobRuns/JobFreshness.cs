@@ -52,10 +52,9 @@ public static class JobFreshnessChecks
             async (db, ct) => Midnight(await db.GroupMemberCountSnapshots
                 .Where(e => e.Source == GroupMemberCountSnapshot.SteamCommunitySource)
                 .MaxAsync(e => (DateOnly?)e.SnapshotDate, ct))),
-        new("steamdb_followers", Collector, "group_member_count_snapshot", "SnapshotDate (SteamDB followers)", TimeSpan.FromDays(2),
-            async (db, ct) => Midnight(await db.GroupMemberCountSnapshots
-                .Where(e => e.Source == GroupMemberCountSnapshot.SteamDbFollowerSource)
-                .MaxAsync(e => (DateOnly?)e.SnapshotDate, ct))),
+        // No steamdb_followers check since 2026-10-24: a game's SteamDB history is fetched once and
+        // the backlog is done, so new rows come only for a new tracked game or a request. The daily
+        // follower numbers are group_member_count's (above).
         new("steamdb", Collector, "steamdb_snapshot", "SnapshotDate", TimeSpan.FromDays(2),
             async (db, ct) => Midnight(await db.SteamDbSnapshots.MaxAsync(e => (DateOnly?)e.SnapshotDate, ct))),
         // Steam reports sales a day or so late.
