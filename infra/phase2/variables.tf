@@ -35,12 +35,6 @@ variable "rds_security_group_id" {
   default = "sg-02821bdf7d5512bc6" # cato-rds-sg (infra/rds)
 }
 
-variable "old_host_security_group_id" {
-  description = "Today's EC2 host (launch-wizard-1): reaches the broker, the cache and the api during the cutover. Remove at decommission."
-  type        = string
-  default     = "sg-0d8fa8b482fd514d4"
-}
-
 
 variable "image_tag" {
   description = "Tag of every image in ECR; the deploy script pushes this tag"
