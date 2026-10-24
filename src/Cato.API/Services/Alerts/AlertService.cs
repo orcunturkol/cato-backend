@@ -273,7 +273,7 @@ public sealed class AlertService
     {
         var (_, results) = await _freshness.GetAsync(nowUtc, ct);
         // A paused job or a failed query decides nothing.
-        return results.Where(r => r.Enabled && r.Error is null)
+        var checks = results.Where(r => r.Enabled && r.Error is null)
             .Select(r => new AlertCheck(r.JobName, AlertRules.StaleData, r.Stale,
                 r.Stale
                     ? r.NewestAt is { } newest
@@ -281,6 +281,16 @@ public sealed class AlertService
                         : $"{r.Table} has no {r.Column} at all"
                     : null))
             .ToList();
+        // A job whose check was removed (steamdb_followers, 2026-10-24): nothing judges its open
+        // incident any more, so resolve it.
+        var checkedJobs = results.Select(r => r.JobName).ToHashSet();
+        var orphans = await _db.AlertIncidents.AsNoTracking()
+            .Where(i => i.ResolvedAt == null && i.Rule == AlertRules.StaleData)
+            .Select(i => i.JobName)
+            .ToListAsync(ct);
+        checks.AddRange(orphans.Where(job => !checkedJobs.Contains(job))
+            .Select(job => new AlertCheck(job, AlertRules.StaleData, false)));
+        return checks;
     }
 
     // ── incidents ──
