@@ -11,6 +11,13 @@ EOF
 install -d -o 1000 -g 1000 /srv/cato/chrome-profile /srv/cato/steamdb-historical
 install -d /srv/cato/caddy-data /srv/cato/caddy-config /srv/cato/seq
 
+# SSH for people (`ssh catoptric`), over Tailscale only: the security group has no inbound rule.
+install -d -m 700 -o ec2-user -g ec2-user /home/ec2-user/.ssh
+echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFBMo/bTHJKFae5qce2pWdJ7b65anSpMPoKkCFZLBhbO catoptric-key' \
+  >> /home/ec2-user/.ssh/authorized_keys
+chown ec2-user:ec2-user /home/ec2-user/.ssh/authorized_keys
+chmod 600 /home/ec2-user/.ssh/authorized_keys
+
 command -v aws >/dev/null || dnf install -y awscli-2
 
 # The fixed public IP: the Steamworks partner login has only ever seen one address.
