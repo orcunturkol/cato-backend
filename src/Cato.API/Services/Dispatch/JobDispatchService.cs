@@ -22,6 +22,9 @@ public sealed class JobDispatcherSettings
 
     /// <summary>A claimed dispatch counts as lost this long after its time limit.</summary>
     public int ClaimGraceMinutes { get; set; } = 10;
+
+    /// <summary>An agent id silent this long is deleted, unless it is the newest of its group.</summary>
+    public int ForgetAgentAfterDays { get; set; } = 7;
 }
 
 /// <summary>What an agent receives when it claims a run.</summary>
@@ -136,7 +139,8 @@ public sealed class JobDispatchService
 
     /// <summary>
     /// Expires pending dispatches nobody claimed and marks claimed ones lost once they pass
-    /// their time limit plus the grace. Either way the job can be dispatched again.
+    /// their time limit plus the grace. Either way the job can be dispatched again. Also
+    /// deletes old agent ids: every new ECS task or container is a new id ("group@host").
     /// </summary>
     public async Task<int> HousekeepAsync(DateTime nowUtc, CancellationToken ct)
     {
@@ -165,7 +169,14 @@ public sealed class JobDispatchService
             d.Note = "the agent did not report a finish within the time limit";
         }
 
-        if (expired.Count + lost.Count > 0)
+        // The newest id of a group stays, so a group that went silent still shows as offline.
+        var forgetBefore = nowUtc - TimeSpan.FromDays(_settings.ForgetAgentAfterDays);
+        var agents = await _db.JobAgents.ToListAsync(ct);
+        var newest = agents.GroupBy(a => a.AgentGroup).Select(g => g.MaxBy(a => a.LastSeenAt)!).ToHashSet();
+        var forgotten = agents.Where(a => a.LastSeenAt < forgetBefore && !newest.Contains(a)).ToList();
+        _db.JobAgents.RemoveRange(forgotten);
+
+        if (expired.Count + lost.Count + forgotten.Count > 0)
             await _db.SaveChangesAsync(ct);
         return expired.Count + lost.Count;
     }
