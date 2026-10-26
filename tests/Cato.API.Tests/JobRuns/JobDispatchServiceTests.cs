@@ -180,6 +180,33 @@ public class JobDispatchServiceTests : JobRunsDbTestBase
     }
 
     [Fact]
+    public async Task Housekeeping_forgets_agent_ids_silent_for_a_week_but_keeps_the_newest_of_each_group()
+    {
+        using (var seed = NewContext())
+        {
+            JobAgent Agent(string id, string group, double daysAgo) => new()
+            {
+                AgentId = id, AgentGroup = group, FirstSeenAt = Now.AddDays(-30), LastSeenAt = Now.AddDays(-daysAgo),
+            };
+            seed.JobAgents.AddRange(
+                Agent("light@old", JobAgentGroups.Light, 8),
+                Agent("light@new", JobAgentGroups.Light, 0),
+                Agent("steamdb@last-week", JobAgentGroups.SteamDb, 6),
+                Agent("steamdb@new", JobAgentGroups.SteamDb, 0),
+                Agent("events@older", JobAgentGroups.Events, 12),
+                Agent("events@dead", JobAgentGroups.Events, 10));
+            seed.SaveChanges();
+        }
+
+        await using var db = NewContext();
+        await Service(db).HousekeepAsync(Now, default);
+
+        await using var check = NewContext();
+        var left = check.JobAgents.Select(a => a.AgentId).OrderBy(id => id).ToList();
+        Assert.Equal(["events@dead", "light@new", "steamdb@last-week", "steamdb@new"], left);
+    }
+
+    [Fact]
     public async Task An_agent_stop_queues_the_run_once_more_but_never_a_second_time()
     {
         Seed(Job("ccu", "*/10 * * * *"));
