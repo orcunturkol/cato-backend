@@ -38,12 +38,12 @@ public class GetGameMetricsHandler : IRequestHandler<GetGameMetricsQuery, List<G
         var ccuFrom = now.AddDays(-7);
 
         // A set of queries for all games together -- never one round trip per game.
-        var graphEnds = await _db.GroupMemberCountSnapshots.AsNoTracking()
+        var graphSpans = await _db.GroupMemberCountSnapshots.AsNoTracking()
             .Where(s => gameIds.Contains(s.GameId) && s.Error == null
                         && s.Source == GroupMemberCountSnapshot.SteamDbFollowerSource)
             .GroupBy(s => s.GameId)
-            .Select(g => new { GameId = g.Key, End = g.Max(s => s.SnapshotDate) })
-            .ToDictionaryAsync(x => x.GameId, x => x.End, ct);
+            .Select(g => new { GameId = g.Key, Start = g.Min(s => s.SnapshotDate), End = g.Max(s => s.SnapshotDate) })
+            .ToDictionaryAsync(x => x.GameId, ct);
         var members = (await _db.GroupMemberCountSnapshots.AsNoTracking()
                 .Where(s => gameIds.Contains(s.GameId) && s.Error == null && s.SnapshotDate >= from)
                 .Select(s => new { s.GameId, s.SnapshotDate, s.MemberCount, s.Source })
@@ -59,6 +59,38 @@ public class GetGameMetricsHandler : IRequestHandler<GetGameMetricsQuery, List<G
                 .Select(c => new { c.GameId, c.Timestamp, c.CcuCount, c.PeakCcuToday })
                 .ToListAsync(ct))
             .ToLookup(c => c.GameId);
+        var summaries = (await _db.ReviewSummarySnapshots.AsNoTracking()
+                .Where(s => gameIds.Contains(s.GameId)
+                            && s.SnapshotDate == _db.ReviewSummarySnapshots
+                                .Where(x => x.GameId == s.GameId).Max(x => x.SnapshotDate))
+                .Select(s => new { s.GameId, s.SnapshotDate, s.CreatedAt, s.TotalReviews, s.TotalPositive, s.TotalNegative, s.ReviewScoreDesc })
+                .ToListAsync(ct))
+            .GroupBy(s => s.GameId)
+            .ToDictionary(g => g.Key, g => g.MaxBy(s => s.CreatedAt)!); // a day can hold several runs
+        var fromUtc = from.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var reviews = (await _db.SteamReviews.AsNoTracking()
+                .Where(r => gameIds.Contains(r.GameId) && r.TimestampCreated >= fromUtc)
+                .Select(r => new { r.GameId, r.TimestampCreated, r.VotedUp })
+                .ToListAsync(ct))
+            .ToLookup(r => r.GameId);
+        var unlocks = (await _db.GameAchievementPercents.AsNoTracking()
+                .Where(a => gameIds.Contains(a.GameId)
+                            && a.SnapshotDate == _db.GameAchievementPercents
+                                .Where(x => x.GameId == a.GameId).Max(x => x.SnapshotDate))
+                .Select(a => new { a.GameId, a.SnapshotDate, a.Percent })
+                .ToListAsync(ct))
+            .ToLookup(a => a.GameId);
+
+        AchievementSummaryDto? Unlocks(Guid gameId)
+        {
+            var day = unlocks[gameId].ToList();
+            if (day.Count == 0)
+                return null;
+            var percents = day.Select(a => (double)a.Percent).Order().ToList();
+            var mid = percents.Count / 2;
+            var median = percents.Count % 2 == 1 ? percents[mid] : (percents[mid - 1] + percents[mid]) / 2;
+            return new AchievementSummaryDto(day[0].SnapshotDate, percents.Count, percents[^1], median);
+        }
 
         ListRankDto? Latest(Guid gameId, string source) => snapshots[gameId]
             .Where(s => s.Source == source)
@@ -68,7 +100,8 @@ public class GetGameMetricsHandler : IRequestHandler<GetGameMetricsQuery, List<G
 
         return games.Select(g =>
         {
-            var graphEnd = graphEnds.TryGetValue(g.Id, out var end) ? end : DateOnly.MinValue;
+            var span = graphSpans.GetValueOrDefault(g.Id);
+            var graphEnd = span?.End ?? DateOnly.MinValue;
             var listed = snapshots[g.Id]
                 .Where(s => s.Follows > 0 && s.SnapshotDate >= from)
                 .GroupBy(s => s.SnapshotDate)
@@ -87,8 +120,22 @@ public class GetGameMetricsHandler : IRequestHandler<GetGameMetricsQuery, List<G
                     latest.CcuCount,
                     recent.Max(c => Math.Max(c.CcuCount, c.PeakCcuToday ?? 0)));
 
+            var summary = summaries.GetValueOrDefault(g.Id);
+            var daily = reviews[g.Id]
+                .GroupBy(r => DateOnly.FromDateTime(r.TimestampCreated))
+                .OrderBy(d => d.Key)
+                .Select(d => new ReviewDayDto(d.Key, d.Count(), d.Count(r => r.VotedUp)))
+                .ToList();
+
             return new GameMetricsDto(
-                g.AppId, followers, Latest(g.Id, MostWished), Latest(g.Id, WishlistActivity), ccuSummary);
+                g.AppId, followers, Latest(g.Id, MostWished), Latest(g.Id, WishlistActivity), ccuSummary,
+                span?.Start,
+                summary is null
+                    ? null
+                    : new ReviewSummaryDto(summary.SnapshotDate, summary.TotalReviews, summary.TotalPositive,
+                        summary.TotalNegative, summary.ReviewScoreDesc),
+                daily,
+                Unlocks(g.Id));
         }).ToList();
     }
 
