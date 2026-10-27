@@ -232,7 +232,7 @@ public class FollowerHistoryQueueTests : IDisposable
     }
 
     [Fact]
-    public async Task Tracked_games_are_sourcing_owned_and_competitor()
+    public async Task Tracked_games_are_sourcing_owned_competitor_and_ogt()
     {
         await using (var db = NewContext())
         {
@@ -240,11 +240,12 @@ public class FollowerHistoryQueueTests : IDisposable
             await AddGameAsync(db, 2, "Sourcing");
             await AddGameAsync(db, 3, "Competitor");
             await AddGameAsync(db, 4);
+            await AddGameAsync(db, 5, "OGT");
         }
 
         await using var read = NewContext();
 
-        Assert.Equal([1, 2, 3], (await FollowerHistoryQueue.LoadTrackedAsync(read)).Order());
+        Assert.Equal([1, 2, 3, 5], (await FollowerHistoryQueue.LoadTrackedAsync(read)).Order());
     }
 
     // ── GetFollowerSeriesAsync ──
