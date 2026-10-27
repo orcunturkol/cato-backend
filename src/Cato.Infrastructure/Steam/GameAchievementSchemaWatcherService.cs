@@ -87,7 +87,7 @@ public class GameAchievementSchemaWatcherService : BackgroundService
         try
         {
         var games = await db.Games
-            .Where(g => g.GameType == "Sourcing" || g.GameType == "Owned")
+            .Where(g => GameTypes.Tracked.Contains(g.GameType))
             .Select(g => new { g.Id, g.AppId, g.GameType })
             .ToListAsync(ct);
 
@@ -124,7 +124,9 @@ public class GameAchievementSchemaWatcherService : BackgroundService
             added += gameAdded;
             updated += gameUpdated;
 
-            if (game.GameType != "Owned") continue;
+            // Unlock percentages for Owned and OGT games only: the team compares how many
+            // buyers really play. Sourcing games stay out to keep the daily table small.
+            if (game.GameType is not (GameTypes.Owned or GameTypes.Ogt)) continue;
             var percents = await steamApi.GetGlobalAchievementPercentagesAsync(game.AppId, ct);
             if (percents is null || percents.Count == 0) continue;
             var (pctAdded, pctUpdated) = await SteamPublicStatsStore.UpsertAchievementPercentsAsync(db, game.Id, game.AppId, today, percents, ct);

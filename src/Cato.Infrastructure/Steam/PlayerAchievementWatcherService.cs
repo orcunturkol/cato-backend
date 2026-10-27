@@ -200,7 +200,7 @@ public class PlayerAchievementWatcherService : BackgroundService
              join p in db.SteamPlayerProfiles on r.AuthorSteamId equals (long?)p.SteamId64
              join g in db.Games on r.GameId equals g.Id
              where p.CommunityVisibilityState == 3
-                   && (g.GameType == "Sourcing" || g.GameType == "Owned")
+                   && GameTypes.Tracked.Contains(g.GameType)
              select new { g.AppId, p.SteamId64 })
             .Distinct();
 

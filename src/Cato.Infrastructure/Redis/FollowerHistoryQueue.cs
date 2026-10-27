@@ -1,3 +1,4 @@
+using Cato.Domain.Entities;
 using Cato.Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 
@@ -65,7 +66,7 @@ public static class FollowerHistoryQueue
     /// list game was queued: ~13k games, most of them tracked by nobody, which cost the paid
     /// proxy its traffic. A request (button or API) still works for any game.
     /// </summary>
-    public static readonly string[] TrackedTypes = ["Sourcing", "Owned", "Competitor"];
+    public static readonly string[] TrackedTypes = [GameTypes.Sourcing, GameTypes.Owned, GameTypes.Competitor, GameTypes.Ogt];
 
     public static double RequestScore(DateTimeOffset requestedAt) => -requestedAt.ToUnixTimeSeconds();
 

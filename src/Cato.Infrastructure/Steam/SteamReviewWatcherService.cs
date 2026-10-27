@@ -71,7 +71,7 @@ public class SteamReviewWatcherService : BackgroundService
         try
         {
         var games = await db.Games
-            .Where(g => g.GameType == "Sourcing" || g.GameType == "Owned")
+            .Where(g => GameTypes.Tracked.Contains(g.GameType))
             .AsNoTracking()
             .Select(g => new { g.Id, g.AppId, g.Name })
             .ToListAsync(ct);

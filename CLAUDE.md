@@ -73,6 +73,10 @@ Some older services (`GameService`, `GameDataService`, `IngestionService`, `Stea
   **Redis writes belong after `SaveChangesAsync`, never inside a transaction** (`GameService.cs`, `SteamGameEnrichmentService.cs`). This is why `game.analyzed` has its own queue rather than riding the batch path — `BatchIngestionDispatcher` runs every item handler inside one transaction, and a Redis write there would not roll back with it.
 - **Steam Integration**: `SteamApiService` (HTTP client for Steam Web API) and `SteamKitService` (SteamKit2 for PICS change monitoring via `SteamPicsWatcherService` background service).
   - **SteamKit Game Discovery**: `SteamPicsWatcherService` polls Steam's PICS change feed via `PICSGetChangesSince`, which returns all AppIDs with any metadata change since the last known change number (persisted in `pics_change_number.txt`). For each changed AppID, it calls `PICSGetProductInfo` and reads the `common` KeyValue section. It filters by `common["type"] == "game"` (excludes DLCs, tools, demos) and `common["releasestate"] == "released"` (excludes unreleased). Also extracts `common["name"]` and `common["steam_release_date"]` (unix timestamp). Matching games are saved with `GameType = "Sourcing"`.
+- **Game types** (`GameTypes`): Owned, Sourcing, Competitor, OGT, Other. The collectors (reviews, CCU,
+  the community group scrape, achievements, player achievements) follow `GameTypes.Tracked` = Sourcing,
+  Owned and OGT. OGT sets `OGT` on a game while its team evaluates it and puts the earlier type back when
+  the evaluation closes; an Owned game keeps its type.
 - **Reviews**: `SteamReviewWatcherService` reads recent reviews from the Web API's
   `IUserReviewsService/GetAppReviews` (no key). Valve switched off the store's
   `appreviews/{appid}?json=1` on 2026-10-22: it redirects to the store home page, so the sync
@@ -275,8 +279,8 @@ its lines in `steam_sale_financial`.
 
 ### Achievement percentages and game news (backend watchers, keyless Web API)
 
-`GameAchievementSchemaWatcherService` (every 6 h, Sourcing + Owned) also stores, for **Owned**
-games only, the day's global unlock percentages (`GetGlobalAchievementPercentagesForApp/v2`, no
+`GameAchievementSchemaWatcherService` (every 6 h, the tracked types: Sourcing, Owned, OGT) also stores, for **Owned**
+and **OGT** games only, the day's global unlock percentages (`GetGlobalAchievementPercentagesForApp/v2`, no
 key; a 403/404 means the app has no stats) in `game_achievement_percent`, keyed
 (`GameId`, `ApiName`, `SnapshotDate`) and updated in place within the day. Sourcing games are left
 out to keep the daily table small. `GameNewsWatcherService` (`News:` settings, every 6 h, Owned
@@ -332,15 +336,15 @@ bands (`FollowerHistoryQueue`); the collector mirrors `RequestBandMax`:
 |---|---|---|
 | < -1e9 (`-epoch`) | requested, newest first | `POST /api/games/{appId}/follower-history/fetch`, old `game.analyzed` path |
 | -2e6 | Owned game, never fetched | `FollowerHistorySweepService` |
-| -1e6 + rank | Sourcing, Owned or Competitor game in a SteamDB list, never fetched, best rank first | `FollowerHistorySweepService` |
-| 0 | seeded Sourcing/Owned, never fetched | `RedisAppIdSyncService` |
+| -1e6 + rank | Sourcing, Owned, Competitor or OGT game in a SteamDB list, never fetched, best rank first | `FollowerHistorySweepService` |
+| 0 | seeded tracked game (Sourcing, Owned, OGT), never fetched | `RedisAppIdSyncService` |
 | > 0 | last successful fetch | collector `mark_success` |
 
 The collector fetches every score <= 0 and fetches a negative score fresh from SteamDB;
 it never revisits the positive band on its own, and neither does the sweep since 2026-10-23: a
 game is fetched once, then CATO's own daily Steam group scrape carries it; only a request
 fetches it again. The hourly sweep reads Owned games and
-every Sourcing, Owned or Competitor game (`FollowerHistoryQueue.TrackedTypes`) with a
+every Sourcing, Owned, Competitor or OGT game (`FollowerHistoryQueue.TrackedTypes`) with a
 `steamdb_snapshot` row in the last 7 days (the list scrape misses days), skips requested
 and quarantined games, and writes only changed scores. It also takes every other game out
 of the list band (`listed_dropped`): until 2026-10-23 all ~13k list games were queued, most

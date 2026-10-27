@@ -1,3 +1,4 @@
+using Cato.Domain.Entities;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 
@@ -128,9 +129,7 @@ public class RedisAppIdSyncService : IRedisAppIdSyncService
     }
 
     /// <summary>
-    /// Matches the legacy <c>db_game_provider.py</c> filter:
-    /// <c>WHERE "GameType" = 'Sourcing' OR "GameType" = 'Owned'</c>.
+    /// The collectors' games: <see cref="GameTypes.Tracked"/> (Sourcing, Owned, OGT).
     /// </summary>
-    public static bool ShouldTrack(string gameType) =>
-        gameType is "Sourcing" or "Owned";
+    public static bool ShouldTrack(string gameType) => GameTypes.IsTracked(gameType);
 }

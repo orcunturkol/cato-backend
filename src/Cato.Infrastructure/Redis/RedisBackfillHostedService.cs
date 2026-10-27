@@ -1,3 +1,4 @@
+using Cato.Domain.Entities;
 using Cato.Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -47,7 +48,7 @@ public class RedisBackfillHostedService : BackgroundService
 
             var tracked = await db.Games
                 .AsNoTracking()
-                .Where(g => g.GameType == "Sourcing" || g.GameType == "Owned")
+                .Where(g => GameTypes.Tracked.Contains(g.GameType))
                 .Select(g => new { g.AppId, g.Name })
                 .ToListAsync(ct);
 
