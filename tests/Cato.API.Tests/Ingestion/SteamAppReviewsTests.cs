@@ -70,6 +70,23 @@ public class SteamAppReviewsTests
         Assert.Null(await api.GetAppReviewsAsync(730));
     }
 
+    [Fact]
+    public async Task A_review_read_does_not_wait_for_a_store_read()
+    {
+        var handler = new SlowStoreHandler(Answer);
+        var api = new SteamApiService(new HttpClient(handler), NullLogger<SteamApiService>.Instance,
+            Options.Create(new SteamWebApiSettings()));
+        var store = api.GetAppDetailsAsync(730);
+        await handler.StoreStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        // The store read holds the store throttle until the gate opens.
+        var page = await api.GetAppReviewsAsync(730).WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.NotNull(page);
+        handler.StoreGate.SetResult();
+        await store;
+    }
+
     private static (SteamApiService Api, FakeHandler Handler) Api(string body, HttpStatusCode status = HttpStatusCode.OK)
     {
         var handler = new FakeHandler(status, body);
@@ -89,6 +106,28 @@ public class SteamAppReviewsTests
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json"),
             });
+        }
+    }
+
+    /// <summary>Store requests wait for <see cref="StoreGate"/>; Web API requests answer at once.</summary>
+    private sealed class SlowStoreHandler(string reviewsBody) : HttpMessageHandler
+    {
+        public TaskCompletionSource StoreStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource StoreGate { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            var body = reviewsBody;
+            if (request.RequestUri!.Host == "store.steampowered.com")
+            {
+                StoreStarted.TrySetResult();
+                await StoreGate.Task.WaitAsync(ct);
+                body = "{}";
+            }
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(body, Encoding.UTF8, "application/json"),
+            };
         }
     }
 }

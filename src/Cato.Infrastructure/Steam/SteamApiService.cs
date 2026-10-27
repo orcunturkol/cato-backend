@@ -37,6 +37,12 @@ public class SteamApiService : ISteamApiService
     private static readonly SemaphoreSlim WebApiRateLimiter = new(1, 1);
     private const int WebApiDelayBetweenRequestsMs = 1100;
 
+    // GetAppReviews has been on api.steampowered.com, without a key, since 2026-10-22, but kept
+    // the store limiter it had while reviews came from the store. Its own limiter, at the store's
+    // pace, keeps the daily review sync (about an hour) out of the store line: enrichment and the
+    // price watcher no longer wait behind it, and the keyed calls do not either.
+    private static readonly SemaphoreSlim ReviewsRateLimiter = new(1, 1);
+
     public async Task<SteamAppData?> GetAppDetailsAsync(int appId, CancellationToken ct = default)
     {
         var url = $"https://store.steampowered.com/api/appdetails?appids={appId}&cc=us&l=english";
@@ -262,7 +268,7 @@ public class SteamApiService : ISteamApiService
 
         for (var attempt = 0; attempt <= MaxRetries; attempt++)
         {
-            await RateLimiter.WaitAsync(ct);
+            await ReviewsRateLimiter.WaitAsync(ct);
             try
             {
                 var response = await _httpClient.GetAsync(url, ct);
@@ -300,7 +306,7 @@ public class SteamApiService : ISteamApiService
                 _ = Task.Run(async () =>
                 {
                     await Task.Delay(DelayBetweenRequestsMs, CancellationToken.None);
-                    RateLimiter.Release();
+                    ReviewsRateLimiter.Release();
                 }, CancellationToken.None);
             }
         }

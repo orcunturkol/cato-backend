@@ -83,7 +83,9 @@ Some older services (`GameService`, `GameDataService`, `IngestionService`, `Stea
   failed with "'<' is an invalid start of a value". The new method's defaults differ (Helpful
   order over 30 days, English only), and plain query parameters fall back to them: the input
   goes in `input_json` (`filter` 1 = recent, `languages` ["all"]). The answer sits in
-  `response` and has no `success` field.
+  `response` and has no `success` field. Since 2026-10-27 it has its own throttle
+  (`ReviewsRateLimiter`, 1.5 s after each answer): on the store throttle the daily sync held
+  up store enrichment for about an hour.
 - **Price watcher**: `SteamPriceWatcherService` reads about 30,000 store prices per cycle, 100
   per app details call (`GetPriceOverviewsAsync`, `filters=price_overview`: the only filter
   that answers for many apps). Until 2026-10-27 it read one game per call and held the shared
@@ -178,7 +180,7 @@ Three traps worth knowing:
 
 - **Never enrich from inside a queue consumer.** `GameAnalyzedDispatcher` used to
   enrich inline for a game it had just stubbed, which reads as obviously correct and
-  is not. `SteamApiService` throttles every Steam call through one **static**
+  is not. `SteamApiService` throttles every store call through one **static**
   `SemaphoreSlim` shared by the whole process, and `cato-game-analyzed` is consumed
   serially with a prefetch of one. So while the enrichment watcher held that throttle
   for its 200-game cycle, a 1310-message backfill drained at **six messages per ten
