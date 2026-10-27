@@ -156,8 +156,10 @@ The sweep (`GameEnrichment` settings section) works five bands in order:
 4. everything else that has gone stale, stalest first
 5. stale games past `FailureThreshold` (mostly delisted apps), stalest first
 
-When a whole batch comes from bands 1 and 3 (`GameEnrichmentBatch.NeverEnriched`), the
-next cycle starts one minute after the last one ends, not after the interval (catch-up).
+When band 1 or band 3 fills the rest of a batch (`GameEnrichmentBatch.NeverEnrichedLeft`),
+the next cycle starts one minute after the last one ends, not after the interval
+(catch-up). Band 2 may share the batch: a few reddit games go stale every hour, and the
+first catch-up rule (the whole batch from bands 1 and 3) never fired because of them.
 A collector page can stub a thousand unknown apps in an hour (the daily `sale_collection`
 read 294 sale events on 2026-10-27); at 200 per hourly cycle they waited most of a day
 while the throttle sat idle. Band 3 goes newest first because OGT's "new pages" list (the

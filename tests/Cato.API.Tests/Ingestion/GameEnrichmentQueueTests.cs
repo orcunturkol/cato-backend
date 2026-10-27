@@ -107,16 +107,42 @@ public class GameEnrichmentQueueTests : IDisposable
     }
 
     [Fact]
-    public async Task Never_enriched_counts_only_games_with_no_store_record()
+    public async Task Stubs_that_fill_the_batch_after_a_stale_reddit_game_leave_more_waiting()
+    {
+        // The first catch-up cycle on 2026-10-27: a few stale reddit games, then stubs to the end.
+        await SeedAsync(1, analyzedAt: Now.AddDays(-1), lastEnrichedAt: Now.AddDays(-40));
+        await SeedAsync(2);
+        await SeedAsync(3);
+        await SeedAsync(4);
+
+        var batch = await SelectAsync(new GameEnrichmentSettings { BatchSize = 3, RefreshAfterDays = 30 });
+
+        Assert.Equal(1, batch.Refresh);
+        Assert.True(batch.NeverEnrichedLeft);
+    }
+
+    [Fact]
+    public async Task Stubs_that_run_out_before_the_batch_is_full_leave_none_waiting()
     {
         await SeedAsync(1);
-        await SeedAsync(2, analyzedAt: Now.AddDays(-1));
-        await SeedAsync(3, lastEnrichedAt: Now.AddDays(-90));
+        await SeedAsync(2, lastEnrichedAt: Now.AddDays(-90));
+        await SeedAsync(3, lastEnrichedAt: Now.AddDays(-80));
 
-        var batch = await SelectAsync(new GameEnrichmentSettings { BatchSize = 10, RefreshAfterDays = 30 });
+        var batch = await SelectAsync(new GameEnrichmentSettings { BatchSize = 3, RefreshAfterDays = 30 });
 
         Assert.Equal(3, batch.GameIds.Count);
-        Assert.Equal(2, batch.NeverEnriched);
+        Assert.False(batch.NeverEnrichedLeft);
+    }
+
+    [Fact]
+    public async Task Never_enriched_reddit_games_that_fill_the_batch_leave_more_waiting()
+    {
+        await SeedAsync(1, analyzedAt: Now.AddDays(-1));
+        await SeedAsync(2, analyzedAt: Now.AddDays(-2));
+
+        var batch = await SelectAsync(new GameEnrichmentSettings { BatchSize = 2 });
+
+        Assert.True(batch.NeverEnrichedLeft);
     }
 
     [Fact]
