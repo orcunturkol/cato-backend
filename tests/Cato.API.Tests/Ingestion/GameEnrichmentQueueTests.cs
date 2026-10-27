@@ -39,7 +39,8 @@ public class GameEnrichmentQueueTests : IDisposable
         int appId,
         DateTime? analyzedAt = null,
         DateTime? lastEnrichedAt = null,
-        int failures = 0)
+        int failures = 0,
+        DateTime? createdAt = null)
     {
         var game = new Game
         {
@@ -55,6 +56,9 @@ public class GameEnrichmentQueueTests : IDisposable
         await using var db = NewContext();
         db.Games.Add(game);
         await db.SaveChangesAsync();
+        // SaveChanges stamps CreatedAt with the clock; a test that orders by it sets it afterwards.
+        if (createdAt is { } created)
+            await db.Games.Where(g => g.Id == game.Id).ExecuteUpdateAsync(s => s.SetProperty(g => g.CreatedAt, created));
         return game.Id;
     }
 
@@ -88,6 +92,31 @@ public class GameEnrichmentQueueTests : IDisposable
 
         Assert.Equal(2, batch.GameIds.Count);
         Assert.DoesNotContain(discovered, batch.GameIds);
+    }
+
+    [Fact]
+    public async Task Discovered_games_go_newest_row_first_not_by_app_id()
+    {
+        var oldRow = await SeedAsync(1, createdAt: Now.AddDays(-3));
+        var newRow = await SeedAsync(900, createdAt: Now);
+        var middleRow = await SeedAsync(500, createdAt: Now.AddHours(-1));
+
+        var batch = await SelectAsync(new GameEnrichmentSettings { BatchSize = 10 });
+
+        Assert.Equal([newRow, middleRow, oldRow], batch.GameIds);
+    }
+
+    [Fact]
+    public async Task Never_enriched_counts_only_games_with_no_store_record()
+    {
+        await SeedAsync(1);
+        await SeedAsync(2, analyzedAt: Now.AddDays(-1));
+        await SeedAsync(3, lastEnrichedAt: Now.AddDays(-90));
+
+        var batch = await SelectAsync(new GameEnrichmentSettings { BatchSize = 10, RefreshAfterDays = 30 });
+
+        Assert.Equal(3, batch.GameIds.Count);
+        Assert.Equal(2, batch.NeverEnriched);
     }
 
     [Fact]

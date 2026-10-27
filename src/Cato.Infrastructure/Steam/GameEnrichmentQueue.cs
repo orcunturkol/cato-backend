@@ -7,6 +7,9 @@ namespace Cato.Infrastructure.Steam;
 public record GameEnrichmentBatch(IReadOnlyList<Guid> GameIds, int Analysed, int Refresh)
 {
     public static readonly GameEnrichmentBatch Empty = new([], 0, 0);
+
+    /// <summary>Games in the batch with no store record at all (bands 1 and 3).</summary>
+    public int NeverEnriched => GameIds.Count - Refresh;
 }
 
 /// <summary>
@@ -22,7 +25,7 @@ public static class GameEnrichmentQueue
     /// <list type="number">
     /// <item>reddit-analysed games with no store record at all</item>
     /// <item>reddit-analysed games whose record has gone stale</item>
-    /// <item>everything else with no store record, by app id</item>
+    /// <item>everything else with no store record, newest row first</item>
     /// <item>everything else that has gone stale, stalest first</item>
     /// <item>stale games past the failure threshold, stalest first</item>
     /// </list>
@@ -40,6 +43,11 @@ public static class GameEnrichmentQueue
     /// waits for band 5, so it is retried only when no other refresh is due: until
     /// 2026-10-21 199 delisted games were the stalest records and took 199 of the 200 slots
     /// of every cycle, and the other 62,000 stale games were never refreshed.
+    ///
+    /// Band 3 takes the newest rows first because OGT's "new pages" list shows the newest
+    /// rows first and hides stubs. On app-id order a burst of stubs (a sale page lists
+    /// thousands of games CATO has never seen) put the rows at the top of that list behind
+    /// every older app id in the burst.
     /// </summary>
     public static async Task<GameEnrichmentBatch> SelectAsync(
         CatoDbContext db,
@@ -92,10 +100,11 @@ public static class GameEnrichmentQueue
 
         if (settings.IncludeUnanalyzedGames)
         {
-            // 3. Everything else that has never been enriched.
+            // 3. Everything else that has never been enriched, newest row first.
             await TakeAsync(neverEnriched
                 .Where(g => g.AnalyzedAt == null)
-                .OrderBy(g => g.AppId)
+                .OrderByDescending(g => g.CreatedAt)
+                .ThenBy(g => g.AppId)
                 .Select(g => g.Id));
 
             // 4. Everything else that has gone stale.

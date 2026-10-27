@@ -42,6 +42,12 @@ public sealed class GameEnrichmentWatcherService : BackgroundService
     // The first value of this watcher's scheduled_job row; the Jobs page owns it after that.
     private WatcherDefaults Defaults => new("Store enrichment sweep", TimeSpan.FromMinutes(_settings.IntervalMinutes), _settings.Enabled);
 
+    // A cycle whose whole batch had no store record leaves more stubs waiting: a sale
+    // page can add a thousand in an hour, and at 200 per hourly cycle they waited most
+    // of a day while the Steam throttle sat idle. The next cycle starts after this pause
+    // instead of the interval. Cycles with refreshes in them keep the interval.
+    private static readonly TimeSpan CatchUpPause = TimeSpan.FromMinutes(1);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation(
@@ -58,9 +64,10 @@ public sealed class GameEnrichmentWatcherService : BackgroundService
             await WatcherSchedule.WaitForNextRunAsync(
                 _scopeFactory, BackendJobNames.GameEnrichmentWatcher, Defaults, previousEnd, _logger, stoppingToken);
 
+            var catchUp = false;
             try
             {
-                await RunCycleAsync(stoppingToken);
+                catchUp = await RunCycleAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -72,10 +79,17 @@ public sealed class GameEnrichmentWatcherService : BackgroundService
             }
 
             previousEnd = DateTime.UtcNow;
+            if (catchUp)
+            {
+                await Task.Delay(CatchUpPause, stoppingToken);
+                // No previous end: the next wait returns at once unless the Jobs page paused the sweep.
+                previousEnd = null;
+            }
         }
     }
 
-    private async Task RunCycleAsync(CancellationToken ct)
+    /// <summary>Runs one cycle; true when its whole batch had no store record (catch up).</summary>
+    private async Task<bool> RunCycleAsync(CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CatoDbContext>();
@@ -91,7 +105,7 @@ public sealed class GameEnrichmentWatcherService : BackgroundService
             {
                 job.Set("selected", 0);
                 _logger.LogInformation("GameEnrichmentWatcher: nothing to enrich");
-                return;
+                return false;
             }
 
             _logger.LogInformation(
@@ -129,9 +143,13 @@ public sealed class GameEnrichmentWatcherService : BackgroundService
             job.SetItems(batch.GameIds.Count, failed, "games");
             if (failed > 0) job.MarkPartialSuccess();
 
+            var catchUp = batch.NeverEnriched >= _settings.BatchSize && !ct.IsCancellationRequested;
+            job.Set("catchUp", catchUp ? 1 : 0);
+
             _logger.LogInformation(
-                "GameEnrichmentWatcher: cycle complete — {Enriched} enriched, {Failed} failed of {Total}",
-                enriched, failed, batch.GameIds.Count);
+                "GameEnrichmentWatcher: cycle complete — {Enriched} enriched, {Failed} failed of {Total}{CatchUp}",
+                enriched, failed, batch.GameIds.Count, catchUp ? "; catching up, next cycle in a minute" : "");
+            return catchUp;
         }
         catch (Exception ex)
         {
