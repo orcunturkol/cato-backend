@@ -150,9 +150,17 @@ The sweep (`GameEnrichment` settings section) works five bands in order:
 
 1. reddit-analysed games with no store record (`AnalyzedAt != null`, newest first)
 2. reddit-analysed games whose record has gone stale
-3. everything else with no store record, by app id
+3. everything else with no store record, newest row (`CreatedAt`) first
 4. everything else that has gone stale, stalest first
 5. stale games past `FailureThreshold` (mostly delisted apps), stalest first
+
+When a whole batch comes from bands 1 and 3 (`GameEnrichmentBatch.NeverEnriched`), the
+next cycle starts one minute after the last one ends, not after the interval (catch-up).
+A collector page can stub a thousand unknown apps in an hour (the daily `sale_collection`
+read 294 sale events on 2026-10-27); at 200 per hourly cycle they waited most of a day
+while the throttle sat idle. Band 3 goes newest first because OGT's "new pages" list (the
+catalog without `appIds`) shows the newest rows first and hides rows with no
+`LastEnrichedAt`.
 
 Bands 2, 4 and 5 need `RefreshAfterDays > 0`. Band 5 exists because a delisted app keeps
 its old `LastEnrichedAt`: until 2026-10-21, 199 of them were the stalest records and took

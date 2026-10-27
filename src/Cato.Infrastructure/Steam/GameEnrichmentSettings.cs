@@ -12,7 +12,9 @@ public class GameEnrichmentSettings
     /// <summary>
     /// Games enriched per cycle. Each one costs two throttled Steam calls (~3s), and
     /// the throttle is shared with every other Steam caller in the process, so a
-    /// batch of 200 occupies roughly ten minutes of an hour-long cycle.
+    /// batch of 200 occupies roughly ten minutes of an hour-long cycle. A batch made
+    /// up entirely of games with no store record starts the next cycle a minute later
+    /// instead (catch-up), so a burst of stubs drains at the throttle's pace.
     /// </summary>
     public int BatchSize { get; set; } = 200;
 
