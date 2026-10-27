@@ -176,9 +176,11 @@ public class GameService : IGameService
             query = query.Where(g => request.AppIds.Contains(g.AppId));
         else
             // Window browsing feeds OGT's "new pages" list — hide games the
-            // filter pipeline rejected (MMO/Hentai/F2P …). Explicit appId
-            // lookups stay unfiltered so already-voted games never vanish.
-            query = query.Where(g => !g.IsFiltered);
+            // filter pipeline rejected (MMO/Hentai/F2P …) and stubs with no
+            // store record yet ("App 123", no developer or tags); a stub shows
+            // once the enrichment sweep fills it. Explicit appId lookups stay
+            // unfiltered so already-voted games never vanish.
+            query = query.Where(g => !g.IsFiltered && g.LastEnrichedAt != null);
 
         if (!string.IsNullOrWhiteSpace(request.Search))
             query = query.Where(g =>
