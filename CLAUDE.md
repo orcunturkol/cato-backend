@@ -86,6 +86,16 @@ Some older services (`GameService`, `GameDataService`, `IngestionService`, `Stea
   `response` and has no `success` field. Since 2026-10-27 it has its own throttle
   (`ReviewsRateLimiter`, 1.5 s after each answer): on the store throttle the daily sync held
   up store enrichment for about an hour.
+- **Review totals of listed games**: `ReviewTotalWatcherService` keeps only the review summary
+  (a `review_summary_snapshot` row, `Game.ReviewCount`, `Game.SteamReviewScore`) of the games on
+  the Redis set `cato:review_totals:appids`, which `PUT api/games/review-totals` replaces (OGT
+  sends the games of its closed evaluations once a day). One first-page read per game every
+  `ReviewTotalsRefreshDays` (30), at most `ReviewTotalsBatchSize` (100) a cycle, through the same
+  `GetAppReviews` call and throttle; games never read come first. Tracked types and app ids
+  CATO does not know are skipped (no stubs). A game with no reviews is stored as 0; Steam's
+  empty answer (`{"response":{}}`, an unknown app) has no score text and counts as a failure,
+  retried after a day. `RedisBackfillHostedService` does not rebuild the set: after a Redis loss
+  it is empty until OGT sends it again.
 - **Price watcher**: `SteamPriceWatcherService` reads about 30,000 store prices per cycle, 100
   per app details call (`GetPriceOverviewsAsync`, `filters=price_overview`: the only filter
   that answers for many apps). Until 2026-10-27 it read one game per call and held the shared

@@ -7,6 +7,7 @@ public static class BackendJobNames
     public const string SteamPicsChangeHistory = "SteamPicsChangeHistory";
     public const string SteamPriceWatcher = "SteamPriceWatcher";
     public const string SteamReviewWatcher = "SteamReviewWatcher";
+    public const string ReviewTotalWatcher = "ReviewTotalWatcher";
     public const string GameEnrichmentWatcher = "GameEnrichmentWatcher";
     public const string GameAchievementSchemaWatcher = "GameAchievementSchemaWatcher";
     public const string GameNewsWatcher = "GameNewsWatcher";

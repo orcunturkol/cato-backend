@@ -83,6 +83,7 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
 builder.Services.AddSingleton<IRedisAppIdSyncService, RedisAppIdSyncService>();
 builder.Services.AddSingleton<ISteamIdRotationService, RedisSteamIdRotationService>();
 builder.Services.AddSingleton<IFollowerHistoryQueueService, FollowerHistoryQueueService>();
+builder.Services.AddSingleton<IReviewTotalList, ReviewTotalList>();
 builder.Services.Configure<FollowerHistorySweepSettings>(builder.Configuration.GetSection(FollowerHistorySweepSettings.SectionName));
 
 // ── RabbitMQ ──
