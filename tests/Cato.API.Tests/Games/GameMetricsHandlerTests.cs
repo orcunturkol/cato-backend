@@ -155,5 +155,100 @@ public class GameMetricsHandlerTests : IDisposable
         Assert.Empty(metrics.Followers);
         Assert.Null(metrics.MostWished);
         Assert.Null(metrics.Ccu);
+        Assert.Null(metrics.FollowersSince);
+        Assert.Null(metrics.Reviews);
+        Assert.Empty(metrics.ReviewsDaily!);
+        Assert.Null(metrics.Achievements);
+    }
+
+    [Fact]
+    public async Task Followers_since_is_the_first_day_of_the_steamdb_graph()
+    {
+        await using (var db = NewContext())
+        {
+            var graphed = await AddGameAsync(db, 50);
+            var scraped = await AddGameAsync(db, 51);
+            db.GroupMemberCountSnapshots.AddRange(
+                Member(graphed, Today.AddDays(-400), GroupMemberCountSnapshot.SteamDbFollowerSource, 10),
+                Member(graphed, Today.AddDays(-3), GroupMemberCountSnapshot.SteamDbFollowerSource, 900),
+                Member(graphed, Today.AddDays(-1), GroupMemberCountSnapshot.SteamCommunitySource, 950),
+                Member(scraped, Today.AddDays(-20), GroupMemberCountSnapshot.SteamCommunitySource, 300));
+            await db.SaveChangesAsync();
+        }
+
+        var metrics = (await MetricsAsync(50, 51)).ToDictionary(m => m.AppId);
+
+        Assert.Equal(Today.AddDays(-400), metrics[50].FollowersSince);
+        Assert.Null(metrics[51].FollowersSince); // the scrape starts when CATO started following, not with the page
+    }
+
+    private static SteamReview Review(Game game, string id, DateTime created, bool up) => new()
+    {
+        Id = Guid.NewGuid(),
+        GameId = game.Id,
+        RecommendationId = id,
+        Language = "english",
+        VotedUp = up,
+        TimestampCreated = created,
+        TimestampUpdated = created,
+    };
+
+    [Fact]
+    public async Task Reviews_show_the_newest_summary_and_the_reviews_per_day()
+    {
+        await using (var db = NewContext())
+        {
+            var game = await AddGameAsync(db, 60);
+            db.ReviewSummarySnapshots.AddRange(
+                new ReviewSummarySnapshot
+                {
+                    Id = Guid.NewGuid(), GameId = game.Id, SnapshotDate = Today.AddDays(-5), ReviewScoreDesc = "Positive",
+                    TotalPositive = 80, TotalNegative = 10, TotalReviews = 90,
+                },
+                new ReviewSummarySnapshot
+                {
+                    Id = Guid.NewGuid(), GameId = game.Id, SnapshotDate = Today.AddDays(-1), ReviewScoreDesc = "Mostly Positive",
+                    TotalPositive = 100, TotalNegative = 20, TotalReviews = 120,
+                });
+            var day1 = Now.UtcDateTime.AddDays(-2);
+            db.SteamReviews.AddRange(
+                Review(game, "r1", day1, up: true),
+                Review(game, "r2", day1.AddHours(1), up: true),
+                Review(game, "r3", day1.AddHours(2), up: false),
+                Review(game, "r4", Now.UtcDateTime.AddDays(-1), up: true),
+                Review(game, "r5", Now.UtcDateTime.AddDays(-60), up: true)); // before the window
+            await db.SaveChangesAsync();
+        }
+
+        var metrics = Assert.Single(await MetricsAsync(60));
+
+        Assert.Equal(new ReviewSummaryDto(Today.AddDays(-1), 120, 100, 20, "Mostly Positive"), metrics.Reviews);
+        Assert.Equal(
+            [new ReviewDayDto(Today.AddDays(-2), 3, 2), new ReviewDayDto(Today.AddDays(-1), 1, 1)],
+            metrics.ReviewsDaily!);
+    }
+
+    [Fact]
+    public async Task Achievements_summarize_the_newest_day_of_unlock_percentages()
+    {
+        await using (var db = NewContext())
+        {
+            var game = await AddGameAsync(db, 70);
+            GameAchievementPercent Unlock(DateOnly day, string name, decimal percent) => new()
+            {
+                Id = Guid.NewGuid(), GameId = game.Id, AppId = 70, ApiName = name, SnapshotDate = day, Percent = percent,
+            };
+            db.GameAchievementPercents.AddRange(
+                Unlock(Today.AddDays(-2), "a1", 90m),
+                Unlock(Today.AddDays(-1), "a1", 80.5m),
+                Unlock(Today.AddDays(-1), "a2", 40m),
+                Unlock(Today.AddDays(-1), "a3", 20m),
+                Unlock(Today.AddDays(-1), "a4", 5m));
+            await db.SaveChangesAsync();
+        }
+
+        var metrics = Assert.Single(await MetricsAsync(70));
+
+        Assert.Equal(new AchievementSummaryDto(Today.AddDays(-1), 4, 80.5, 30), metrics.Achievements);
     }
 }
