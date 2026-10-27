@@ -8,8 +8,12 @@ public record GameEnrichmentBatch(IReadOnlyList<Guid> GameIds, int Analysed, int
 {
     public static readonly GameEnrichmentBatch Empty = new([], 0, 0);
 
-    /// <summary>Games in the batch with no store record at all (bands 1 and 3).</summary>
-    public int NeverEnriched => GameIds.Count - Refresh;
+    /// <summary>
+    /// A band of games with no store record (1 or 3) filled the rest of the batch, so more
+    /// of them may be waiting. Stale reddit games (band 2) can share the batch: they come
+    /// before band 3 and a few go stale every hour.
+    /// </summary>
+    public bool NeverEnrichedLeft { get; init; }
 }
 
 /// <summary>
@@ -70,6 +74,7 @@ public static class GameEnrichmentQueue
         var gameIds = new List<Guid>();
         var analysed = 0;
         var refreshed = 0;
+        var neverEnrichedLeft = false;
 
         async Task<int> TakeAsync(IQueryable<Guid> query)
         {
@@ -82,10 +87,12 @@ public static class GameEnrichmentQueue
 
         // 1. Never-enriched reddit games — most recently analysed first, so the
         //    freshest question gets the freshest data.
-        analysed += await TakeAsync(neverEnriched
+        var neverAnalysed = await TakeAsync(neverEnriched
             .Where(g => g.AnalyzedAt != null)
             .OrderByDescending(g => g.AnalyzedAt)
             .Select(g => g.Id));
+        analysed += neverAnalysed;
+        neverEnrichedLeft = neverAnalysed > 0 && budget == 0;
 
         // 2. Stale reddit games.
         if (staleOk is not null)
@@ -101,11 +108,12 @@ public static class GameEnrichmentQueue
         if (settings.IncludeUnanalyzedGames)
         {
             // 3. Everything else that has never been enriched, newest row first.
-            await TakeAsync(neverEnriched
+            var neverOther = await TakeAsync(neverEnriched
                 .Where(g => g.AnalyzedAt == null)
                 .OrderByDescending(g => g.CreatedAt)
                 .ThenBy(g => g.AppId)
                 .Select(g => g.Id));
+            neverEnrichedLeft |= neverOther > 0 && budget == 0;
 
             // 4. Everything else that has gone stale.
             if (staleOk is not null)
@@ -123,6 +131,6 @@ public static class GameEnrichmentQueue
                 .OrderBy(g => g.LastEnrichedAt)
                 .Select(g => g.Id));
 
-        return new GameEnrichmentBatch(gameIds, analysed, refreshed);
+        return new GameEnrichmentBatch(gameIds, analysed, refreshed) { NeverEnrichedLeft = neverEnrichedLeft };
     }
 }

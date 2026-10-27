@@ -42,10 +42,10 @@ public sealed class GameEnrichmentWatcherService : BackgroundService
     // The first value of this watcher's scheduled_job row; the Jobs page owns it after that.
     private WatcherDefaults Defaults => new("Store enrichment sweep", TimeSpan.FromMinutes(_settings.IntervalMinutes), _settings.Enabled);
 
-    // A cycle whose whole batch had no store record leaves more stubs waiting: a sale
+    // A cycle filled by games with no store record leaves more stubs waiting: a sale
     // page can add a thousand in an hour, and at 200 per hourly cycle they waited most
     // of a day while the Steam throttle sat idle. The next cycle starts after this pause
-    // instead of the interval. Cycles with refreshes in them keep the interval.
+    // instead of the interval. Cycles that reach the general refresh bands keep the interval.
     private static readonly TimeSpan CatchUpPause = TimeSpan.FromMinutes(1);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -88,7 +88,7 @@ public sealed class GameEnrichmentWatcherService : BackgroundService
         }
     }
 
-    /// <summary>Runs one cycle; true when its whole batch had no store record (catch up).</summary>
+    /// <summary>Runs one cycle; true when games with no store record filled it (catch up).</summary>
     private async Task<bool> RunCycleAsync(CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
@@ -143,7 +143,7 @@ public sealed class GameEnrichmentWatcherService : BackgroundService
             job.SetItems(batch.GameIds.Count, failed, "games");
             if (failed > 0) job.MarkPartialSuccess();
 
-            var catchUp = batch.NeverEnriched >= _settings.BatchSize && !ct.IsCancellationRequested;
+            var catchUp = batch.NeverEnrichedLeft && !ct.IsCancellationRequested;
             job.Set("catchUp", catchUp ? 1 : 0);
 
             _logger.LogInformation(
