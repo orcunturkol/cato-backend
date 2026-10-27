@@ -1,6 +1,7 @@
 using Cato.Domain.Entities;
 using Cato.Infrastructure.Database;
 using Cato.Infrastructure.Jobs;
+using Cato.Infrastructure.Steam.Models;
 using Cato.Infrastructure.Steam.SteamKit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -63,10 +64,11 @@ public sealed class SteamPriceWatcherService : BackgroundService
         }
     }
 
-    // A cycle reads about 33,000 games behind the shared Steam throttle and takes about 18 h.
-    // It saves every SaveEvery games and keeps the last saved app id in worker_state, so a
-    // restart loses at most one unsaved group and the next cycle goes on from there. Until
-    // 2026-10-21 it saved once at the end, and every deploy lost the whole cycle.
+    // A cycle reads about 30,000 games, 100 per Steam call (until 2026-10-27 one call per game,
+    // about 18 h behind the shared Steam throttle). It saves every SaveEvery games and keeps the
+    // last saved app id in worker_state, so a restart loses at most one unsaved group and the
+    // next cycle goes on from there. Until 2026-10-21 it saved once at the end, and every
+    // deploy lost the whole cycle.
     internal const int SaveEvery = 200;
 
     internal async Task CheckPricesAsync(CancellationToken ct, int saveEvery = SaveEvery)
@@ -102,11 +104,11 @@ public sealed class SteamPriceWatcherService : BackgroundService
             int? lastDone = null;
             try
             {
-                foreach (var game in games)
+                foreach (var batch in games.Chunk(SteamApiService.MaxPriceBatch))
                 {
                     ct.ThrowIfCancellationRequested();
-                    await CheckGameAsync(db, steam, game, counts, ct);
-                    lastDone = game.AppId;
+                    await CheckBatchAsync(db, steam, batch, counts, ct);
+                    lastDone = batch[^1].AppId;
                 }
             }
             finally
@@ -149,19 +151,38 @@ public sealed class SteamPriceWatcherService : BackgroundService
         public int Failed;
     }
 
-    private async Task CheckGameAsync(
-        CatoDbContext db, ISteamApiService steam, Game game, PriceCounts counts, CancellationToken ct)
+    private async Task CheckBatchAsync(
+        CatoDbContext db, ISteamApiService steam, Game[] games, PriceCounts counts, CancellationToken ct)
+    {
+        IReadOnlyDictionary<int, SteamPriceOverview> prices;
+        try
+        {
+            prices = await steam.GetPriceOverviewsAsync(games.Select(g => g.AppId).ToList(), ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            counts.Failed += games.Length;
+            _logger.LogWarning(ex, "SteamPriceWatcher: Failed to read the prices of AppIds {First}-{Last}",
+                games[0].AppId, games[^1].AppId);
+            return;
+        }
+
+        // When these prices were read, not when the cycle began.
+        var readAt = DateTime.UtcNow;
+        foreach (var game in games)
+        {
+            if (prices.TryGetValue(game.AppId, out var price))
+                await SavePriceAsync(db, game, price, readAt, counts, ct);
+            else
+                counts.Skipped++;
+        }
+    }
+
+    private async Task SavePriceAsync(
+        CatoDbContext db, Game game, SteamPriceOverview price, DateTime readAt, PriceCounts counts, CancellationToken ct)
     {
         try
         {
-            var steamData = await steam.GetAppDetailsAsync(game.AppId, ct);
-            if (steamData?.PriceOverview is null)
-            {
-                counts.Skipped++;
-                return;
-            }
-
-            var price = steamData.PriceOverview;
             var basePriceUsd = price.InitialUsd ?? 0m;
             var finalPriceUsd = price.FinalUsd ?? 0m;
             var discountPercent = price.DiscountPercent ?? 0;
@@ -183,8 +204,7 @@ public sealed class SteamPriceWatcherService : BackgroundService
                 {
                     Id = Guid.NewGuid(),
                     GameId = game.Id,
-                    // When this price was read, not when the 18 h cycle began.
-                    CapturedAt = DateTime.UtcNow,
+                    CapturedAt = readAt,
                     BasePriceUsd = basePriceUsd,
                     FinalPriceUsd = finalPriceUsd,
                     DiscountPercent = discountPercent,

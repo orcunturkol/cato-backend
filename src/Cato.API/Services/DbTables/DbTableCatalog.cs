@@ -91,7 +91,8 @@ public static class DbTableCatalog
         "Backend SteamPicsChangeHistory, every 10 min", BackendJobNames.SteamPicsChangeHistory, Backend);
 
     private static readonly DbTableSource StorePrice = new(
-        DataSite.SteamStore, "App details API, price_overview", AppDetailsUrl,
+        DataSite.SteamStore, "App details API, price_overview, 100 apps per call",
+        "https://store.steampowered.com/api/appdetails?appids={appId,appId,...}&filters=price_overview&cc=us",
         "Backend SteamPriceWatcher, daily", BackendJobNames.SteamPriceWatcher, Backend);
 
     private static readonly DbTableSource StoreReviews = new(
@@ -453,7 +454,7 @@ public static class DbTableCatalog
                 "The watcher covers games released since 2023-01-01 with a price above 0.",
                 "Upload: an entry without fullPrice or finalPrice is counted as failed; a snapshot without timestamp is skipped.",
             ],
-            ["No price_overview in app details: the game is skipped. An error counts the game as failed and the job reads PartialSuccess."],
+            ["No price_overview in app details (a free game, no store page): the game is skipped. A failed call counts its games (up to 100) as failed and the job reads PartialSuccess."],
             new Dictionary<string, DbColumnDoc>
             {
                 ["BasePriceUsd"] = new("App details: price_overview.initial / 100. Upload: fullPrice in that currency"),

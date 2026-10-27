@@ -55,21 +55,47 @@ public class SteamPriceWatcherTests : JobRunsDbTestBase
     {
         SeedGames(10, 20, 30, 40, 50);
         using var stop = new CancellationTokenSource();
-        // The app stops while the fourth price is being read.
+        // The app stops during the second read (30 and 40): that read is lost as a whole.
         _steam.OnRead = appId => { if (appId == 40) stop.Cancel(); };
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Watcher().CheckPricesAsync(stop.Token, saveEvery: 2));
 
-        Assert.Equal([10, 20, 30], SnapshotAppIds());
-        Assert.Equal("30", LastAppId());
+        Assert.Equal([10, 20], SnapshotAppIds());
+        Assert.Equal("20", LastAppId());
 
         _steam.Reads.Clear();
         _steam.OnRead = null;
         await Watcher().CheckPricesAsync(CancellationToken.None, saveEvery: 2);
 
-        Assert.Equal([40, 50], _steam.Reads);
+        Assert.Equal([30, 40, 50], _steam.Reads);
         Assert.Equal([10, 20, 30, 40, 50], SnapshotAppIds());
         Assert.Equal("0", LastAppId());
+    }
+
+    [Fact]
+    public async Task Prices_are_read_a_hundred_games_per_steam_call()
+    {
+        SeedGames(Enumerable.Range(1, 250).ToArray());
+
+        await Watcher().CheckPricesAsync(CancellationToken.None);
+
+        Assert.Equal([100, 100, 50], _steam.Batches);
+        Assert.Equal(250, SnapshotAppIds().Count);
+    }
+
+    [Fact]
+    public async Task A_game_with_no_price_in_the_answer_is_skipped()
+    {
+        SeedGames(10, 20, 30);
+        _steam.NoPrice.Add(20);
+
+        await Watcher().CheckPricesAsync(CancellationToken.None);
+
+        Assert.Equal([10, 30], SnapshotAppIds());
+        using var db = NewContext();
+        using var metrics = JsonDocument.Parse(db.JobRuns.Single(r => r.JobName == BackendJobNames.SteamPriceWatcher).MetricsJson!);
+        Assert.Equal(1, metrics.RootElement.GetProperty("skipped").GetInt64());
+        Assert.Equal(0, metrics.RootElement.GetProperty("failed").GetInt64());
     }
 
     [Fact]
@@ -106,18 +132,27 @@ public class SteamPriceWatcherTests : JobRunsDbTestBase
     private sealed class FakeSteamApi : ISteamApiService
     {
         public List<int> Reads { get; } = [];
+        public List<int> Batches { get; } = [];
+        public HashSet<int> NoPrice { get; } = [];
         public Action<int>? OnRead { get; set; }
 
-        public Task<SteamAppData?> GetAppDetailsAsync(int appId, CancellationToken ct = default)
+        public Task<IReadOnlyDictionary<int, SteamPriceOverview>> GetPriceOverviewsAsync(
+            IReadOnlyList<int> appIds, CancellationToken ct = default)
         {
-            Reads.Add(appId);
-            OnRead?.Invoke(appId);
-            ct.ThrowIfCancellationRequested();
-            return Task.FromResult<SteamAppData?>(new SteamAppData
+            Batches.Add(appIds.Count);
+            foreach (var appId in appIds)
             {
-                PriceOverview = new SteamPriceOverview { Currency = "USD", Initial = 999, Final = 499, DiscountPercent = 50 },
-            });
+                Reads.Add(appId);
+                OnRead?.Invoke(appId);
+            }
+            ct.ThrowIfCancellationRequested();
+            return Task.FromResult<IReadOnlyDictionary<int, SteamPriceOverview>>(appIds
+                .Where(id => !NoPrice.Contains(id))
+                .ToDictionary(id => id, _ => new SteamPriceOverview { Currency = "USD", Initial = 999, Final = 499, DiscountPercent = 50 }));
         }
+
+        public Task<SteamAppData?> GetAppDetailsAsync(int appId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
 
         public Task<List<SteamUserTag>> GetUserTagsAsync(int appId, CancellationToken ct = default) =>
             throw new NotImplementedException();

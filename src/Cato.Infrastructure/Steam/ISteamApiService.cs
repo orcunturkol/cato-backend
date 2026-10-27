@@ -10,6 +10,14 @@ public interface ISteamApiService
     Task<SteamAppData?> GetAppDetailsAsync(int appId, CancellationToken ct = default);
 
     /// <summary>
+    /// Reads the store prices of up to 100 apps in one app details call
+    /// (<c>filters=price_overview</c>). The answer holds only apps with a price: a free
+    /// game and an app without a store page are absent. Throws when Steam fails.
+    /// </summary>
+    Task<IReadOnlyDictionary<int, SteamPriceOverview>> GetPriceOverviewsAsync(
+        IReadOnlyList<int> appIds, CancellationToken ct = default);
+
+    /// <summary>
     /// Fetch popular user-defined tags from the Steam store page.
     /// </summary>
     Task<List<SteamUserTag>> GetUserTagsAsync(int appId, CancellationToken ct = default);

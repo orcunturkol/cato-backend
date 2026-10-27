@@ -93,6 +93,76 @@ public class SteamApiService : ISteamApiService
         return null;
     }
 
+    /// <summary>Apps per <see cref="GetPriceOverviewsAsync"/> call; the URL stays near 1 KB.</summary>
+    public const int MaxPriceBatch = 100;
+
+    public async Task<IReadOnlyDictionary<int, SteamPriceOverview>> GetPriceOverviewsAsync(
+        IReadOnlyList<int> appIds, CancellationToken ct = default)
+    {
+        if (appIds.Count == 0)
+            return new Dictionary<int, SteamPriceOverview>();
+        if (appIds.Count > MaxPriceBatch)
+            throw new ArgumentException($"At most {MaxPriceBatch} apps per price read; chunk before calling.", nameof(appIds));
+
+        // Only with filters=price_overview does app details answer for many apps at once.
+        var url = $"https://store.steampowered.com/api/appdetails?appids={string.Join(',', appIds)}&filters=price_overview&cc=us";
+
+        for (var attempt = 0; attempt <= MaxRetries; attempt++)
+        {
+            await RateLimiter.WaitAsync(ct);
+            try
+            {
+                var response = await _httpClient.GetAsync(url, ct);
+
+                if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                {
+                    var backoff = (attempt + 1) * 5000;
+                    _logger.LogWarning("Rate limited reading {Count} prices, retrying in {Backoff}ms (attempt {Attempt}/{Max})",
+                        appIds.Count, backoff, attempt + 1, MaxRetries);
+                    await Task.Delay(backoff, ct);
+                    continue;
+                }
+
+                response.EnsureSuccessStatusCode();
+                return ParsePriceOverviews(await response.Content.ReadAsStringAsync(ct));
+            }
+            finally
+            {
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(DelayBetweenRequestsMs, CancellationToken.None);
+                    RateLimiter.Release();
+                }, CancellationToken.None);
+            }
+        }
+
+        throw new HttpRequestException($"Steam rate-limited the price read of {appIds.Count} apps after {MaxRetries} retries");
+    }
+
+    /// <summary>
+    /// The app details answer keyed by app id. A free game answers <c>"data": []</c> and an
+    /// app without a store page <c>"success": false</c>; neither has a price.
+    /// </summary>
+    internal static Dictionary<int, SteamPriceOverview> ParsePriceOverviews(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        if (doc.RootElement.ValueKind != JsonValueKind.Object)
+            throw new JsonException($"Steam price answer is {doc.RootElement.ValueKind}, not an object");
+
+        var prices = new Dictionary<int, SteamPriceOverview>();
+        foreach (var app in doc.RootElement.EnumerateObject())
+        {
+            if (int.TryParse(app.Name, out var appId)
+                && app.Value.ValueKind == JsonValueKind.Object
+                && app.Value.TryGetProperty("data", out var data)
+                && data.ValueKind == JsonValueKind.Object
+                && data.TryGetProperty("price_overview", out var price)
+                && price.Deserialize<SteamPriceOverview>(JsonOptions) is { } overview)
+                prices[appId] = overview;
+        }
+        return prices;
+    }
+
     private static readonly Regex TagRegex = new(
         @"class=""app_tag""[^>]*>\s*(.+?)\s*</a>",
         RegexOptions.Compiled | RegexOptions.Singleline);
