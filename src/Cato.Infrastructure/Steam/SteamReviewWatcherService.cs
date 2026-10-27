@@ -147,7 +147,9 @@ public class SteamReviewWatcherService : BackgroundService
             // Upsert today's summary snapshot from the first page's query_summary.
             if (isFirstPage)
             {
-                await InsertSummarySnapshotAsync(db, gameId, response.QuerySummary, ct);
+                if (response.QuerySummary is not null)
+                    await ReviewSummaries.AddSnapshotAsync(
+                        db, gameId, response.QuerySummary, DateOnly.FromDateTime(DateTime.UtcNow), ct);
                 isFirstPage = false;
             }
 
@@ -220,51 +222,12 @@ public class SteamReviewWatcherService : BackgroundService
         }
 
         // Refresh Game.SteamReviewScore and Game.ReviewCount from the latest snapshot.
-        await UpdateGameReviewFieldsAsync(db, gameId, ct);
+        await ReviewSummaries.RefreshGameFieldsAsync(db, gameId, ct);
 
         _logger.LogInformation(
             "Synced {Total} new reviews for AppId {AppId} ({Name})",
             totalInserted, appId, gameName);
 
         return totalInserted;
-    }
-
-    private async Task InsertSummarySnapshotAsync(
-        CatoDbContext db, Guid gameId, SteamReviewQuerySummary? summary, CancellationToken ct)
-    {
-        if (summary is null) return;
-
-        db.ReviewSummarySnapshots.Add(new ReviewSummarySnapshot
-        {
-            Id = Guid.NewGuid(),
-            GameId = gameId,
-            SnapshotDate = DateOnly.FromDateTime(DateTime.UtcNow),
-            ReviewScore = summary.ReviewScore,
-            ReviewScoreDesc = summary.ReviewScoreDesc ?? string.Empty,
-            TotalPositive = summary.TotalPositive,
-            TotalNegative = summary.TotalNegative,
-            TotalReviews = summary.TotalReviews,
-        });
-
-        await db.SaveChangesAsync(ct);
-    }
-
-    private async Task UpdateGameReviewFieldsAsync(
-        CatoDbContext db, Guid gameId, CancellationToken ct)
-    {
-        var latest = await db.ReviewSummarySnapshots
-            .Where(s => s.GameId == gameId)
-            .OrderByDescending(s => s.SnapshotDate)
-            .ThenByDescending(s => s.CreatedAt)
-            .FirstOrDefaultAsync(ct);
-
-        if (latest is null) return;
-
-        var game = await db.Games.FindAsync([gameId], ct);
-        if (game is null) return;
-
-        game.SteamReviewScore = latest.ReviewScoreDesc;
-        game.ReviewCount = latest.TotalReviews;
-        await db.SaveChangesAsync(ct);
     }
 }

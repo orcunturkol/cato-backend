@@ -116,6 +116,26 @@ public class GamesController : ControllerBase
         return Results.Ok(await _mediator.Send(new GetGameMetricsQuery(ids, days ?? 30)));
     }
 
+    /// <summary>
+    /// Replace the list of games whose review totals CATO keeps although it does not sync their
+    /// reviews in full (OGT sends the games of its closed evaluations once a day). The review-total
+    /// watcher reads each listed game's first review page every ReviewTotalsRefreshDays; Sourcing,
+    /// Owned and OGT games and AppIds CATO does not know are skipped. An empty list clears it.
+    /// </summary>
+    [HttpPut("review-totals")]
+    [ProducesResponseType(typeof(ReviewTotalListDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> SetReviewTotalList(
+        [FromBody] SetReviewTotalListCommand command,
+        [FromServices] IValidator<SetReviewTotalListCommand> validator)
+    {
+        var validation = await validator.ValidateAsync(command);
+        if (!validation.IsValid)
+            return Results.BadRequest(validation.Errors.Select(e => e.ErrorMessage));
+
+        return Results.Ok(await _mediator.Send(command));
+    }
+
     /// <summary>Enrich a game from Steam by its AppId (for sibling services keyed on AppId).</summary>
     [HttpPost("by-appid/{appId:int}/enrich")]
     [ProducesResponseType(typeof(GameDto), StatusCodes.Status200OK)]

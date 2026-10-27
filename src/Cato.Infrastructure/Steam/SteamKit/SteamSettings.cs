@@ -16,4 +16,13 @@ public class SteamSettings
 
     /// <summary>Maximum individual reviews to backfill per game on first run (default 2000).</summary>
     public int ReviewBackfillMaxPerGame { get; set; } = 2000;
+
+    /// <summary>How often (in minutes) the review-total watcher reads the listed games that are due.</summary>
+    public int ReviewTotalsIntervalMinutes { get; set; } = 60;
+
+    /// <summary>Most listed games one review-total cycle reads, one Steam request each (default 100).</summary>
+    public int ReviewTotalsBatchSize { get; set; } = 100;
+
+    /// <summary>Days before a listed game's review total is read again (default 30).</summary>
+    public int ReviewTotalsRefreshDays { get; set; } = 30;
 }
