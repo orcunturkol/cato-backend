@@ -133,6 +133,10 @@ public class SteamGameEnrichmentServiceTests : IDisposable
         public Task<SteamAppData?> GetAppDetailsAsync(int appId, CancellationToken ct = default) =>
             Task.FromResult(Data.GetValueOrDefault(appId));
 
+        public Task<IReadOnlyDictionary<int, SteamPriceOverview>> GetPriceOverviewsAsync(
+            IReadOnlyList<int> appIds, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+
         public Task<List<SteamUserTag>> GetUserTagsAsync(int appId, CancellationToken ct = default) =>
             Task.FromResult(new List<SteamUserTag>());
 

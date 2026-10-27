@@ -84,8 +84,10 @@ Some older services (`GameService`, `GameDataService`, `IngestionService`, `Stea
   order over 30 days, English only), and plain query parameters fall back to them: the input
   goes in `input_json` (`filter` 1 = recent, `languages` ["all"]). The answer sits in
   `response` and has no `success` field.
-- **Price watcher**: `SteamPriceWatcherService` reads about 33,000 store prices per cycle (about
-  18 h behind the shared Steam throttle). It saves every 200 games and keeps the last saved
+- **Price watcher**: `SteamPriceWatcherService` reads about 30,000 store prices per cycle, 100
+  per app details call (`GetPriceOverviewsAsync`, `filters=price_overview`: the only filter
+  that answers for many apps). Until 2026-10-27 it read one game per call and held the shared
+  Steam throttle about 18 h a day. It saves every 200 games and keeps the last saved
   app id in `worker_state` (`price_watcher_last_app_id`, 0 when a cycle is complete), so a
   restart goes on from there; a snapshot's `CapturedAt` is when its price was read.
 - **Logging**: Serilog, levels from the `Serilog` section. The console sink is always on;
