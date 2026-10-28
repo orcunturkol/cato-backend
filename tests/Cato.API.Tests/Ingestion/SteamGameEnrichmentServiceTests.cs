@@ -73,6 +73,43 @@ public class SteamGameEnrichmentServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Two_enrichments_of_one_game_run_one_after_the_other()
+    {
+        // The PICS watcher and the enrichment watcher picked the same new stub; both replaced its
+        // genres and the second insert broke IX_game_genre_GameId_GenreName_Source.
+        var gameId = await SeedAsync(400);
+        _steam.Data[400] = StoreData("Raced", "Action", "Indie");
+        var calls = 0;
+        var firstInside = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _steam.BeforeDetails = async _ =>
+        {
+            if (Interlocked.Increment(ref calls) == 1)
+            {
+                firstInside.SetResult();
+                await release.Task;
+            }
+        };
+
+        await using var dbA = NewContext();
+        await using var dbB = NewContext();
+        var first = NewService(dbA).EnrichGameAsync(gameId);
+        await firstInside.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var second = NewService(dbB).EnrichGameAsync(gameId);
+        await Task.Delay(300);
+        Assert.Equal(1, Volatile.Read(ref calls));
+
+        release.SetResult();
+        Assert.True(await first);
+        Assert.True(await second);
+        Assert.Equal(2, calls);
+
+        await using var check = NewContext();
+        Assert.Equal(["Action", "Indie"], await check.GameGenres.Where(g => g.GameId == gameId)
+            .OrderBy(g => g.GenreName).Select(g => g.GenreName).ToListAsync());
+    }
+
+    [Fact]
     public async Task The_demo_the_store_page_links_to_is_kept_and_cleared_when_it_goes()
     {
         var gameId = await SeedAsync(300);
@@ -130,8 +167,14 @@ public class SteamGameEnrichmentServiceTests : IDisposable
     {
         public Dictionary<int, SteamAppData> Data { get; } = [];
 
-        public Task<SteamAppData?> GetAppDetailsAsync(int appId, CancellationToken ct = default) =>
-            Task.FromResult(Data.GetValueOrDefault(appId));
+        /// <summary>Runs before each store call; a test can hold the call open here.</summary>
+        public Func<int, Task>? BeforeDetails { get; set; }
+
+        public async Task<SteamAppData?> GetAppDetailsAsync(int appId, CancellationToken ct = default)
+        {
+            if (BeforeDetails is not null) await BeforeDetails(appId);
+            return Data.GetValueOrDefault(appId);
+        }
 
         public Task<IReadOnlyDictionary<int, SteamPriceOverview>> GetPriceOverviewsAsync(
             IReadOnlyList<int> appIds, CancellationToken ct = default) =>
