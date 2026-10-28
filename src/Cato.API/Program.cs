@@ -8,7 +8,6 @@ using Cato.Infrastructure.Steam.SteamKit;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
-using Serilog.Events;
 using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -261,11 +260,7 @@ if (swagger)
 // Health probes and the agents' claim and heartbeat calls (four agents, every 10 s) are
 // polls; keep them out of the request log unless they fail.
 app.UseSerilogRequestLogging(options => options.GetLevel = (context, _, exception) =>
-    exception is not null || context.Response.StatusCode >= 500 ? LogEventLevel.Error
-    : context.Request.Path.StartsWithSegments("/health") ? LogEventLevel.Verbose
-    : HttpMethods.IsPost(context.Request.Method) && context.Request.Path.StartsWithSegments("/api/job-agents")
-        ? LogEventLevel.Verbose
-    : LogEventLevel.Information);
+    RequestLogLevel.For(context, exception));
 app.UseCors("AllowFrontend");
 app.UseOutputCache();
 app.MapCatoHealthChecks();
