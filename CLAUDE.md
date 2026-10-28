@@ -12,7 +12,7 @@ CATO is a Steam game analytics backend that ingests and serves financial, traffi
 # Build
 dotnet build
 
-# Run the API (requires RabbitMQ from docker-compose; Postgres is AWS RDS — see infra/rds/)
+# Run the API locally (RabbitMQ from docker-compose; Postgres is AWS RDS — see infra/rds/)
 docker compose up -d rabbitmq
 dotnet run --project src/Cato.API
 
@@ -21,8 +21,9 @@ dotnet ef migrations add <MigrationName> --project src/Cato.Infrastructure --sta
 dotnet ef database update --project src/Cato.Infrastructure --startup-project src/Cato.API
 ```
 
-Role `all` (a plain `dotnet run`) auto-migrates on startup. In compose the one-shot
-`migrate` service applies the migrations, and `api` and `worker` start after it exits 0.
+Role `all` (a plain `dotnet run`) auto-migrates on startup. The server is ECS (see
+"Deploying and the AWS layout"): the one-shot `cato-migrate` task applies the migrations
+before `api` and `worker` roll; compose is only for local development.
 
 ```bash
 dotnet test                                          # all test projects
@@ -68,11 +69,14 @@ Some older services (`GameService`, `GameDataService`, `IngestionService`, `Stea
   On shutdown a cancelled handler is neither acked nor nacked: the broker redelivers
   the message. The connection recovers its queues and consumers after a broker
   restart. `RabbitMQ:Uri` (`amqps://user:pass@host:5671/`, URL-encoded) overrides the
-  host settings and turns TLS on; the connection is named `cato-{role}`.
+  host settings and turns TLS on; the connection is named `cato-{role}`. On ECS the broker
+  is Amazon MQ (RabbitMQ 4.3, `max_message_size` 128 MiB; its 512 KiB default refused
+  follower batches) and `RabbitMQ__Uri` comes from the secret `cato/mq/app-user` (key `uri`).
 
   **Redis writes belong after `SaveChangesAsync`, never inside a transaction** (`GameService.cs`, `SteamGameEnrichmentService.cs`). This is why `game.analyzed` has its own queue rather than riding the batch path — `BatchIngestionDispatcher` runs every item handler inside one transaction, and a Redis write there would not roll back with it.
 - **Steam Integration**: `SteamApiService` (HTTP client for Steam Web API) and `SteamKitService` (SteamKit2 for PICS change monitoring via `SteamPicsWatcherService` background service).
-  - **SteamKit Game Discovery**: `SteamPicsWatcherService` polls Steam's PICS change feed via `PICSGetChangesSince`, which returns all AppIDs with any metadata change since the last known change number (persisted in `pics_change_number.txt`). For each changed AppID, it calls `PICSGetProductInfo` and reads the `common` KeyValue section. It filters by `common["type"] == "game"` (excludes DLCs, tools, demos) and `common["releasestate"] == "released"` (excludes unreleased). Also extracts `common["name"]` and `common["steam_release_date"]` (unix timestamp). Matching games are saved with `GameType = "Sourcing"`.
+  - **SteamKit Game Discovery**: `SteamPicsWatcherService` polls Steam's PICS change feed via `PICSGetChangesSince`, which returns all AppIDs with any metadata change since the last known change number (persisted in `worker_state`, key of the PICS watcher; the old `pics_change_number.txt` is
+only read once as a fallback). For each changed AppID, it calls `PICSGetProductInfo` and reads the `common` KeyValue section. It filters by `common["type"] == "game"` (excludes DLCs, tools, demos) and `common["releasestate"] == "released"` (excludes unreleased). Also extracts `common["name"]` and `common["steam_release_date"]` (unix timestamp). Matching games are saved with `GameType = "Sourcing"`.
 - **Game types** (`GameTypes`): Owned, Sourcing, Competitor, OGT, Other. The collectors (reviews, CCU,
   the community group scrape, achievements, player achievements) follow `GameTypes.Tracked` = Sourcing,
   Owned and OGT. OGT sets `OGT` on a game while its team evaluates it and puts the earlier type back when
@@ -103,7 +107,9 @@ Some older services (`GameService`, `GameDataService`, `IngestionService`, `Stea
   app id in `worker_state` (`price_watcher_last_app_id`, 0 when a cycle is complete), so a
   restart goes on from there; a snapshot's `CapturedAt` is when its price was read.
 - **Logging**: Serilog, levels from the `Serilog` section. The console sink is always on;
-  the Seq sink only when `Seq:ServerUrl` is set (compose: `http://seq:80`). Health probes
+  the Seq sink only when `Seq:ServerUrl` is set (ECS: `http://seq.cato.internal:5341`, Seq on
+  the edge node, 14-day retention). Every ECS service also logs to CloudWatch `/cato/<service>`
+  (30 days): `aws logs tail /cato/worker --region eu-central-1`. Health probes
   and the agents' `POST /api/job-agents/*` polls log at Verbose unless they fail.
   `Microsoft.EntityFrameworkCore.Database.Command` is at `Fatal`: its "Failed executing
   DbCommand" error carries the whole SQL batch. From 2026-08-22 to 2026-10-04 one
@@ -112,7 +118,7 @@ Some older services (`GameService`, `GameDataService`, `IngestionService`, `Stea
   the normal log volume (Seq: ~390 MB/day against ~10). The docker log reached 62 GB and
   filled the disk. The exception itself still logs (`Microsoft.EntityFrameworkCore.Update`
   and `.Query`, and the app's own handlers).
-- **Swagger**: `/swagger` when `Swagger:Enabled` is true (Development, and compose on the server).
+- **Swagger**: `/swagger` when `Swagger:Enabled` is true (Development, and the ECS `api` service).
 
 ### Database Entities
 
@@ -140,13 +146,12 @@ worker that is `LocalGameEnrichmentGateway`; in role api it is
 OGT's contract: 200 enriched, 404 unknown game, 400 failed; a worker that is down is an
 error, not a quiet failure.
 
-Compose runs the split since 2026-10-21 (PR 15): `migrate` (one-shot), `api` (`cato-api`,
-`127.0.0.1:5039`, 1.5 GB) and `worker` (`cato-worker`, no published port, 3 GB), one image
-`cato-backend:local`. Deploy with `docker compose up -d --build api worker`: compose runs
-`migrate` first. Read both logs (`docker compose logs api worker`); the watchers, consumers,
-dispatcher, alerts and SteamKit log in `worker`. The collector's data folder is no longer
-mounted: every job publishes its data inline (only the unscheduled legacy `run_daily.py`
-sent file paths).
+On ECS one image `cato-backend:<tag>` runs as three task definitions: `api` (role api,
+Fargate 0.5 vCPU / 2 GB, `api.cato.internal:8080`), `worker` (role worker, 1 vCPU / 4 GB,
+desired 1; a deploy stops the old task before the new one starts, so there is never a second
+Steam login or dispatcher) and the one-shot `cato-migrate`. Read both logs; the watchers,
+consumers, dispatcher, alerts and SteamKit log in `worker`. Every job publishes its data
+inline (only the unscheduled legacy `run_daily.py` sent file paths).
 
 ### Steam store enrichment
 
@@ -390,11 +395,10 @@ them on the wrong date.
 ### Job schedules (`scheduled_job`)
 
 One row per job. A collector job has a cron, a time limit and an agent group; the job
-dispatcher (worker) turns its slots into `job_dispatch` rows and the collector's
-`cato-agent@<group>` claims them (`ManagedBy` `dispatcher`). The Jobs page and the
-alerts read every collector job from this table; a `cron` row (a rollback to the host
-crontab, which has no job lines since 2026-10-21) still shows, but nothing dispatches
-it. A backend watcher has `ManagedBy` `worker` and an
+dispatcher (worker) turns its slots into `job_dispatch` rows and the collector's agent of
+that group (ECS service `agent-<group>`) claims them (`ManagedBy` `dispatcher`). The Jobs page
+and the alerts read every collector job from this table; a `cron` row (a value left from the
+old host's crontab) still shows, but nothing dispatches it. A backend watcher has `ManagedBy` `worker` and an
 `IntervalMinutes` instead: before every cycle it calls
 `WatcherSchedule.WaitForNextRunAsync`, which reads its row once a minute and returns when
 the row is enabled and the interval has passed since the last cycle ended. The first read
@@ -460,7 +464,8 @@ next cycle and a "resolved" message goes only where the "opened" one went. Queue
 come from a passive declare (plain AMQP, works on Amazon MQ). The monitor also sends
 `CATO/WorkerHeartbeat` to CloudWatch; the alarm `cato-worker-heartbeat`
 (`infra/phase1`) e-mails after five silent minutes. Everything is off unless
-`ALERTS_ENABLED=true` in `.env`; `POST /api/alerts/test` sends one message to every
+`Alerts:Enabled` is true (ECS: `Alerts__Enabled`, `Alerts__HeartbeatEnabled`, the topic and
+the webhook secret id in `backend_env`, `infra/phase2/services.tf`); `POST /api/alerts/test` sends one message to every
 channel and `GET /api/alerts` lists incidents. A collector run reports
 `CATO_DISPATCH_ID` as `job_run.DispatchId`.
 
@@ -469,10 +474,12 @@ channel and `GET /api/alerts` lists incidents. A collector run reports
 Every non-GET request through Caddy (`https://catoptricgames.duckdns.org/api/...`) needs
 the admin password, user `cato` (Caddy `basic_auth`; since Step D3 Caddy runs on the ECS edge
 node and reads the hash from the secret `cato/caddy/admin-hash`; set it with
-`scripts/set-admin-password.sh`, which also restarts the caddy service). Reads stay open. The API port 5039 is bound to `127.0.0.1` only: the
-collector's jobs and agents call `localhost:5039` directly, OGT calls `api:8080` on the
-Docker network, and people go through Caddy. Remember that the frontend's paths are
-`/api/api/...` (Caddy strips the first `/api`).
+`scripts/set-admin-password.sh`, which also restarts the caddy service). Reads stay open. The API
+has no public port: the collector agents call `http://api.cato.internal:8080` (Cloud Map,
+`CATO_API_BASE_URL`), OGT calls the same name (`Cato__BaseUrl`), and people go through Caddy
+on the edge node over Tailscale (`catoptricgames.duckdns.org` → the edge node's tailnet IP
+100.82.132.63). Remember that the frontend's paths are `/api/api/...` (Caddy strips the first
+`/api`).
 
 `GET /api/credentials/steamworks` shows the Steamworks login of the collector's jobs from
 the secret store: the masked account, the refresh token's expiry and days left, and the
@@ -483,16 +490,40 @@ lifetime over a week, not expired, a warning for a second account in the paste) 
 writes `cato/steamworks/refresh`. No endpoint returns a cookie, and the log has only the
 masked account.
 
-**AWS foundation for the ECS split:** `infra/phase2/` (Terraform, not applied yet; `README.md` has
-the apply order, the cost and the Phase 3 prerequisites; `deploy.sh` builds, pushes, migrates and
-rolls the services).
+### Deploying and the AWS layout
+
+Everything runs in eu-central-1 since 2026-10-23 (Terraform `infra/phase2/`, `infra/rds/`,
+`infra/phase1/`; the old EC2 host was terminated on 2026-10-28):
+
+- ECS cluster `cato`, Fargate: `api`, `worker`, `frontend`, `ogt-api`, `ogt-frontend`; the job
+  agents `agent-light` and `agent-events` on `FARGATE_SPOT`.
+- EC2 edge node `cato-edge` (t3.large, ASG min = max = 1, Elastic IP 63.176.34.199): `caddy`
+  (host network, the only entry point), `seq`, `agent-steamworks`, `agent-steamdb`; it is the
+  Tailscale subnet router for 172.31.0.0/16.
+- Amazon MQ (RabbitMQ 4.3, `mq.m7g.medium`), ElastiCache Valkey, RDS `db.t4g.medium`, Secrets
+  Manager, Cloud Map `cato.internal`, CloudWatch Logs `/cato/*`.
+
+Deploy only with the per-image scripts in `infra/phase2/`; each builds one image under its
+repo's short commit, applies the **whole** Terraform config of this checkout and records the tag
+in `images.auto.tfvars` (commit that file after the deploy):
+
+| Script | Rolls |
+|---|---|
+| `deploy-backend.sh` | `cato-backend`: runs `cato-migrate`, then `api` and `worker` |
+| `deploy-frontend.sh` | `cato-frontend` |
+| `deploy-collector.sh` | `cato-collector`: the four agents |
+| `deploy-ogt.sh` | `ogt-api`, `ogt-frontend` (outside 14:00-15:00 UTC) |
+
+Never run `deploy.sh`: it builds every image, OGT from a sibling checkout. Because the scripts
+apply the whole config, merge a change's branch into `main` before deploying, and `git fetch`
+first: another session deploys from this repo too, and an old checkout rolls its changes back.
 
 ## Configuration
 
 Settings are in `src/Cato.API/appsettings.json`. Key sections: `ConnectionStrings:DefaultConnection`, `RabbitMQ`, `SteamKit`, `Ingestion:DataPath`.
 
-**Secrets are not in appsettings.** With `Secrets:Backend = aws` (`SECRETS_BACKEND=aws` in the
-server's `.env`) the API reads the Secrets Manager secret `cato/backend/config` at start: a
+**Secrets are not in appsettings.** With `Secrets:Backend = aws` (`Secrets__Backend` in the ECS
+task env) the API reads the Secrets Manager secret `cato/backend/config` at start: a
 JSON object of configuration keys (`ConnectionStrings:DefaultConnection`,
 `SteamKit:Username`, `SteamKit:Password`, `SteamWebApi:ApiKey`), added last so it wins over
 appsettings and the environment; the log names the keys, never the values. The SteamKit
@@ -500,21 +531,21 @@ refresh token is the rotating secret `cato/steam/steamkit-auth`. For local devel
 the Steam account with `dotnet user-secrets` or `SteamKit__Username` / `SteamKit__Password`.
 The Steam password was in git history until 2026-10-21; rotate it.
 
-The other containers' secrets (Caddy's DuckDNS token, Seq's first-run password, OGT's
-database login and invite code) are the secret `cato/server/compose-env`, a JSON object
-`{service: {NAME: value}}`. `cato-compose-secrets.service` (`infra/phase1/systemd`) runs
-`scripts/compose-secrets.py` at boot, which writes `/run/cato/<service>.env` (tmpfs, mode
-600); compose reads them with `env_file`. After a rotation: `sudo systemctl restart
-cato-compose-secrets`, then recreate that service. The backend `.env` holds no secret.
+ECS injects the other containers' secrets at task start (`infra/phase2/secrets_iam.tf`): flat
+secrets `cato/caddy/duckdns-token`, `cato/caddy/admin-hash`, `cato/seq/admin-password`, the JSON
+secrets `cato/ogt/config` (OGT), `cato/mq/app-user` and `cato/cache/connection` (broker and Valkey
+addresses); each task role reads only its own. After a rotation, force a new deployment of the
+service that reads it. `cato/server/compose-env` and `cato-compose-secrets.service` belonged to
+the old host.
 
-The container runs as `Production` (Dockerfile and compose); `appsettings.Development.json`
+The container runs as `Production` (Dockerfile); `appsettings.Development.json`
 holds only local-development values. Other settings:
 
-| Key | Default | Server (compose) |
+| Key | Default | ECS |
 |---|---|---|
 | `Cors:AllowedOrigins` | none (Development: `localhost:5173`, `localhost:3000`) | the site origin; the frontend calls its own origin anyway |
-| `Seq:ServerUrl` | none, so no Seq sink (Development: `localhost:5341`) | `http://seq:80` |
-| `Swagger:Enabled` | false (Development: true) | true |
+| `Seq:ServerUrl` | none, so no Seq sink (Development: `localhost:5341`) | `http://seq.cato.internal:5341` |
+| `Swagger:Enabled` | false (Development: true) | true on `api` |
 | `Database:MaxPoolSize` | per role: all 60, api 30, worker 40, migrate 5 | the role default |
 
 Scope and start-up DI validation stay on in Production (`UseDefaultServiceProvider`). The
