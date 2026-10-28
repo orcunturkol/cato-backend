@@ -73,6 +73,14 @@ Some older services (`GameService`, `GameDataService`, `IngestionService`, `Stea
   is Amazon MQ (RabbitMQ 4.3, `max_message_size` 128 MiB; its 512 KiB default refused
   follower batches) and `RabbitMQ__Uri` comes from the secret `cato/mq/app-user` (key `uri`).
 
+  **Amazon MQ's queues are quorum queues** (its vhost default), and a quorum queue takes a
+  delivery back when it stays unacked past `consumer_timeout` (30 min) and cancels the
+  consumer. On 2026-10-27 one sale message took 8 h; after its timeout `cato-ingestion` sat
+  for 13 h with a consumer that got nothing. The consumer service now subscribes again after
+  such a cancel (once the running handler ends; a cancel followed by a connection recovery,
+  as in a broker restart, is left to the recovery). The timed-out message may be handled a
+  second time, so handlers must stay idempotent. Keep handlers far below 30 minutes.
+
   **Redis writes belong after `SaveChangesAsync`, never inside a transaction** (`GameService.cs`, `SteamGameEnrichmentService.cs`). This is why `game.analyzed` has its own queue rather than riding the batch path — `BatchIngestionDispatcher` runs every item handler inside one transaction, and a Redis write there would not roll back with it.
 - **Steam Integration**: `SteamApiService` (HTTP client for Steam Web API) and `SteamKitService` (SteamKit2 for PICS change monitoring via `SteamPicsWatcherService` background service).
   - **SteamKit Game Discovery**: `SteamPicsWatcherService` polls Steam's PICS change feed via `PICSGetChangesSince`, which returns all AppIDs with any metadata change since the last known change number (persisted in `worker_state`, key of the PICS watcher; the old `pics_change_number.txt` is

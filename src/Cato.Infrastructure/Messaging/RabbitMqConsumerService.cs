@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Security;
 using System.Text;
 using Microsoft.Extensions.DependencyInjection;
@@ -36,6 +37,12 @@ public class RabbitMqConsumerService : BackgroundService
     private readonly IServiceProvider _serviceProvider;
     private readonly RabbitMqSettings _settings;
     private readonly ILogger<RabbitMqConsumerService> _logger;
+    private readonly ConcurrentBag<IChannel> _channels = [];
+
+    private int _recoveries;
+
+    /// <summary>A broker shutdown cancels consumers too; by then the connection's recovery has restored them.</summary>
+    internal static TimeSpan ResubscribeDelay { get; set; } = TimeSpan.FromSeconds(5);
 
     public RabbitMqConsumerService(
         IServiceProvider serviceProvider,
@@ -97,8 +104,12 @@ public class RabbitMqConsumerService : BackgroundService
         }
 
         if (connection is null) return;
+        connection.RecoverySucceededAsync += (_, _) =>
+        {
+            Interlocked.Increment(ref _recoveries);
+            return Task.CompletedTask;
+        };
 
-        var channels = new List<IChannel>();
         try
         {
             await using (var setup = await connection.CreateChannelAsync(cancellationToken: stoppingToken))
@@ -107,10 +118,10 @@ public class RabbitMqConsumerService : BackgroundService
                 await setup.CloseAsync(stoppingToken);
             }
 
-            channels.Add(await ConsumeAsync(connection, _settings.QueueName, DispatchTarget.Legacy, stoppingToken));
+            await ConsumeAsync(connection, _settings.QueueName, DispatchTarget.Legacy, stoppingToken);
             foreach (var route in BatchQueues.For(_settings))
-                channels.Add(await ConsumeAsync(connection, route.Queue, DispatchTarget.Batch, stoppingToken));
-            channels.Add(await ConsumeAsync(connection, _settings.GameAnalyzedQueue, DispatchTarget.GameAnalyzed, stoppingToken));
+                await ConsumeAsync(connection, route.Queue, DispatchTarget.Batch, stoppingToken);
+            await ConsumeAsync(connection, _settings.GameAnalyzedQueue, DispatchTarget.GameAnalyzed, stoppingToken);
 
             _logger.LogInformation(
                 "Listening on queues '{Legacy}' (single), {Batch} (batch) and '{Analyzed}' (game.analyzed), one channel each; DLX='{DLX}'",
@@ -135,7 +146,7 @@ public class RabbitMqConsumerService : BackgroundService
                 _logger.LogWarning(ex, "RabbitMQ connection did not close cleanly");
             }
 
-            foreach (var channel in channels)
+            foreach (var channel in _channels)
                 await channel.DisposeAsync();
             await connection.DisposeAsync();
         }
@@ -241,7 +252,7 @@ public class RabbitMqConsumerService : BackgroundService
     /// Opens a channel for one queue and starts its consumer. The client runs a channel's
     /// handlers one at a time, so on one shared channel a slow handler stalled every queue.
     /// </summary>
-    private async Task<IChannel> ConsumeAsync(
+    private async Task ConsumeAsync(
         IConnection connection, string queue, DispatchTarget target, CancellationToken stoppingToken)
     {
         var channel = await connection.CreateChannelAsync(
@@ -250,19 +261,80 @@ public class RabbitMqConsumerService : BackgroundService
                 publisherConfirmationTrackingEnabled: false,
                 consumerDispatchConcurrency: 1),
             stoppingToken);
+        _channels.Add(channel);
 
         await channel.BasicQosAsync(prefetchSize: 0, prefetchCount: 1, global: false, cancellationToken: stoppingToken);
+        await SubscribeAsync(connection, channel, queue, target, stoppingToken);
+    }
 
+    /// <summary>
+    /// Starts a consumer on the channel. A RabbitMQ 4 quorum queue (Amazon MQ's default) takes
+    /// a delivery back when it stays unacked past consumer_timeout (Amazon MQ: 30 min) and
+    /// cancels the consumer; nothing reached that queue again until a restart (2026-10-27:
+    /// 13 h behind one 8-hour message). After such a cancel the queue gets a new consumer.
+    /// </summary>
+    private async Task SubscribeAsync(
+        IConnection connection, IChannel channel, string queue, DispatchTarget target, CancellationToken stoppingToken)
+    {
+        // A broker shutdown cancels consumers too, and the connection's recovery restores them:
+        // only a cancel with no recovery since this subscription needs a new consumer.
+        var recoveries = Volatile.Read(ref _recoveries);
         var consumer = new AsyncEventingBasicConsumer(channel);
         consumer.ReceivedAsync += (_, ea) => HandleAsync(channel, ea, target, stoppingToken);
+        consumer.UnregisteredAsync += (_, ea) =>
+        {
+            if (stoppingToken.IsCancellationRequested) return Task.CompletedTask;
+            // Not inline: this runs on the channel's dispatcher, which the new consumer needs.
+            _ = Task.Run(() => ResubscribeAsync(connection, channel, queue, target, ea.ConsumerTags, recoveries, stoppingToken),
+                CancellationToken.None);
+            return Task.CompletedTask;
+        };
 
         await channel.BasicConsumeAsync(
             queue: queue,
             autoAck: false,
             consumer: consumer,
             cancellationToken: stoppingToken);
+    }
 
-        return channel;
+    private async Task ResubscribeAsync(
+        IConnection connection, IChannel channel, string queue, DispatchTarget target,
+        string[] cancelledTags, int recoveries, CancellationToken stoppingToken)
+    {
+        try
+        {
+            await Task.Delay(ResubscribeDelay, stoppingToken);
+            if (!connection.IsOpen || !channel.IsOpen || Volatile.Read(ref _recoveries) != recoveries)
+                return;
+
+            _logger.LogWarning(
+                "The broker cancelled the consumer of {Queue} (a delivery held past consumer_timeout); subscribing again", queue);
+            // The queue may still list the timed-out consumer, which gets nothing: try to drop it.
+            foreach (var tag in cancelledTags)
+            {
+                try
+                {
+                    using var limit = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+                    limit.CancelAfter(TimeSpan.FromSeconds(5));
+                    await channel.BasicCancelAsync(tag, noWait: false, limit.Token);
+                }
+                catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+                {
+                    _logger.LogDebug(ex, "Cancelling the old consumer {Tag} of {Queue} failed", tag, queue);
+                }
+            }
+
+            // The same channel keeps one handler at a time.
+            await SubscribeAsync(connection, channel, queue, target, stoppingToken);
+            _logger.LogInformation("Consuming {Queue} again", queue);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+        {
+            _logger.LogError(ex, "Could not subscribe to {Queue} again; it has no consumer until the worker restarts", queue);
+        }
     }
 
     internal async Task HandleAsync(

@@ -19,18 +19,26 @@ namespace Cato.Infrastructure.Tests.Messaging;
 /// CATO_RABBITMQ_TEST_CONTAINER=cato-rmq-test dotnet test
 /// </code>
 /// The restart test also needs <c>CATO_RABBITMQ_TEST_CONTAINER</c>: it runs <c>docker restart</c>.
+/// The consumer-timeout test needs a RabbitMQ 4 broker with quorum queues and a short
+/// <c>consumer_timeout</c>, like Amazon MQ: start it with
+/// <c>-e RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS="-rabbit consumer_timeout 15000"</c>, run
+/// <c>rabbitmqctl update_vhost_metadata / --default-queue-type quorum</c>, and set
+/// <c>CATO_RABBITMQ_TEST_CONSUMER_TIMEOUT_SECONDS=15</c>.
 /// </summary>
 public sealed class RabbitMqFactAttribute : FactAttribute
 {
     public const string UriVariable = "CATO_RABBITMQ_TEST_URI";
     public const string ContainerVariable = "CATO_RABBITMQ_TEST_CONTAINER";
+    public const string ConsumerTimeoutVariable = "CATO_RABBITMQ_TEST_CONSUMER_TIMEOUT_SECONDS";
 
-    public RabbitMqFactAttribute(bool restartsBroker = false)
+    public RabbitMqFactAttribute(bool restartsBroker = false, bool shortConsumerTimeout = false)
     {
         if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(UriVariable)))
             Skip = $"Set {UriVariable} to a disposable RabbitMQ to run this test.";
         else if (restartsBroker && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(ContainerVariable)))
             Skip = $"Set {ContainerVariable} to the broker's docker container to run this test.";
+        else if (shortConsumerTimeout && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(ConsumerTimeoutVariable)))
+            Skip = $"Set {ConsumerTimeoutVariable} to the broker's consumer_timeout (a few seconds) to run this test.";
     }
 }
 
@@ -148,6 +156,50 @@ public sealed class RabbitMqConsumerIntegrationTests(ITestOutputHelper output) :
         Log("the in-flight message is back in its queue with redelivered=true; the DLQ holds only the control message");
     }
 
+    [RabbitMqFact(shortConsumerTimeout: true)]
+    public async Task A_consumer_the_broker_cancels_for_a_slow_message_consumes_again()
+    {
+        // RabbitMQ 4 quorum queues take a delivery back after consumer_timeout and cancel the
+        // consumer (Amazon MQ: 30 min). Before the fix the queue then stood still until a restart.
+        var timeout = TimeSpan.FromSeconds(int.Parse(Environment.GetEnvironmentVariable(RabbitMqFactAttribute.ConsumerTimeoutVariable)!));
+        var seen = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        var slowStarted = NewSignal();
+
+        await StartServiceAsync(
+            legacy: async (body, ct) =>
+            {
+                seen.Enqueue(body);
+                if (body == "slow" && seen.Count == 1)
+                {
+                    slowStarted.TrySetResult();
+                    // Longer than the timeout plus the broker's once-a-minute check.
+                    await Task.Delay(timeout + TimeSpan.FromSeconds(75), ct);
+                }
+            },
+            batch: Ok,
+            analyzed: Ok);
+
+        await PublishAsync("ingestion.test", "slow");
+        await slowStarted.Task.WaitAsync(Wait);
+        await PublishAsync("ingestion.test", "next-1");
+        await PublishAsync("ingestion.test", "next-2");
+        Log("slow is in its handler; next-1 and next-2 wait");
+
+        await WaitUntilAsync(() => Task.FromResult(seen.Contains("next-2")), "next-2 handled after the slow message",
+            timeout + TimeSpan.FromSeconds(150));
+        Log($"handled in order: {string.Join(", ", seen)}");
+        // The queue took "slow" back at the timeout; whether the late ack still settles it depends
+        // on timing (in production it came back hours later). Handlers are idempotent either way.
+        var order = seen.Where(b => b != "slow").ToArray();
+        Assert.Equal(["next-1", "next-2"], order);
+        Assert.InRange(seen.Count(b => b == "slow"), 1, 2);
+        await WaitUntilAsync(async () => await MessageCountAsync(_settings.QueueName) == 0, "the legacy queue empty");
+
+        // A new message still reaches the queue's new consumer.
+        await PublishAsync("ingestion.test", "next-3");
+        await WaitUntilAsync(() => Task.FromResult(seen.Contains("next-3")), "next-3 handled");
+    }
+
     [RabbitMqFact(restartsBroker: true)]
     public async Task After_a_broker_restart_every_queue_is_consumed_again_without_a_service_restart()
     {
@@ -192,6 +244,16 @@ public sealed class RabbitMqConsumerIntegrationTests(ITestOutputHelper output) :
         await WaitUntilAsync(async () => await MessageCountAsync(_settings.QueueNameV2) == 0, "the batch queue drained");
         Assert.Equal(0u, await MessageCountAsync(_settings.DeadLetterQueue));
         Log($"handled in order: {string.Join(", ", seen)}; DLQ empty");
+
+        // The restart cancelled every consumer; recovery restored them, so no second one may appear.
+        await Task.Delay(RabbitMqConsumerService.ResubscribeDelay + TimeSpan.FromSeconds(3));
+        await using var connection = await ConnectAsync();
+        foreach (var queue in AllConsumedQueues)
+        {
+            await using var channel = await connection.CreateChannelAsync();
+            Assert.Equal(1u, await channel.ConsumerCountAsync(queue));
+        }
+        Log("exactly one consumer on every queue");
     }
 
     [RabbitMqFact]
