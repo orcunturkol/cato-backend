@@ -775,6 +775,7 @@ public class IngestionService : IIngestionService
 
                         if (eventEl.TryGetProperty("games", out var gamesEl) && gamesEl.ValueKind == JsonValueKind.Array)
                         {
+                            var items = new List<(int AppId, string ItemType, JsonElement Game)>();
                             var seenAppIds = new HashSet<int>();
                             foreach (var gameEl in gamesEl.EnumerateArray())
                             {
@@ -783,22 +784,37 @@ public class IngestionService : IIngestionService
                                 // Only apps can become Game rows; bundles/packages stay in the raw file.
                                 if (!appId.HasValue || itemType is not ("game" or "demo") || !seenAppIds.Add(appId.Value))
                                     continue;
+                                items.Add((appId.Value, itemType, gameEl));
+                            }
 
-                                var game = await FindOrStubGameAsync(
-                                    appId.Value, Str(gameEl, "name"), ct);
+                            // One query for the event's games and one for its links. A sale event lists
+                            // hundreds of games: per-game queries took 8 h for one sale on 2026-10-27.
+                            var appIds = items.Select(i => i.AppId).ToList();
+                            var gameIds = await _db.Games.AsNoTracking()
+                                .Where(g => appIds.Contains(g.AppId))
+                                .Select(g => new { g.AppId, g.Id })
+                                .ToDictionaryAsync(g => g.AppId, g => g.Id, ct);
+                            foreach (var item in items.Where(i => !gameIds.ContainsKey(i.AppId)))
+                                gameIds[item.AppId] = (await FindOrStubGameAsync(item.AppId, Str(item.Game, "name"), ct)).Id;
 
-                                var link = await _db.SteamSpecialEventGames
-                                    .FirstOrDefaultAsync(l => l.SteamSpecialEventId == ev.Id && l.GameId == game.Id, ct);
-                                if (link is null)
+                            var links = await _db.SteamSpecialEventGames
+                                .Where(l => l.SteamSpecialEventId == ev.Id)
+                                .ToDictionaryAsync(l => l.GameId, ct);
+
+                            foreach (var (appId, itemType, gameEl) in items)
+                            {
+                                var gameId = gameIds[appId];
+                                if (!links.TryGetValue(gameId, out var link))
                                 {
                                     link = new SteamSpecialEventGame
                                     {
                                         Id = Guid.NewGuid(),
                                         SteamSpecialEventId = ev.Id,
-                                        GameId = game.Id,
+                                        GameId = gameId,
                                         FirstSeenAt = now
                                     };
                                     _db.SteamSpecialEventGames.Add(link);
+                                    links[gameId] = link;
                                     inserted++;
                                 }
                                 else
@@ -816,6 +832,9 @@ public class IngestionService : IIngestionService
                         }
 
                         await _db.SaveChangesAsync(ct);
+                        // The event is saved: forget its rows, or every later save checks them all again.
+                        _db.ChangeTracker.Clear();
+                        _db.IngestionLogs.Attach(log);
                     }
                     catch (Exception ex)
                     {
