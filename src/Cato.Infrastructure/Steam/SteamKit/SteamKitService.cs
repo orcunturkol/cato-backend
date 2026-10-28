@@ -303,6 +303,20 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
 
     private sealed record StoredSteamAuth(string AccountName, string RefreshToken, string? GuardData);
 
+    /// <summary>
+    /// A stop (the token) or a dropped Steam connection (SteamKit cancels its open jobs, and the
+    /// reconnect policy logs in again) interrupts a request: not an error. Both were logged at
+    /// ERR and counted as errors. True when the exception was one of them.
+    /// </summary>
+    private bool LogInterrupted(Exception ex, CancellationToken ct, string request)
+    {
+        if (ex is not (OperationCanceledException or TimeoutException)) return false;
+        if (!ct.IsCancellationRequested)
+            _logger.LogWarning("SteamKit2: {Request} was interrupted ({Reason}); the next poll tries again",
+                request, ex.GetType().Name);
+        return true;
+    }
+
     // ── ISteamKitService ──────────────────────────────────────────────────────
 
     public async Task<int?> GetCurrentPlayerCountAsync(int appId, CancellationToken ct = default)
@@ -328,7 +342,8 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "SteamKit2: Exception getting player count for AppId {AppId}", appId);
+            if (!LogInterrupted(ex, ct, $"player count for AppId {appId}"))
+                _logger.LogError(ex, "SteamKit2: Exception getting player count for AppId {AppId}", appId);
             return null;
         }
     }
@@ -358,7 +373,8 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "SteamKit2: Exception fetching PICS changes since {ChangeNumber}", sinceChangeNumber);
+            if (!LogInterrupted(ex, ct, $"PICS changes since {sinceChangeNumber}"))
+                _logger.LogError(ex, "SteamKit2: Exception fetching PICS changes since {ChangeNumber}", sinceChangeNumber);
             return (Array.Empty<uint>(), sinceChangeNumber);
         }
     }
@@ -398,7 +414,8 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "SteamKit2: Exception fetching app info for AppId {AppId}", appId);
+            if (!LogInterrupted(ex, ct, $"app info for AppId {appId}"))
+                _logger.LogError(ex, "SteamKit2: Exception fetching app info for AppId {AppId}", appId);
             return null;
         }
     }
@@ -425,7 +442,8 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "SteamKit2: Exception fetching raw app info for AppId {AppId}", appId);
+            if (!LogInterrupted(ex, ct, $"raw app info for AppId {appId}"))
+                _logger.LogError(ex, "SteamKit2: Exception fetching raw app info for AppId {AppId}", appId);
             return null;
         }
     }
@@ -464,7 +482,8 @@ public sealed class SteamKitService : ISteamKitService, IHostedService, IDisposa
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "SteamKit2: Exception fetching raw app info batch ({Count} apps)", batch.Length);
+                if (!LogInterrupted(ex, ct, $"raw app info batch ({batch.Length} apps)"))
+                    _logger.LogError(ex, "SteamKit2: Exception fetching raw app info batch ({Count} apps)", batch.Length);
             }
         }
 

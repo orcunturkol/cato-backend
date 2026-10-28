@@ -56,8 +56,21 @@ public class SteamGameEnrichmentService : ISteamGameEnrichmentService
             CultureInfo.InvariantCulture, DateTimeStyles.None, out date);
     }
 
+    /// <summary>
+    /// Two enrichments of one game (the PICS watcher and the enrichment watcher on the same new
+    /// stub) each replaced its genres and tags, and the second insert broke the unique index
+    /// (IX_game_genre_GameId_GenreName_Source, 4 times 2026-10-26..28). Every enrichment runs in
+    /// the worker process (the api role forwards it there), so a lock per game is enough: the
+    /// second one waits. Striped: games sharing a stripe wait too, but the shared Steam throttle
+    /// serialises the calls anyway.
+    /// </summary>
+    private static readonly SemaphoreSlim[] GameLocks =
+        Enumerable.Range(0, 64).Select(_ => new SemaphoreSlim(1, 1)).ToArray();
+
     public async Task<bool> EnrichGameAsync(Guid gameId, CancellationToken ct = default)
     {
+        var gameLock = GameLocks[(gameId.GetHashCode() & int.MaxValue) % GameLocks.Length];
+        await gameLock.WaitAsync(ct);
         try
         {
             return await EnrichGameCoreAsync(gameId, ct);
@@ -69,6 +82,10 @@ public class SteamGameEnrichmentService : ISteamGameEnrichmentService
             if (ex is DbUpdateException)
                 await CountFailureAsync(gameId, ct);
             throw;
+        }
+        finally
+        {
+            gameLock.Release();
         }
     }
 
