@@ -2,7 +2,7 @@
 # scripts rewrite this file (scripts/set_image_tag.py) after a successful apply: commit it.
 image_tag = "876ff4f"
 image_tags = {
-  "cato-backend"   = "360b48d"
+  "cato-backend"   = "3430a44"
   "cato-caddy"     = "42ac6d2"
   "cato-collector" = "95bb742"
   "cato-frontend"  = "cf1272d"
