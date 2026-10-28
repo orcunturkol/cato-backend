@@ -32,8 +32,6 @@ provider "aws" {
   }
 }
 
-data "aws_caller_identity" "current" {}
-
 # ── Alerts ──
 
 resource "aws_sns_topic" "alerts" {
@@ -109,63 +107,4 @@ resource "aws_cloudwatch_metric_alarm" "worker_heartbeat" {
       stat        = "SampleCount"
     }
   }
-}
-
-# ── Role for today's EC2 host ──
-# Every CATO process still runs on one host, so one role covers them. The ECS move
-# replaces it with one task role per service and agent, each limited to its own secrets.
-
-resource "aws_iam_role" "host" {
-  name        = "cato-ec2-host"
-  description = "Today's CATO EC2 host: alerts, secrets under cato/*, CATO metrics."
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "ec2.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
-}
-
-resource "aws_iam_role_policy" "host" {
-  name = "cato-ec2-host"
-  role = aws_iam_role.host.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid      = "PublishAlerts"
-        Effect   = "Allow"
-        Action   = "sns:Publish"
-        Resource = aws_sns_topic.alerts.arn
-      },
-      {
-        Sid    = "ReadAndRotateCatoSecrets"
-        Effect = "Allow"
-        Action = [
-          "secretsmanager:GetSecretValue",
-          "secretsmanager:DescribeSecret",
-          "secretsmanager:PutSecretValue",
-        ]
-        Resource = "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:cato/*"
-      },
-      {
-        Sid      = "HeartbeatMetrics"
-        Effect   = "Allow"
-        Action   = "cloudwatch:PutMetricData"
-        Resource = "*"
-        Condition = {
-          StringEquals = { "cloudwatch:namespace" = "CATO" }
-        }
-      },
-    ]
-  })
-}
-
-resource "aws_iam_instance_profile" "host" {
-  name = "cato-ec2-host"
-  role = aws_iam_role.host.name
 }
