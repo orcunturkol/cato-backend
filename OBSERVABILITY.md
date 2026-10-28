@@ -1,5 +1,11 @@
 # Observability: job-run tracking, logs, and alerting
 
+> Partly history. Alerts now come from the worker's `AlertMonitorService` (SNS e-mail and
+> Discord; see "Alerts" in `CLAUDE.md`), not from a Seq signal. Since 2026-10-23 Seq runs on the
+> ECS edge node (`http://seq.cato.internal:5341` inside the VPC, 14-day retention, admin login in
+> `cato/seq/admin-password`), and every service also logs to CloudWatch `/cato/<service>`. The
+> compose, `localhost:5039` and cron steps below describe the old host (terminated 2026-10-28).
+
 This system tracks **what every job did** (succeeded / failed / partial, with
 per-job counters), makes logs **searchable by time** in Seq, and **alerts to
 Discord** when a job fails. It spans both repos:

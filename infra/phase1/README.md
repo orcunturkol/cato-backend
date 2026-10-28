@@ -1,12 +1,16 @@
 # Phase 1 AWS stack
 
-The AWS parts that today's EC2 host needs before the move to ECS:
+The alerting parts, created for the old EC2 host and still used by the ECS worker
+(`infra/phase2`):
 
 | Resource | Purpose |
 |---|---|
 | SNS topic `cato-alerts` + email subscription | critical job alerts by email |
 | Secret `cato/alerts/discord-webhook` | Discord webhook for the same alerts |
-| IAM role and instance profile `cato-ec2-host` | lets the host publish alerts, read and rotate secrets under `cato/*`, and send `CATO` metrics |
+| CloudWatch alarm `cato-worker-heartbeat` | e-mails when the worker sends no `CATO/WorkerHeartbeat` for five minutes |
+
+The old host's IAM role and instance profile `cato-ec2-host` were removed after the host was
+terminated (2026-10-28); the ECS tasks have their own task roles in `infra/phase2`.
 
 State lives in S3 (`cato-terraform-state-657566734223`, key `phase1/terraform.tfstate`)
 with S3 native locking, so it does not depend on one machine.
@@ -37,9 +41,6 @@ arrive only after its link is clicked.
 
 ## Steps outside Terraform
 
-The compose services' secrets (`cato/server/compose-env`) reach the containers through
-`/run/cato/*.env`: install `systemd/cato-compose-secrets.service` once (see its header).
-
 Set the Discord webhook from a file, so the URL appears in no command line or state:
 
 ```sh
@@ -47,24 +48,9 @@ aws secretsmanager put-secret-value --region eu-central-1 \
   --secret-id cato/alerts/discord-webhook --secret-string file://webhook.txt
 ```
 
-Attach the role to the EC2 host (no restart), and allow one extra metadata hop so
-Docker containers on the host can use the role too:
-
-```sh
-aws ec2 associate-iam-instance-profile --region eu-central-1 \
-  --instance-id i-0b69760b8c49c78d1 --iam-instance-profile Name=cato-ec2-host
-aws ec2 modify-instance-metadata-options --region eu-central-1 \
-  --instance-id i-0b69760b8c49c78d1 --http-tokens required --http-put-response-hop-limit 2
-```
-
-Turn the alerts on in the backend's `.env` on the host (none of these are secrets),
-then recreate the API:
-
-```sh
-ALERTS_ENABLED=true
-ALERTS_SNS_TOPIC_ARN=<terraform output alerts_topic_arn>
-ALERTS_DISCORD_SECRET_ID=cato/alerts/discord-webhook
-```
+The ECS worker turns the alerts on through its task env (`Alerts__*` in `backend_env`,
+`infra/phase2/services.tf`), not a `.env` file. `systemd/cato-compose-secrets.service` and
+`cato/server/compose-env` belonged to the old host's compose services.
 
 **Apply the heartbeat alarm only after the worker sends the metric.** Until the first
 `CATO/WorkerHeartbeat` data point exists, "missing data = breaching" alarms at once.

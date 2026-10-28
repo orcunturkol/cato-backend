@@ -1,5 +1,8 @@
 # Step A runbook: backend and state to AWS
 
+> History: Step A ran on 2026-10-22 and the old host was terminated on 2026-10-28. Keep this
+> runbook for reference only; it describes host steps that no longer exist.
+
 One maintenance window, about an hour; nobody uses CATO until the split is done. Afterwards
 the worker, the API, the frontends and OGT run on ECS, Redis is Valkey and RabbitMQ is Amazon MQ.
 The four job agents stay on today's host until Steps B-D2 and point at the new endpoints.

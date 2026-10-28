@@ -1,5 +1,8 @@
 # CATO → RDS Cutover Runbook
 
+> History: the cutover is done, and the `catoptric-games` host was terminated on 2026-10-28.
+> Its Postgres rule on `cato-rds-sg` was removed; only the ECS groups (`infra/phase2`) reach RDS now.
+
 Run every step below yourself, on the `catoptric-games` EC2 host unless noted
 otherwise. Nothing in `infra/rds/` runs `terraform apply` or touches
 production automatically — that's intentional.

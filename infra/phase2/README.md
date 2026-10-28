@@ -1,24 +1,41 @@
 # Phase 2: AWS foundation (ECS)
 
-Written 2026-10-21 during the Phase 1 soak. **Not applied.** `terraform plan` (read-only):
-143 to add, 0 to change, 0 to destroy. Apply only after the Phase 1 gate passes and the user
-approves the cost below (plan "Phase 2", step 5).
+**Live.** Applied 2026-10-22; Phase 3 (Steps A-D3) moved every CATO and OGT service here by
+2026-10-23. The old EC2 host was decommissioned 2026-10-24..28: stopped, its disk and Elastic IP
+removed, its security group rules removed, the instance terminated. Its root disk survives only
+as the archived snapshot `snap-0992206efc37b10e3` (restore steps in the infra split plan).
+Deploy with the per-image scripts (below), never with `deploy.sh`.
 
 ## What it creates
 
 | Part | Resources |
 |---|---|
-| Network | 10 security groups (inbound only from other CATO groups), Postgres rules in `cato-rds-sg`, Cloud Map namespace `cato.internal` with `api`, `worker`, `frontend`, `ogt-api`, `ogt-frontend` and a `seq` record (today's host until Step D3) |
+| Network | 10 security groups (inbound only from other CATO groups), Postgres rules in `cato-rds-sg`, Cloud Map namespace `cato.internal` with `api`, `worker`, `frontend`, `ogt-api`, `ogt-frontend` and a `seq` record (the edge node's private IP; apply again after the node is replaced) |
 | Images and logs | ECR: `cato-backend`, `cato-frontend`, `cato-collector`, `cato-caddy`, `ogt-api`, `ogt-frontend` (newest 20 kept); log groups `/cato/<service>`, 30 days |
-| Secrets and IAM | empty flat secrets for ECS injection (`cato/edge/tailscale-auth-key`, `cato/caddy/duckdns-token`, `cato/caddy/admin-hash`, `cato/ogt/db-connection`, `cato/ogt/invite-code`, `cato/seq/admin-password`); generated `cato/mq/app-user` and `cato/cache/connection`; one task role per service with only its own secrets; the edge node role |
+| Secrets and IAM | flat secrets for ECS injection (`cato/edge/tailscale-auth-key`, `cato/caddy/duckdns-token`, `cato/caddy/admin-hash`, `cato/seq/admin-password`); `cato/ogt/config` (OGT, one JSON key per setting); generated `cato/mq/app-user` and `cato/cache/connection`; one task role per service with only its own secrets; the edge node role |
 | Data stores | Amazon MQ RabbitMQ 4.3, `mq.m7g.medium`, single instance, private; ElastiCache Valkey 8.1 `cache.t4g.micro`, TLS + auth token; maintenance Sunday 07:00 UTC |
 | Compute | ECS cluster `cato` (Fargate + the edge capacity provider); edge node: one `t3.large` in an ECS-managed group (min = max = 1), Elastic IP, Tailscale subnet router (`edge-user-data.sh`); 11 services and the `cato-migrate` task definition |
 
-Running after apply: `api` and `frontend` (desired 1). **At 0:** `ogt-api` and `ogt-frontend`
-(ogt-api runs `WatchlistCheckService`, which must not run twice against the OGT database), `worker`
-and the four agents (the ECS api uses the production database: an ECS agent would take
-dispatches from the host's agents, and a second worker is a second Steam login and dispatcher),
-`caddy` and `seq` (Step D3). Phase 3 raises them one step at a time (`desired_counts`).
+Running now: every service at 1 (`desired_counts`). Fargate: `api`, `worker`, `frontend`,
+`ogt-api`, `ogt-frontend`; `agent-light` and `agent-events` on `FARGATE_SPOT` (an agent stop
+queues its run once more). Edge node: `caddy` (host network), `seq`, `agent-steamworks`,
+`agent-steamdb`. Never more than one `worker` (two Steam logins, two dispatchers) or `ogt-api`
+(`WatchlistCheckService` must run once).
+
+## Deploying
+
+Each script builds one image under its repo's short commit, applies the **whole** config of this
+checkout and records the tag in `images.auto.tfvars`; commit that file afterwards. Merge your
+branch into `main` and `git fetch` before you deploy: another session deploys from this repo too.
+
+| Script | Rolls |
+|---|---|
+| `deploy-backend.sh` | `cato-backend`: `cato-migrate`, then `api` and `worker` |
+| `deploy-frontend.sh` | `cato-frontend` |
+| `deploy-collector.sh` | `cato-collector`: the four agents |
+| `deploy-ogt.sh` | `ogt-api`, `ogt-frontend` (outside 14:00-15:00 UTC) |
+
+`deploy.sh` builds every image, OGT from a sibling checkout: do not use it.
 
 ## Cost (eu-central-1, on-demand, AWS price list 2026-10-21; 730 h/month)
 
@@ -35,8 +52,11 @@ dispatches from the host's agents, and a second worker is a second Steam login a
 | Secrets Manager (8 new × $0.40), Route 53 zone, ECR, CloudWatch Logs | | ~$6 | ~$12 |
 | **Total** | | **~$280** | **~$387** |
 
-RDS (`db.t4g.medium` with storage and backups, ~$59) is extra. The old host was stopped on
-2026-10-24; its disk and Elastic IP were removed the same day (an AMI keeps the disk, ~$5).
+RDS (`db.t4g.medium` with storage and backups, ~$59) is extra. The old host is gone (stopped
+2026-10-24, terminated 2026-10-28); its archived root snapshot costs about $2 a month.
+
+The sections below are the history of the first apply and the cutover; they no longer describe
+work to do.
 
 ## Before `apply`
 
