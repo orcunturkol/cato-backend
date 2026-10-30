@@ -134,7 +134,14 @@ public class PlayerAchievementWatcherService : BackgroundService
                     case AchievementFetchStatus.Private: priv++; break;
                     case AchievementFetchStatus.NoStats: noStats++; break;
                     case AchievementFetchStatus.NotOwned: notOwned++; break;
-                    default: error++; break;
+                    default:
+                        // Unclassified: the text is the only clue (one pair failed hourly 2026-10-29
+                        // and nothing recorded what Steam said).
+                        _logger.LogWarning(
+                            "Player achievements: Steam error for AppId {AppId}, SteamId {SteamId}: {Error}",
+                            pair.AppId, pair.SteamId64, response.PlayerStats.Error);
+                        error++;
+                        break;
                 }
                 await db.SaveChangesAsync(ct);
                 continue;
