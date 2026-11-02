@@ -6,6 +6,6 @@ image_tags = {
   "cato-caddy"     = "42ac6d2"
   "cato-collector" = "95bb742"
   "cato-frontend"  = "cf1272d"
-  "ogt-api"        = "7e23217"
-  "ogt-frontend"   = "cc39351"
+  "ogt-api"        = "459bf12"
+  "ogt-frontend"   = "0269c71"
 }
