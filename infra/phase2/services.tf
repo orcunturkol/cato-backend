@@ -69,7 +69,8 @@ locals {
         Serilog__WriteTo__1__Args__serverUrl = "http://seq.${local.namespace}:5341"
       }
       secrets = { for k in ["ConnectionStrings__DefaultConnection", "Auth__InviteCode", "Notifications__DiscordWebhookUrl",
-      "Ogt__ScreenerEmails__0", "Ogt__PublicBaseUrl"] : k => "${aws_secretsmanager_secret.ogt_config.arn}:${k}::" }
+        "Ogt__ScreenerEmails__0", "Ogt__ReviewerEmails__0", "Ogt__ReviewerEmails__1", "Bible__DefaultAssignee",
+      "Ogt__PublicBaseUrl"] : k => "${aws_secretsmanager_secret.ogt_config.arn}:${k}::" }
       health = null, min_healthy = 100, max_percent = 200
     }
     "ogt-frontend" = {
