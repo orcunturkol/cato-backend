@@ -18,6 +18,14 @@ resource "aws_secretsmanager_secret" "flat" {
   recovery_window_in_days = 7
 }
 
+# WireGuard on the edge node as JSON: the server key pair and the devices (name, role, ip, public
+# and preshared key). Written by infra/phase2/wireguard-device.sh; the node reads it every minute.
+resource "aws_secretsmanager_secret" "wireguard" {
+  name                    = "cato/edge/wireguard"
+  description             = "WireGuard on the edge node: the server key pair and the devices. Written by infra/phase2/wireguard-device.sh."
+  recovery_window_in_days = 7
+}
+
 # Generated at apply: the broker's application login and the cache's auth token.
 resource "random_password" "mq" {
   length  = 32
@@ -200,6 +208,7 @@ resource "aws_iam_role_policy" "edge_boot" {
     Version = "2012-10-17"
     Statement = [
       { Effect = "Allow", Action = local.read, Resource = aws_secretsmanager_secret.flat["cato/edge/tailscale-auth-key"].arn },
+      { Effect = "Allow", Action = local.read, Resource = aws_secretsmanager_secret.wireguard.arn },
       { Effect = "Allow", Action = ["ec2:AssociateAddress", "ec2:DescribeAddresses"], Resource = "*" },
     ]
   })

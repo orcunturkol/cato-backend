@@ -485,8 +485,9 @@ node and reads the hash from the secret `cato/caddy/admin-hash`; set it with
 `scripts/set-admin-password.sh`, which also restarts the caddy service). Reads stay open. The API
 has no public port: the collector agents call `http://api.cato.internal:8080` (Cloud Map,
 `CATO_API_BASE_URL`), OGT calls the same name (`Cato__BaseUrl`), and people go through Caddy
-on the edge node over Tailscale (`catoptricgames.duckdns.org` → the edge node's tailnet IP
-100.82.132.63). Remember that the frontend's paths are `/api/api/...` (Caddy strips the first
+on the edge node over WireGuard (`*.catoptricgames.duckdns.org` → 10.99.0.1 on wg0; admin devices
+see CATO and OGT, team devices only OGT; `infra/phase2/README.md`) or, for admins, Tailscale
+(the tailnet IP 100.82.132.63). Remember that the frontend's paths are `/api/api/...` (Caddy strips the first
 `/api`).
 
 `GET /api/credentials/steamworks` shows the Steamworks login of the collector's jobs from
@@ -507,7 +508,8 @@ Everything runs in eu-central-1 since 2026-10-23 (Terraform `infra/phase2/`, `in
   agents `agent-light` and `agent-events` on `FARGATE_SPOT`.
 - EC2 edge node `cato-edge` (t3.large, ASG min = max = 1, Elastic IP 63.176.34.199): `caddy`
   (host network, the only entry point), `seq`, `agent-steamworks`, `agent-steamdb`; it is the
-  Tailscale subnet router for 172.31.0.0/16.
+  Tailscale subnet router for 172.31.0.0/16 and the WireGuard server (UDP 51820,
+  `infra/phase2/edge-wireguard.sh`; devices with `wireguard-device.sh`).
 - Amazon MQ (RabbitMQ 4.3, `mq.m7g.medium`), ElastiCache Valkey, RDS `db.t4g.medium`, Secrets
   Manager, Cloud Map `cato.internal`, CloudWatch Logs `/cato/*`.
 
@@ -521,6 +523,7 @@ in `images.auto.tfvars` (commit that file after the deploy):
 | `deploy-frontend.sh` | `cato-frontend` |
 | `deploy-collector.sh` | `cato-collector`: the four agents |
 | `deploy-ogt.sh` | `ogt-api`, `ogt-frontend` (outside 14:00-15:00 UTC) |
+| `deploy-caddy.sh` | `cato-caddy` (`Caddyfile.ecs`) |
 
 Never run `deploy.sh`: it builds every image, OGT from a sibling checkout. Because the scripts
 apply the whole config, merge a change's branch into `main` before deploying, and `git fetch`

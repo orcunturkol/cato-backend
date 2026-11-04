@@ -1,5 +1,6 @@
-# Security groups. Inbound only from other CATO groups; nothing from the internet. People
-# reach the services through Tailscale on the edge node (Caddy), never through an open port.
+# Security groups. Inbound only from other CATO groups; from the internet only WireGuard
+# (UDP 51820) on the edge node, which answers no packet without a device key. People reach the
+# services through WireGuard or Tailscale on the edge node (Caddy), never through an open TCP port.
 
 locals {
   security_groups = {
@@ -79,6 +80,16 @@ resource "aws_vpc_security_group_ingress_rule" "seq_on_edge" {
   to_port                      = 5341
   referenced_security_group_id = aws_security_group.this[each.key].id
   description                  = "Seq from ${each.key}"
+}
+
+# WireGuard on the edge node (edge-wireguard.sh): the only port open to the internet.
+resource "aws_vpc_security_group_ingress_rule" "wireguard" {
+  security_group_id = aws_security_group.this["edge"].id
+  ip_protocol       = "udp"
+  from_port         = 51820
+  to_port           = 51820
+  cidr_ipv4         = "0.0.0.0/0"
+  description       = "WireGuard"
 }
 
 resource "aws_vpc_security_group_ingress_rule" "rds" {
