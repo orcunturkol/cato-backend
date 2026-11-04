@@ -3,7 +3,7 @@
 image_tag = "876ff4f"
 image_tags = {
   "cato-backend"   = "75b266d"
-  "cato-caddy"     = "42ac6d2"
+  "cato-caddy"     = "858b2fe"
   "cato-collector" = "95bb742"
   "cato-frontend"  = "cf1272d"
   "ogt-api"        = "b7caafe"

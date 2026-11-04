@@ -11,7 +11,7 @@ EOF
 install -d -o 1000 -g 1000 /srv/cato/chrome-profile /srv/cato/steamdb-historical
 install -d /srv/cato/caddy-data /srv/cato/caddy-config /srv/cato/seq
 
-# SSH for people (`ssh catoptric`), over Tailscale only: the security group has no inbound rule.
+# SSH for people (`ssh catoptric`), over Tailscale or admin WireGuard: no TCP port is open.
 install -d -m 700 -o ec2-user -g ec2-user /home/ec2-user/.ssh
 echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFBMo/bTHJKFae5qce2pWdJ7b65anSpMPoKkCFZLBhbO catoptric-key' \
   >> /home/ec2-user/.ssh/authorized_keys
@@ -40,3 +40,11 @@ AUTHKEY=$(aws secretsmanager get-secret-value --region ${region} --secret-id ${t
   --query SecretString --output text)
 tailscale up --authkey="$AUTHKEY" --hostname=cato-edge --advertise-routes=${vpc_cidr} --accept-dns=false
 unset AUTHKEY
+
+# WireGuard: people reach Caddy on 10.99.0.1 (wg0); admins also reach the node and the VPC.
+# edge-wireguard.sh installs the packages and a timer that applies ${wireguard_secret} every minute.
+cat > /usr/local/sbin/cato-wireguard <<'WIREGUARD'
+${wireguard_script}
+WIREGUARD
+chmod 755 /usr/local/sbin/cato-wireguard
+/usr/local/sbin/cato-wireguard install ${region} ${wireguard_secret} ${vpc_cidr}
