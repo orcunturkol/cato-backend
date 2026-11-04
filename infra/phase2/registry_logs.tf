@@ -1,5 +1,5 @@
 resource "aws_ecr_repository" "this" {
-  for_each             = toset(["cato-backend", "cato-frontend", "cato-collector", "cato-caddy", "ogt-api", "ogt-frontend"])
+  for_each             = toset(["cato-backend", "cato-frontend", "cato-collector", "cato-caddy", "ogt-api", "ogt-frontend", "ogt-backup"])
   name                 = each.key
   image_tag_mutability = "MUTABLE"
 

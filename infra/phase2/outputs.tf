@@ -32,11 +32,16 @@ output "migrate_task_definition" {
 }
 
 output "service_security_groups" {
-  description = "For the deploy script's run-task of the migrate task"
-  value       = { migrate = aws_security_group.this["migrate"].id }
+  description = "For run-task of the migrate task (deploy script) and of the OGT backup (by hand)"
+  value       = { migrate = aws_security_group.this["migrate"].id, "ogt-api" = aws_security_group.this["ogt-api"].id }
 }
 
 output "subnet_ids" {
   description = "For the deploy script's run-task of the migrate task"
   value       = var.subnet_ids
+}
+
+output "ogt_backup_bucket" {
+  description = "The nightly OGT dumps (ogt/ogt-<UTC time>.dump, kept 35 days)"
+  value       = aws_s3_bucket.ogt_backups.bucket
 }
