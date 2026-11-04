@@ -2,21 +2,20 @@
 # Today's host mounts ./Caddyfile over it, so the host does not use this file.
 #
 # Listener: no bind directive, so Caddy listens on :443 on every interface of the edge node
-# (host network). Only WireGuard and the tailnet reach it: cato-edge-sg opens only UDP 51820
-# (WireGuard), so the Elastic IP and the private IP drop all other inbound traffic; WireGuard
-# traffic arrives on wg0 (10.99.0.1) and Tailscale traffic on tailscale0, both behind the
-# security group. Never add an inbound rule for 443 to cato-edge-sg.
+# (host network). Only WireGuard reaches it: cato-edge-sg opens only UDP 51820 (WireGuard), so
+# the Elastic IP and the private IP drop all other inbound traffic; WireGuard traffic arrives on
+# wg0 (10.99.0.1), behind the security group. Never add an inbound rule for 443 to cato-edge-sg.
 #
 # Who sees which site: Caddy checks the client address (edge-wireguard.sh sets the ranges and
-# WireGuard binds each address to one device key). CATO: the admin range 10.99.0.0/24 and the
-# tailnet. OGT: both WireGuard ranges (admins and the team, 10.99.1.0/24) and the tailnet.
-# Everyone else gets 403. The check sits first in a route block: at the top level Caddy runs
-# respond after handle, so a catch-all handle would answer first.
+# WireGuard binds each address to one device key). CATO: the admin range 10.99.0.0/24. OGT: both
+# WireGuard ranges (admins and the team, 10.99.1.0/24). Everyone else gets 403. The check sits
+# first in a route block: at the top level Caddy runs respond after handle, so a catch-all
+# handle would answer first.
 #
-# Upstreams: Cloud Map A records (*.cato.internal, TTL 10 s) through the VPC resolver
-# (the node runs tailscale up --accept-dns=false). Caddy looks the names up again every
-# 10 s, so it follows task IP changes. Keep the names in step with local.namespace and
-# aws_service_discovery_service in infra/phase2/network.tf.
+# Upstreams: Cloud Map A records (*.cato.internal, TTL 10 s) through the VPC resolver (the
+# node's /etc/resolv.conf; wg0's dnsmasq is only for the devices). Caddy looks the names up
+# again every 10 s, so it follows task IP changes. Keep the names in step with local.namespace
+# and aws_service_discovery_service in infra/phase2/network.tf.
 {
 	email {$ACME_EMAIL}
 	auto_https disable_redirects
@@ -27,8 +26,8 @@ catoptricgames.duckdns.org {
 		dns duckdns {$DUCKDNS_TOKEN}
 	}
 
-	# Admins only (WireGuard admin range and the tailnet); the team gets 403.
-	@outsider not remote_ip 10.99.0.0/24 100.64.0.0/10
+	# Admins only (WireGuard admin range); the team gets 403.
+	@outsider not remote_ip 10.99.0.0/24
 
 	route {
 		respond @outsider 403
@@ -71,8 +70,8 @@ ogt.catoptricgames.duckdns.org {
 		dns duckdns {$DUCKDNS_TOKEN}
 	}
 
-	# Admins and the team (both WireGuard ranges) and the tailnet.
-	@outsider not remote_ip 10.99.0.0/16 100.64.0.0/10
+	# Admins and the team (both WireGuard ranges).
+	@outsider not remote_ip 10.99.0.0/16
 
 	route {
 		respond @outsider 403

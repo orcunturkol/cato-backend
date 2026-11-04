@@ -8,10 +8,9 @@
 # the user approves), never from this state.
 resource "aws_secretsmanager_secret" "flat" {
   for_each = {
-    "cato/edge/tailscale-auth-key" = "Tagged, reusable Tailscale auth key of the edge node (no key expiry)."
-    "cato/caddy/duckdns-token"     = "DuckDNS token for Caddy's DNS-01 challenge (same value as cato/server/compose-env caddy/DUCKDNS_TOKEN)."
-    "cato/caddy/admin-hash"        = "Base64 of the bcrypt hash of the CATO admin password (user cato) for Caddy's basic_auth on writes. Same value as CATO_ADMIN_HASH in the host's .env (scripts/set-admin-password.sh), not in cato/server/compose-env."
-    "cato/seq/admin-password"      = "Seq first-run admin password on the edge node (same value as cato/server/compose-env seq/SEQ_FIRSTRUN_ADMINPASSWORD)."
+    "cato/caddy/duckdns-token" = "DuckDNS token for Caddy's DNS-01 challenge (same value as cato/server/compose-env caddy/DUCKDNS_TOKEN)."
+    "cato/caddy/admin-hash"    = "Base64 of the bcrypt hash of the CATO admin password (user cato) for Caddy's basic_auth on writes. Same value as CATO_ADMIN_HASH in the host's .env (scripts/set-admin-password.sh), not in cato/server/compose-env."
+    "cato/seq/admin-password"  = "Seq first-run admin password on the edge node (same value as cato/server/compose-env seq/SEQ_FIRSTRUN_ADMINPASSWORD)."
   }
   name                    = each.key
   description             = each.value
@@ -195,7 +194,7 @@ resource "aws_iam_role" "edge" {
 resource "aws_iam_role_policy_attachment" "edge" {
   for_each = toset([
     "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role",
-    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore", # shell without Tailscale (drills)
+    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore", # emergency shell without WireGuard
   ])
   role       = aws_iam_role.edge.name
   policy_arn = each.value
@@ -207,7 +206,6 @@ resource "aws_iam_role_policy" "edge_boot" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      { Effect = "Allow", Action = local.read, Resource = aws_secretsmanager_secret.flat["cato/edge/tailscale-auth-key"].arn },
       { Effect = "Allow", Action = local.read, Resource = aws_secretsmanager_secret.wireguard.arn },
       { Effect = "Allow", Action = ["ec2:AssociateAddress", "ec2:DescribeAddresses"], Resource = "*" },
     ]

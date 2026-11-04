@@ -101,7 +101,7 @@ locals {
     }
     caddy = {
       # The image carries Caddyfile.ecs (*.cato.internal upstreams, :443 on all interfaces;
-      # only the tailnet reaches it). The task does not start until both secrets have a value.
+      # only WireGuard reaches it). The task does not start until both secrets have a value.
       image = "cato-caddy", cpu = 256, memory = 256, port = null, edge = true
       env   = { ACME_EMAIL = "ofturkol@proton.me" }
       secrets = {
@@ -131,7 +131,7 @@ locals {
     seq = [{ volume = "seq", host = "/srv/cato/seq", path = "/data" }]
   }
 
-  # Caddy shares the node's network (it listens on the Tailscale IP); Seq maps 5341 -> 80.
+  # Caddy shares the node's network (it listens on wg0's 10.99.0.1); Seq maps 5341 -> 80.
   network_mode = { caddy = "host", seq = "bridge", "agent-steamdb" = "bridge", "agent-steamworks" = "bridge" }
 }
 

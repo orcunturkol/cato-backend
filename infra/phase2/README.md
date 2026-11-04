@@ -12,10 +12,10 @@ Deploy with the per-image scripts (below), never with `deploy.sh`.
 |---|---|
 | Network | 10 security groups (inbound only from other CATO groups; from the internet only WireGuard, UDP 51820 on the edge node), Postgres rules in `cato-rds-sg`, Cloud Map namespace `cato.internal` with `api`, `worker`, `frontend`, `ogt-api`, `ogt-frontend` and a `seq` record (the edge node's private IP; apply again after the node is replaced) |
 | Images and logs | ECR: `cato-backend`, `cato-frontend`, `cato-collector`, `cato-caddy`, `ogt-api`, `ogt-frontend`, `ogt-backup` (newest 20 kept); log groups `/cato/<service>`, 30 days |
-| Secrets and IAM | flat secrets for ECS injection (`cato/edge/tailscale-auth-key`, `cato/caddy/duckdns-token`, `cato/caddy/admin-hash`, `cato/seq/admin-password`); `cato/ogt/config` (OGT, one JSON key per setting); `cato/edge/wireguard` (the WireGuard server key pair and devices, written by `wireguard-device.sh`); generated `cato/mq/app-user` and `cato/cache/connection`; one task role per service with only its own secrets; the edge node role |
+| Secrets and IAM | flat secrets for ECS injection (`cato/caddy/duckdns-token`, `cato/caddy/admin-hash`, `cato/seq/admin-password`); `cato/ogt/config` (OGT, one JSON key per setting); `cato/edge/wireguard` (the WireGuard server key pair and devices, written by `wireguard-device.sh`); generated `cato/mq/app-user` and `cato/cache/connection`; one task role per service with only its own secrets; the edge node role |
 | Data stores | Amazon MQ RabbitMQ 4.3, `mq.m7g.medium`, single instance, private; ElastiCache Valkey 8.1 `cache.t4g.micro`, TLS + auth token; maintenance Sunday 07:00 UTC |
 | OGT backup and alarms | S3 bucket `cato-ogt-backups-<account>` (private, SSE-S3, dumps deleted after 35 days); task `cato-ogt-backup` (`pg_dump` of the OGT database only) started at 01:00 UTC by the EventBridge Scheduler schedule `cato-ogt-backup`; alarms `cato-ogt-backup-missing` and `cato-ogt-api-down` e-mail `cato-alerts` (`ogt_backup.tf`, `alarms.tf`) |
-| Compute | ECS cluster `cato` (Fargate + the edge capacity provider); edge node: one `t3.large` in an ECS-managed group (min = max = 1), Elastic IP, Tailscale subnet router and WireGuard server (`edge-user-data.sh`, `edge-wireguard.sh`); 11 services and the `cato-migrate` task definition |
+| Compute | ECS cluster `cato` (Fargate + the edge capacity provider); edge node: one `t3.large` in an ECS-managed group (min = max = 1), Elastic IP, WireGuard server (`edge-user-data.sh`, `edge-wireguard.sh`), SSM for an emergency shell; 11 services and the `cato-migrate` task definition |
 
 Running now: every service at 1 (`desired_counts`). Fargate: `api`, `worker`, `frontend`,
 `ogt-api`, `ogt-frontend`; `agent-light` and `agent-events` on `FARGATE_SPOT` (an agent stop
@@ -73,8 +73,9 @@ connection string in `cato/ogt/config`) and start `ogt-api` again.
 ## People's access: WireGuard
 
 People reach Caddy through WireGuard on the edge node: `*.catoptricgames.duckdns.org` resolves to
-10.99.0.1 (wg0), and the devices connect to UDP 51820 on the Elastic IP. Tailscale stays as the
-second way in for admins (SSH, the VPC route). One key per device, in two ranges:
+10.99.0.1 (wg0), and the devices connect to UDP 51820 on the Elastic IP. Tailscale was removed
+on 2026-11-04; without WireGuard, the emergency shell is AWS SSM (`aws ssm send-command`). One key
+per device, in two ranges:
 
 | Role | Addresses | Reaches |
 |---|---|---|
@@ -99,8 +100,8 @@ with NetworkManager, send only the sites' names there after the import:
 `nmcli connection modify <name> ipv4.dns-search "~catoptricgames.duckdns.org"`.
 
 On the node, `cato-wireguard.timer` runs `/usr/local/sbin/cato-wireguard sync` every minute: it
-loads the firewall (nftables table `inet cato_wg`; its drops are final whatever Docker's and
-Tailscale's chains accept) and applies the secret to wg0. If the firewall does not load, wg0 goes
+loads the firewall (nftables table `inet cato_wg`; its drops are final whatever Docker's chains
+accept) and applies the secret to wg0. If the firewall does not load, wg0 goes
 down. `edge-user-data.sh` installs it on a new node; on the running node, once:
 
 ```bash
