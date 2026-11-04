@@ -90,7 +90,9 @@ infra/phase2/wireguard-device.sh list
 
 The person installs the WireGuard app and imports the file (phone: the QR code). Send each config
 privately; the device's private key exists only there. Device names live in the secret, never in
-this repo.
+this repo. Each config sets DNS 1.1.1.1 while the tunnel is on: many home routers drop DNS answers
+with a private address (10.99.0.1, rebind protection; seen on 2026-11-04), so the name would
+not resolve through them.
 
 On the node, `cato-wireguard.timer` runs `/usr/local/sbin/cato-wireguard sync` every minute: it
 loads the firewall (nftables table `inet cato_wg`; its drops are final whatever Docker's and
@@ -103,9 +105,9 @@ scp infra/phase2/edge-wireguard.sh catoptric:/tmp/ && ssh catoptric \
 ```
 
 Checks: `sudo wg show` and `journalctl -u cato-wireguard` on the node. A device that has the
-tunnel but cannot open the site: `nslookup ogt.catoptricgames.duckdns.org` must give 10.99.0.1;
-some home routers drop DNS answers with private addresses, so add `DNS = 1.1.1.1` to that device's
-`[Interface]`. Cost: the secret ($0.40) and ~43,000 reads a month (~$0.22).
+tunnel but cannot open the site: `nslookup ogt.catoptricgames.duckdns.org` must give 10.99.0.1,
+and the config must have the `DNS = 1.1.1.1, 1.0.0.1` line. Cost: the secret ($0.40) and ~43,000
+reads a month (~$0.22).
 
 ## Cost (eu-central-1, on-demand, AWS price list 2026-10-21; 730 h/month)
 

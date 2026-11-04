@@ -71,10 +71,13 @@ add() {
   psk=$(openssl rand -base64 32)
   mkdir -p "$DIR" && chmod 700 "$DIR"
   tmp=$(mktemp "$DIR/.new.XXXXXX")
+  # DNS: many home routers drop DNS answers with a private address (10.99.0.1, rebind
+  # protection), so the device asks Cloudflare while the tunnel is on.
   cat >"$tmp" <<EOF
 [Interface]
 PrivateKey = $priv
 Address = $ip/32
+DNS = 1.1.1.1, 1.0.0.1
 
 [Peer]
 PublicKey = $(jq -r .server_public_key <<<"$json")
