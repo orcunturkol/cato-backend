@@ -3,7 +3,7 @@ resource "aws_ecs_cluster" "cato" {
 }
 
 # ── Edge node: one EC2 instance in an ECS-managed group (min = max = 1) ──
-# Caddy (TLS edge for WireGuard and Tailscale), Seq, and the steamdb and steamworks agents
+# Caddy (TLS edge for WireGuard), Seq, and the steamdb and steamworks agents
 # (Chrome profile on the host; one fixed public IP for the Steamworks partner login).
 
 resource "aws_eip" "edge" {
@@ -40,7 +40,6 @@ resource "aws_launch_template" "edge" {
     cluster           = aws_ecs_cluster.cato.name
     region            = var.aws_region
     eip_allocation_id = aws_eip.edge.allocation_id
-    tailscale_secret  = aws_secretsmanager_secret.flat["cato/edge/tailscale-auth-key"].name
     vpc_cidr          = var.vpc_cidr
     wireguard_secret  = aws_secretsmanager_secret.wireguard.name
     wireguard_script  = file("${path.module}/edge-wireguard.sh")

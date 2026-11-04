@@ -13,8 +13,8 @@
 # The firewall trusts the source address because WireGuard takes from a peer only the address
 # in its AllowedIPs: one /32, built here from the secret's checked ip field, never copied.
 #
-# The firewall is its own nftables table. A drop there is final, whatever Docker's and
-# Tailscale's iptables chains accept, and their restarts cannot reorder it. Seq (bridge, host
+# The firewall is its own nftables table. A drop there is final, whatever Docker's iptables
+# chains accept, and Docker's restarts cannot reorder it. Seq (bridge, host
 # port 5341) arrives through Docker's DNAT, so it takes the forward path, not input: both chains
 # drop the team. The timer loads the table again every minute; if the load fails, wg0 goes down.
 set -euo pipefail

@@ -11,7 +11,8 @@ EOF
 install -d -o 1000 -g 1000 /srv/cato/chrome-profile /srv/cato/steamdb-historical
 install -d /srv/cato/caddy-data /srv/cato/caddy-config /srv/cato/seq
 
-# SSH for people (`ssh catoptric`), over Tailscale or admin WireGuard: no TCP port is open.
+# SSH for people (`ssh catoptric`), over admin WireGuard only: no TCP port is open. Emergency
+# shell without WireGuard: AWS SSM (the instance role has AmazonSSMManagedInstanceCore).
 install -d -m 700 -o ec2-user -g ec2-user /home/ec2-user/.ssh
 echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFBMo/bTHJKFae5qce2pWdJ7b65anSpMPoKkCFZLBhbO catoptric-key' \
   >> /home/ec2-user/.ssh/authorized_keys
@@ -26,20 +27,6 @@ TOKEN=$(curl -fsS -X PUT "$IMDS/api/token" -H "X-aws-ec2-metadata-token-ttl-seco
 INSTANCE_ID=$(curl -fsS -H "X-aws-ec2-metadata-token: $TOKEN" "$IMDS/meta-data/instance-id")
 aws ec2 associate-address --region ${region} --instance-id "$INSTANCE_ID" \
   --allocation-id ${eip_allocation_id} --allow-reassociation
-
-# Tailscale: people reach Caddy here, and the node routes the VPC into the tailnet (the gate
-# tool and SSM-free debugging). Machines never use a Tailscale IP to reach each other.
-# Tailscale's install.sh does not support Amazon Linux 2023 ("isn't supported by this script
-# yet", 2026-10-22, and set -e stopped the boot here); its package repository does.
-curl -fsSL https://pkgs.tailscale.com/stable/amazon-linux/2023/tailscale.repo -o /etc/yum.repos.d/tailscale.repo
-dnf install -y tailscale
-systemctl enable --now tailscaled
-echo 'net.ipv4.ip_forward = 1' > /etc/sysctl.d/99-tailscale.conf
-sysctl -p /etc/sysctl.d/99-tailscale.conf
-AUTHKEY=$(aws secretsmanager get-secret-value --region ${region} --secret-id ${tailscale_secret} \
-  --query SecretString --output text)
-tailscale up --authkey="$AUTHKEY" --hostname=cato-edge --advertise-routes=${vpc_cidr} --accept-dns=false
-unset AUTHKEY
 
 # WireGuard: people reach Caddy on 10.99.0.1 (wg0); admins also reach the node and the VPC.
 # edge-wireguard.sh installs the packages and a timer that applies ${wireguard_secret} every minute.

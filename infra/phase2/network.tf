@@ -1,9 +1,10 @@
 # Security groups. Inbound only from other CATO groups; from the internet only WireGuard
 # (UDP 51820) on the edge node, which answers no packet without a device key. People reach the
-# services through WireGuard or Tailscale on the edge node (Caddy), never through an open TCP port.
+# services through WireGuard on the edge node (Caddy), never through an open TCP port.
 
 locals {
   security_groups = {
+    # Out of date since Tailscale left (2026-11-04), but a new description replaces the group.
     edge         = "Edge node: Caddy, Seq, the steamdb and steamworks agents, the Tailscale subnet router"
     api          = "cato-api tasks (HTTP only)"
     worker       = "cato-worker task (hosted services)"
