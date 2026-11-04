@@ -11,9 +11,10 @@ Deploy with the per-image scripts (below), never with `deploy.sh`.
 | Part | Resources |
 |---|---|
 | Network | 10 security groups (inbound only from other CATO groups), Postgres rules in `cato-rds-sg`, Cloud Map namespace `cato.internal` with `api`, `worker`, `frontend`, `ogt-api`, `ogt-frontend` and a `seq` record (the edge node's private IP; apply again after the node is replaced) |
-| Images and logs | ECR: `cato-backend`, `cato-frontend`, `cato-collector`, `cato-caddy`, `ogt-api`, `ogt-frontend` (newest 20 kept); log groups `/cato/<service>`, 30 days |
+| Images and logs | ECR: `cato-backend`, `cato-frontend`, `cato-collector`, `cato-caddy`, `ogt-api`, `ogt-frontend`, `ogt-backup` (newest 20 kept); log groups `/cato/<service>`, 30 days |
 | Secrets and IAM | flat secrets for ECS injection (`cato/edge/tailscale-auth-key`, `cato/caddy/duckdns-token`, `cato/caddy/admin-hash`, `cato/seq/admin-password`); `cato/ogt/config` (OGT, one JSON key per setting); generated `cato/mq/app-user` and `cato/cache/connection`; one task role per service with only its own secrets; the edge node role |
 | Data stores | Amazon MQ RabbitMQ 4.3, `mq.m7g.medium`, single instance, private; ElastiCache Valkey 8.1 `cache.t4g.micro`, TLS + auth token; maintenance Sunday 07:00 UTC |
+| OGT backup and alarms | S3 bucket `cato-ogt-backups-<account>` (private, SSE-S3, dumps deleted after 35 days); task `cato-ogt-backup` (`pg_dump` of the OGT database only) started at 01:00 UTC by the EventBridge Scheduler schedule `cato-ogt-backup`; alarms `cato-ogt-backup-missing` and `cato-ogt-api-down` e-mail `cato-alerts` (`ogt_backup.tf`, `alarms.tf`) |
 | Compute | ECS cluster `cato` (Fargate + the edge capacity provider); edge node: one `t3.large` in an ECS-managed group (min = max = 1), Elastic IP, Tailscale subnet router (`edge-user-data.sh`); 11 services and the `cato-migrate` task definition |
 
 Running now: every service at 1 (`desired_counts`). Fargate: `api`, `worker`, `frontend`,
@@ -34,8 +35,39 @@ branch into `main` and `git fetch` before you deploy: another session deploys fr
 | `deploy-frontend.sh` | `cato-frontend` |
 | `deploy-collector.sh` | `cato-collector`: the four agents |
 | `deploy-ogt.sh` | `ogt-api`, `ogt-frontend` (outside 14:00-15:00 UTC) |
+| `deploy-ogt-backup.sh` | `ogt-backup`: the nightly backup task (the first run creates its repository first) |
 
 `deploy.sh` builds every image, OGT from a sibling checkout: do not use it.
+
+## OGT backup
+
+Every night at 01:00 UTC the schedule `cato-ogt-backup` starts the task of the same name: a
+`pg_dump` of the OGT database only (custom format), uploaded to
+`s3://cato-ogt-backups-<account>/ogt/ogt-<UTC time>.dump` and kept 35 days. The task logs
+`ogt-backup: ok <key> <bytes>` to `/cato/ogt-api` (prefix `ogt-backup`); 25 hours without that
+line e-mail `cato-alerts`. RDS's own backups (7 days) cover the whole instance, CATO too.
+
+First deploy: `terraform plan` first, then `deploy-ogt-backup.sh` (the repository, the image,
+then the whole config). Then run the task once by hand, so the backup alarm turns OK; it is in
+alarm from its creation until the first dump:
+
+    SG=$(terraform output -json service_security_groups | jq -r '."ogt-api"')
+    SUBNETS=$(terraform output -json subnet_ids | jq -r 'join(",")')
+    aws ecs run-task --cluster cato --task-definition cato-ogt-backup \
+      --capacity-provider-strategy capacityProvider=FARGATE,weight=1 \
+      --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SG],assignPublicIp=ENABLED}"
+
+Restore a dump into a new, empty database first and check it; never over the live one without
+a fresh dump. Use `pg_restore` 16 or newer:
+
+    aws s3 ls "s3://$(terraform output -raw ogt_backup_bucket)/ogt/"
+    aws s3 cp "s3://$(terraform output -raw ogt_backup_bucket)/ogt/<file>.dump" ogt.dump
+    createdb -h <host> -U <user> ogt_restore
+    pg_restore --no-owner --no-privileges -h <host> -U <user> -d ogt_restore ogt.dump
+
+RDS is reachable only from the CATO security groups: restore into RDS from a one-off task in the
+`ogt-api` network. To put a restored database live, stop `ogt-api`, swap the databases (or the
+connection string in `cato/ogt/config`) and start `ogt-api` again.
 
 ## Cost (eu-central-1, on-demand, AWS price list 2026-10-21; 730 h/month)
 
@@ -50,6 +82,7 @@ branch into `main` and `git fetch` before you deploy: another session deploys fr
 | Public IPv4 ($0.005/h): Phase 2 two tasks + EIP; Phase 3 seven tasks + EIP | | $11 | $29 |
 | ElastiCache Valkey `cache.t4g.micro` | $0.0144/h | $11 | $11 |
 | Secrets Manager (8 new × $0.40), Route 53 zone, ECR, CloudWatch Logs | | ~$6 | ~$12 |
+| OGT backup (2026-11): S3, a 2-minute Fargate task a night, 1 custom metric, 2 alarms | | | <$1 |
 | **Total** | | **~$280** | **~$387** |
 
 RDS (`db.t4g.medium` with storage and backups, ~$59) is extra. The old host is gone (stopped

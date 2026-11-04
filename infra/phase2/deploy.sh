@@ -36,6 +36,7 @@ build "$CATO_FRONTEND_DIR" cato-frontend Dockerfile --build-arg VITE_API_URL=htt
 build "$COLLECTOR_DIR" cato-collector Dockerfile
 build "$OGT_API_DIR" ogt-api Dockerfile
 build "$OGT_FRONTEND_DIR" ogt-frontend Dockerfile --build-arg VITE_API_URL=
+build "$HERE/ogt-backup" ogt-backup Dockerfile
 
 cd "$HERE"
 # The migrate task definition first, so it carries the new image.
