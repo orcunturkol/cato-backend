@@ -9,7 +9,7 @@ variable "vpc_id" {
 }
 
 variable "vpc_cidr" {
-  description = "Routed into the tailnet by the edge node (subnet router)"
+  description = "Routed into the tailnet (subnet router) and to admin WireGuard devices by the edge node"
   type        = string
   default     = "172.31.0.0/16"
 }

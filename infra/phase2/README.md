@@ -10,11 +10,11 @@ Deploy with the per-image scripts (below), never with `deploy.sh`.
 
 | Part | Resources |
 |---|---|
-| Network | 10 security groups (inbound only from other CATO groups), Postgres rules in `cato-rds-sg`, Cloud Map namespace `cato.internal` with `api`, `worker`, `frontend`, `ogt-api`, `ogt-frontend` and a `seq` record (the edge node's private IP; apply again after the node is replaced) |
+| Network | 10 security groups (inbound only from other CATO groups; from the internet only WireGuard, UDP 51820 on the edge node), Postgres rules in `cato-rds-sg`, Cloud Map namespace `cato.internal` with `api`, `worker`, `frontend`, `ogt-api`, `ogt-frontend` and a `seq` record (the edge node's private IP; apply again after the node is replaced) |
 | Images and logs | ECR: `cato-backend`, `cato-frontend`, `cato-collector`, `cato-caddy`, `ogt-api`, `ogt-frontend` (newest 20 kept); log groups `/cato/<service>`, 30 days |
-| Secrets and IAM | flat secrets for ECS injection (`cato/edge/tailscale-auth-key`, `cato/caddy/duckdns-token`, `cato/caddy/admin-hash`, `cato/seq/admin-password`); `cato/ogt/config` (OGT, one JSON key per setting); generated `cato/mq/app-user` and `cato/cache/connection`; one task role per service with only its own secrets; the edge node role |
+| Secrets and IAM | flat secrets for ECS injection (`cato/edge/tailscale-auth-key`, `cato/caddy/duckdns-token`, `cato/caddy/admin-hash`, `cato/seq/admin-password`); `cato/ogt/config` (OGT, one JSON key per setting); `cato/edge/wireguard` (the WireGuard server key pair and devices, written by `wireguard-device.sh`); generated `cato/mq/app-user` and `cato/cache/connection`; one task role per service with only its own secrets; the edge node role |
 | Data stores | Amazon MQ RabbitMQ 4.3, `mq.m7g.medium`, single instance, private; ElastiCache Valkey 8.1 `cache.t4g.micro`, TLS + auth token; maintenance Sunday 07:00 UTC |
-| Compute | ECS cluster `cato` (Fargate + the edge capacity provider); edge node: one `t3.large` in an ECS-managed group (min = max = 1), Elastic IP, Tailscale subnet router (`edge-user-data.sh`); 11 services and the `cato-migrate` task definition |
+| Compute | ECS cluster `cato` (Fargate + the edge capacity provider); edge node: one `t3.large` in an ECS-managed group (min = max = 1), Elastic IP, Tailscale subnet router and WireGuard server (`edge-user-data.sh`, `edge-wireguard.sh`); 11 services and the `cato-migrate` task definition |
 
 Running now: every service at 1 (`desired_counts`). Fargate: `api`, `worker`, `frontend`,
 `ogt-api`, `ogt-frontend`; `agent-light` and `agent-events` on `FARGATE_SPOT` (an agent stop
@@ -34,8 +34,46 @@ branch into `main` and `git fetch` before you deploy: another session deploys fr
 | `deploy-frontend.sh` | `cato-frontend` |
 | `deploy-collector.sh` | `cato-collector`: the four agents |
 | `deploy-ogt.sh` | `ogt-api`, `ogt-frontend` (outside 14:00-15:00 UTC) |
+| `deploy-caddy.sh` | `cato-caddy` (`Caddyfile.ecs`): https stops for the seconds Caddy needs to restart |
 
 `deploy.sh` builds every image, OGT from a sibling checkout: do not use it.
+
+## People's access: WireGuard
+
+People reach Caddy through WireGuard on the edge node: `*.catoptricgames.duckdns.org` resolves to
+10.99.0.1 (wg0), and the devices connect to UDP 51820 on the Elastic IP. Tailscale stays as the
+second way in for admins (SSH, the VPC route). One key per device, in two ranges:
+
+| Role | Addresses | Reaches |
+|---|---|---|
+| admin | 10.99.0.2-254 | the whole edge node (SSH, Seq, CATO, OGT) and the VPC |
+| team | 10.99.1.1-254 | `https://ogt.catoptricgames.duckdns.org` only: port 443 on 10.99.0.1, and Caddy answers 403 for CATO |
+
+```bash
+infra/phase2/wireguard-device.sh init                # once: the server key pair
+infra/phase2/wireguard-device.sh add <name> team     # or admin; writes ~/.config/cato-wireguard/<name>.conf, shows a QR code
+infra/phase2/wireguard-device.sh remove <name>       # the node drops the device within a minute
+infra/phase2/wireguard-device.sh list
+```
+
+The person installs the WireGuard app and imports the file (phone: the QR code). Send each config
+privately; the device's private key exists only there. Device names live in the secret, never in
+this repo.
+
+On the node, `cato-wireguard.timer` runs `/usr/local/sbin/cato-wireguard sync` every minute: it
+loads the firewall (nftables table `inet cato_wg`; its drops are final whatever Docker's and
+Tailscale's chains accept) and applies the secret to wg0. If the firewall does not load, wg0 goes
+down. `edge-user-data.sh` installs it on a new node; on the running node, once:
+
+```bash
+scp infra/phase2/edge-wireguard.sh catoptric:/tmp/ && ssh catoptric \
+  sudo bash /tmp/edge-wireguard.sh install eu-central-1 cato/edge/wireguard 172.31.0.0/16
+```
+
+Checks: `sudo wg show` and `journalctl -u cato-wireguard` on the node. A device that has the
+tunnel but cannot open the site: `nslookup ogt.catoptricgames.duckdns.org` must give 10.99.0.1;
+some home routers drop DNS answers with private addresses, so add `DNS = 1.1.1.1` to that device's
+`[Interface]`. Cost: the secret ($0.40) and ~43,000 reads a month (~$0.22).
 
 ## Cost (eu-central-1, on-demand, AWS price list 2026-10-21; 730 h/month)
 
