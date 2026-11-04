@@ -79,7 +79,7 @@ second way in for admins (SSH, the VPC route). One key per device, in two ranges
 | Role | Addresses | Reaches |
 |---|---|---|
 | admin | 10.99.0.2-254 | the whole edge node (SSH, Seq, CATO, OGT) and the VPC |
-| team | 10.99.1.1-254 | `https://ogt.catoptricgames.duckdns.org` only: port 443 on 10.99.0.1, and Caddy answers 403 for CATO |
+| team | 10.99.1.1-254 | `https://ogt.catoptricgames.duckdns.org` only: ports 443 and 53 (DNS) on 10.99.0.1, and Caddy answers 403 for CATO |
 
 ```bash
 infra/phase2/wireguard-device.sh init                # once: the server key pair
@@ -90,9 +90,13 @@ infra/phase2/wireguard-device.sh list
 
 The person installs the WireGuard app and imports the file (phone: the QR code). Send each config
 privately; the device's private key exists only there. Device names live in the secret, never in
-this repo. Each config sets DNS 1.1.1.1 while the tunnel is on: many home routers drop DNS answers
-with a private address (10.99.0.1, rebind protection; seen on 2026-11-04), so the name would
-not resolve through them.
+this repo. Each config sets `DNS = 10.99.0.1`: a dnsmasq on the edge node (`cato-wireguard-dns`,
+only on wg0) gives the sites' names 10.99.0.1 and every other name from Cloudflare. Many home
+routers drop public DNS answers with a private address (rebind protection; seen on 2026-11-04),
+and a DNS server outside the tunnel fails where the OS sends a link's queries through that link
+(systemd-resolved). While the tunnel is on, all of a device's DNS goes through the node. On Linux
+with NetworkManager, send only the sites' names there after the import:
+`nmcli connection modify <name> ipv4.dns-search "~catoptricgames.duckdns.org"`.
 
 On the node, `cato-wireguard.timer` runs `/usr/local/sbin/cato-wireguard sync` every minute: it
 loads the firewall (nftables table `inet cato_wg`; its drops are final whatever Docker's and
@@ -106,8 +110,8 @@ scp infra/phase2/edge-wireguard.sh catoptric:/tmp/ && ssh catoptric \
 
 Checks: `sudo wg show` and `journalctl -u cato-wireguard` on the node. A device that has the
 tunnel but cannot open the site: `nslookup ogt.catoptricgames.duckdns.org` must give 10.99.0.1,
-and the config must have the `DNS = 1.1.1.1, 1.0.0.1` line. Cost: the secret ($0.40) and ~43,000
-reads a month (~$0.22).
+and the config must have `DNS = 10.99.0.1`; on the node, `systemctl status cato-wireguard-dns`.
+Cost: the secret ($0.40) and ~43,000 reads a month (~$0.22).
 
 ## Cost (eu-central-1, on-demand, AWS price list 2026-10-21; 730 h/month)
 
