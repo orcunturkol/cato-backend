@@ -6,7 +6,10 @@
 #
 # Two ranges, one key per device (infra/phase2/wireguard-device.sh writes the secret):
 #   10.99.0.0/24 admin: the whole node (SSH, Seq, Caddy) and the VPC
-#   10.99.1.0/24 team:  port 443 on 10.99.0.1 only; Caddy serves the team OGT and nothing else
+#   10.99.1.0/24 team:  ports 443 and 53 on 10.99.0.1 only; Caddy serves the team OGT and nothing else
+# DNS for the devices (DNS = 10.99.0.1 in their configs) is a dnsmasq on wg0: the sites' names give
+# 10.99.0.1 (many home routers drop that private answer from public DNS), every other name comes
+# from Cloudflare. A server inside the tunnel works however a device's OS sends its DNS queries.
 # The firewall trusts the source address because WireGuard takes from a peer only the address
 # in its AllowedIPs: one /32, built here from the secret's checked ip field, never copied.
 #
@@ -21,7 +24,7 @@ CONF=/etc/wireguard/wg0.conf
 
 install_node() {
   local region=$1 secret=$2 vpc=$3
-  dnf install -y wireguard-tools nftables jq
+  dnf install -y wireguard-tools nftables jq dnsmasq
   install -d -m 700 /etc/cato-wireguard
   printf 'REGION=%s\nSECRET=%s\nVPC_CIDR=%s\n' "$region" "$secret" "$vpc" >/etc/cato-wireguard/env
   [ "$(readlink -f "$0")" = "$SELF" ] || install -m 755 "$0" "$SELF"
@@ -52,7 +55,36 @@ AccuracySec=5s
 [Install]
 WantedBy=timers.target
 EOF
+
+  # Its own config file and unit: AL2023's /etc/dnsmasq.conf listens on lo with bind-interfaces.
+  # Never the VPC resolver (no-resolv), so the devices do not see cato.internal.
+  cat >/etc/cato-wireguard/dnsmasq.conf <<'EOF'
+pid-file=
+interface=wg0
+except-interface=lo
+bind-dynamic
+no-resolv
+no-hosts
+server=1.1.1.1
+server=1.0.0.1
+address=/catoptricgames.duckdns.org/10.99.0.1
+EOF
+  cat >/etc/systemd/system/cato-wireguard-dns.service <<'EOF'
+[Unit]
+Description=DNS for the WireGuard devices on 10.99.0.1 (dnsmasq on wg0)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/sbin/dnsmasq --keep-in-foreground --conf-file=/etc/cato-wireguard/dnsmasq.conf
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
   systemctl daemon-reload
+  systemctl enable cato-wireguard-dns.service
+  systemctl restart cato-wireguard-dns.service
   systemctl enable --now cato-wireguard.timer
   # Fails until the secret has a server key (wireguard-device.sh init); the timer tries again.
   systemctl start cato-wireguard.service || echo "cato-wireguard: no wg0 yet, see journalctl -u cato-wireguard" >&2
@@ -72,7 +104,7 @@ table inet cato_wg {
 	chain from_peers {
 		ct state established,related accept
 		ip saddr 10.99.0.0/24 accept
-		ip saddr 10.99.1.0/24 ip daddr 10.99.0.1 meta l4proto { tcp, udp } th dport 443 accept
+		ip saddr 10.99.1.0/24 ip daddr 10.99.0.1 meta l4proto { tcp, udp } th dport { 53, 443 } accept
 		limit rate 6/minute log prefix "cato-wg drop: "
 		drop
 	}

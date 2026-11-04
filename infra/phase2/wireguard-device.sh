@@ -8,7 +8,7 @@
 #   infra/phase2/wireguard-device.sh list
 #
 #   admin  10.99.0.2-254: the whole edge node (SSH, Seq, CATO, OGT) and the VPC
-#   team   10.99.1.1-254: OGT only (https://ogt.catoptricgames.duckdns.org)
+#   team   10.99.1.1-254: OGT only (https://ogt.catoptricgames.duckdns.org) and the tunnel's DNS
 #
 # One key per device: two devices on one key take the session from each other. add writes the
 # config to $WG_CONFIG_DIR (default ~/.config/cato-wireguard, mode 600) and shows it as a QR
@@ -71,13 +71,14 @@ add() {
   psk=$(openssl rand -base64 32)
   mkdir -p "$DIR" && chmod 700 "$DIR"
   tmp=$(mktemp "$DIR/.new.XXXXXX")
-  # DNS: many home routers drop DNS answers with a private address (10.99.0.1, rebind
-  # protection), so the device asks Cloudflare while the tunnel is on.
+  # DNS: the dnsmasq on the edge node, inside the tunnel. Many home routers drop DNS answers with a
+  # private address (10.99.0.1, rebind protection), and a server outside the tunnel fails on
+  # systems that send a link's DNS queries through that link (systemd-resolved).
   cat >"$tmp" <<EOF
 [Interface]
 PrivateKey = $priv
 Address = $ip/32
-DNS = 1.1.1.1, 1.0.0.1
+DNS = 10.99.0.1
 
 [Peer]
 PublicKey = $(jq -r .server_public_key <<<"$json")
