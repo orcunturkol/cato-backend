@@ -96,7 +96,7 @@ public sealed class AlertService
         checks.AddRange(await CheckFreshnessAsync(nowUtc, ct));
         checks.AddRange(await CheckWatchersAsync(nowUtc, ct));
         var (opened, resolved) = await ApplyAsync(checks, nowUtc, ct);
-        var sent = await DeliverAsync(nowUtc, ct);
+        var sent = await DeliverAsync(nowUtc, ct) + await RemindAsync(nowUtc, ct);
         return new AlertCycleResult(checks.Count, opened, resolved, sent);
     }
 
@@ -418,6 +418,50 @@ public sealed class AlertService
         return sent;
     }
 
+    /// <summary>
+    /// Repeats the message of each incident still open <see cref="AlertSettings.ReminderHours"/>
+    /// after its opening or its last reminder, on the channels that sent the "opened" one.
+    /// </summary>
+    public async Task<int> RemindAsync(DateTime nowUtc, CancellationToken ct)
+    {
+        if (_notifiers.Count == 0 || _settings.ReminderHours <= 0)
+            return 0;
+        var dueBefore = nowUtc - TimeSpan.FromHours(_settings.ReminderHours);
+        var incidents = await _db.AlertIncidents
+            .Where(i => i.ResolvedAt == null && i.OpenSentTo != ""
+                        && (i.LastRemindedAt ?? i.OpenedAt) <= dueBefore)
+            .OrderBy(i => i.OpenedAt)
+            .ToListAsync(ct);
+        var sent = 0;
+
+        foreach (var incident in incidents)
+        {
+            var openSent = Channels(incident.OpenSentTo);
+            var reminded = false;
+            foreach (var notifier in _notifiers.Where(n => openSent.Contains(n.Name)))
+            {
+                try
+                {
+                    await notifier.SendAsync(Reminder(incident, nowUtc), ct);
+                    reminded = true;
+                    sent++;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogWarning("Alert channel {Channel} failed the reminder for {Job} {Rule}: {Error}",
+                        notifier.Name, incident.JobName, incident.Rule, ex.Message);
+                }
+            }
+            // One channel through is enough; with none, the next cycle tries again.
+            if (reminded)
+            {
+                incident.LastRemindedAt = nowUtc;
+                await _db.SaveChangesAsync(ct);
+            }
+        }
+        return sent;
+    }
+
     public async Task<List<AlertChannelResult>> SendTestAsync(string? requestedBy, DateTime nowUtc, CancellationToken ct)
     {
         var message = new AlertMessage(
@@ -446,6 +490,11 @@ public sealed class AlertService
         $"[CATO] {i.JobName}: {AlertRules.Title(i.Rule)}",
         $"🔴 CATO alert: {i.JobName} - {AlertRules.Title(i.Rule)}\n{i.Message}\n" +
         $"Since {Stamp(i.OpenedAt)} UTC\n{_settings.JobsPageUrl}");
+
+    private AlertMessage Reminder(AlertIncident i, DateTime nowUtc) => new(
+        $"[CATO] still open: {i.JobName}: {AlertRules.Title(i.Rule)}",
+        $"🔁 Still open: {i.JobName} - {AlertRules.Title(i.Rule)}\n{i.Message}\n" +
+        $"Open for {JobRunStatusEvaluator.FormatSpan(nowUtc - AsUtc(i.OpenedAt))}, since {Stamp(i.OpenedAt)} UTC\n{_settings.JobsPageUrl}");
 
     private AlertMessage Resolved(AlertIncident i, DateTime nowUtc) => new(
         $"[CATO] resolved: {i.JobName}: {AlertRules.Title(i.Rule)}",

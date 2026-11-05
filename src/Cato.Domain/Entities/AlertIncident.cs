@@ -2,8 +2,8 @@ namespace Cato.Domain.Entities;
 
 /// <summary>
 /// One alert (table alert_incident): a rule that fires for a job, an agent or a queue.
-/// It opens once, sends one message per channel, and resolves at the next good state
-/// with one more message. <see cref="OpenKey"/> is "job|rule" while the incident is
+/// It opens once, sends one message per channel, repeats it once a day while it stays
+/// open, and resolves at the next good state with one more message. <see cref="OpenKey"/> is "job|rule" while the incident is
 /// open and null after, so a unique index allows one open incident per job and rule.
 /// </summary>
 public class AlertIncident
@@ -33,6 +33,9 @@ public class AlertIncident
 
     /// <summary>Comma-separated channels that sent the "resolved" message.</summary>
     public string ResolveSentTo { get; set; } = string.Empty;
+
+    /// <summary>When the last "still open" reminder went out; null before the first.</summary>
+    public DateTime? LastRemindedAt { get; set; }
 }
 
 public static class AlertRules

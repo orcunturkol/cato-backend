@@ -32,6 +32,12 @@ public sealed class AlertSettings
     /// <summary>A queue with messages and no progress for this long is stuck.</summary>
     public int QueueStuckMinutes { get; set; } = 30;
 
+    /// <summary>
+    /// An open incident repeats its message this often (0: never). One message is easy to miss:
+    /// on 2026-10-30 a stopped watcher's alert went out once and stayed open for six days.
+    /// </summary>
+    public int ReminderHours { get; set; } = 24;
+
     /// <summary>Sends CATO/WorkerHeartbeat to CloudWatch every cycle; an alarm watches it.</summary>
     public bool HeartbeatEnabled { get; set; }
 }

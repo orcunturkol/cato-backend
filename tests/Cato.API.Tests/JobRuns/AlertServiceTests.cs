@@ -95,6 +95,30 @@ public class AlertServiceTests : JobRunsDbTestBase
     }
 
     [Fact]
+    public async Task An_open_alert_is_repeated_once_a_day_until_it_resolves()
+    {
+        // 2026-10-30: one message for a stopped watcher, then six silent days.
+        Add(Job("ccu"), Run("ccu", Now.AddMinutes(-30), JobRunStatus.Failed, error: "redis unreachable: timeout"));
+        Assert.Equal(2, (await CycleAsync(Now)).Sent);
+
+        Assert.Equal(0, (await CycleAsync(Now.AddHours(23))).Sent);
+        Assert.Equal(2, (await CycleAsync(Now.AddHours(24))).Sent);
+        Assert.Equal(0, (await CycleAsync(Now.AddHours(25))).Sent);
+        Assert.Equal(2, (await CycleAsync(Now.AddHours(48))).Sent);
+
+        var reminder = _email.Sent[1];
+        Assert.Equal("[CATO] still open: ccu: run failed", reminder.Subject);
+        Assert.Contains("redis unreachable", reminder.Body);
+        Assert.Contains("Open for 24h", reminder.Body);
+
+        Add(Run("ccu", Now.AddHours(49), JobRunStatus.Succeeded, Items(549, 0)));
+        Assert.Equal(2, (await CycleAsync(Now.AddHours(49).AddMinutes(5))).Sent); // the resolved message
+        Assert.Equal(0, (await CycleAsync(Now.AddHours(80))).Sent);
+        Assert.Equal(["[CATO] ccu: run failed", "[CATO] still open: ccu: run failed",
+            "[CATO] still open: ccu: run failed", "[CATO] resolved: ccu: run failed"], _email.Sent.Select(m => m.Subject));
+    }
+
+    [Fact]
     public async Task Skipped_and_interrupted_runs_neither_alert_nor_resolve()
     {
         Add(Job("steamdb_followers", JobAgentGroups.SteamDb),
