@@ -685,7 +685,7 @@ public static class DbTableCatalog
             "One row per alert: a rule firing for a job, an agent or a queue, from open to resolved, with the channels that sent each message.",
             [new(DataSite.Cato, "Alert monitor", null, "AlertMonitorService every 60 s (worker)")],
             ["OpenKey (job|rule) is unique while the incident is open, so one open incident per job and rule."],
-            ["A channel that fails is retried alone next cycle; an incident resolved before any message went out sends nothing."]),
+            ["A channel that fails is retried alone next cycle; an incident resolved before any message went out sends nothing; an open incident repeats its message every 24 h (LastRemindedAt)."]),
 
         new("marketing_target", DataCollection.Manual,
             "Influencers, media, events and mailing lists.",

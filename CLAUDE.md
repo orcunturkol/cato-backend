@@ -472,7 +472,10 @@ lost by a restart. A watcher cycle that fails while the app stops is stored as
 `Interrupted` (`JobRunTracker`).
 Messages go to every `IAlertNotifier` (SNS e-mail, Discord); `OpenSentTo` and
 `ResolveSentTo` record the channels that sent, so a failed channel is retried alone
-next cycle and a "resolved" message goes only where the "opened" one went. Queue counts
+next cycle and a "resolved" message goes only where the "opened" one went. An incident
+still open repeats its message every `Alerts:ReminderHours` (24; 0 = never) on the same
+channels (`RemindAsync`, `LastRemindedAt`): on 2026-10-30 one message for a stopped watcher
+was missed and nothing more came for six days. Queue counts
 come from a passive declare (plain AMQP, works on Amazon MQ). The monitor also sends
 `CATO/WorkerHeartbeat` to CloudWatch; the alarm `cato-worker-heartbeat`
 (`infra/phase1`) e-mails after five silent minutes. Everything is off unless
