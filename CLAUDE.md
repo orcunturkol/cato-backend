@@ -432,6 +432,7 @@ state and returns firing / not firing; firing opens one incident per job and rul
 | `dlq_not_empty` | `cato-ingestion-dlq` has messages | it is empty |
 | `queue_stuck` | a queue has messages and the count has not dropped for 30 min | the count drops |
 | `stale_data` | the newest data of an enabled job is older than its limit | newer data arrives |
+| `watcher_stopped` | an enabled watcher has no run for 2 x its interval + 1 h (from its last run or the worker's start) and none is running | the watcher runs again |
 
 `stale_data` reads `JobFreshnessChecks` (`Services/JobRuns/JobFreshness.cs`): per job the
 newest value of a date column in the table it writes (`ccu_history.Timestamp` within
@@ -455,6 +456,9 @@ An agent stop (note `agent stopped`: a deploy, or a Fargate Spot interruption of
 agent-light/agent-events) leaves the run `Interrupted` and queues one `retry` dispatch, so a
 daily job does not wait a day. A stopped retry, a paused job and a run that reported its
 own result first are not retried.
+A watcher loop leaves only on `catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)`:
+an HttpClient timeout is a `TaskCanceledException` too, and on 2026-10-30 a bare catch ended
+`PlayerAchievementWatcher` for six days (`watcher_stopped` now reports such a stop).
 A watcher run lost to a worker restart
 (or replaced by the next cycle after one) does not alert; the heartbeat alarm reports a
 dead worker.

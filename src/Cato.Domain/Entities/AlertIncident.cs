@@ -51,6 +51,8 @@ public static class AlertRules
     public const string QueueStuck = "queue_stuck";
     /// <summary>The newest data a job writes is older than its limit.</summary>
     public const string StaleData = "stale_data";
+    /// <summary>A backend watcher has not run for much longer than its interval.</summary>
+    public const string WatcherStopped = "watcher_stopped";
 
     public static string Title(string rule) => rule switch
     {
@@ -61,6 +63,7 @@ public static class AlertRules
         DlqNotEmpty => "rejected batches in the DLQ",
         QueueStuck => "queue stuck",
         StaleData => "stale data",
+        WatcherStopped => "watcher stopped",
         _ => rule,
     };
 }

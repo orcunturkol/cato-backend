@@ -62,7 +62,7 @@ public class SteamPlayerProfileWatcherService : BackgroundService
             {
                 await RunCycleAsync(stoppingToken);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
             }

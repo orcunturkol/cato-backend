@@ -46,7 +46,7 @@ public class SteamReviewWatcherService : BackgroundService
             {
                 await RunReviewSyncAsync(stoppingToken);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
             }

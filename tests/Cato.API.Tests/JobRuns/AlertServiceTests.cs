@@ -185,6 +185,55 @@ public class AlertServiceTests : JobRunsDbTestBase
         Assert.Equal(BackendJobNames.GameEnrichmentWatcher, Assert.Single(Incidents()).JobName);
     }
 
+    private static ScheduledJob Watcher(string name, int intervalMinutes, bool enabled = true) => new()
+    {
+        Name = name, Label = name, AgentGroup = JobAgentGroups.Worker, Module = "", Args = "", Cron = null,
+        Enabled = enabled, TimeoutSeconds = 0, ManagedBy = ScheduledJobManagedBy.Worker,
+        IntervalMinutes = intervalMinutes, UpdatedAt = Now.AddDays(-1),
+    };
+
+    [Fact]
+    public async Task A_watcher_that_stopped_running_alerts_and_resolves_when_it_runs_again()
+    {
+        // 2026-10-30: one Steam timeout ended the loop; the last run ended 14:24:40, the worker runs on.
+        Add(Watcher(BackendJobNames.PlayerAchievementWatcher, 10),
+            Run(BackendJobNames.PlayerAchievementWatcher, ApiStart.AddMinutes(5), JobRunStatus.Succeeded,
+                producer: JobRunProducer.CatoBackend));
+
+        await CycleAsync(Now); // 56 min after its last run: inside 2 x 10 min + 1 h
+        Assert.Empty(Incidents());
+
+        await CycleAsync(Now.AddHours(1));
+        var incident = Assert.Single(Incidents());
+        Assert.Equal((BackendJobNames.PlayerAchievementWatcher, AlertRules.WatcherStopped), (incident.JobName, incident.Rule));
+        Assert.StartsWith("no run for 1 h 56 min (it runs every 10 min); the last run started", incident.Message);
+
+        Add(Run(BackendJobNames.PlayerAchievementWatcher, Now.AddHours(1).AddMinutes(1), JobRunStatus.Succeeded,
+            producer: JobRunProducer.CatoBackend));
+        await CycleAsync(Now.AddHours(1).AddMinutes(5));
+        Assert.NotNull(Assert.Single(Incidents()).ResolvedAt);
+    }
+
+    [Fact]
+    public async Task A_running_paused_or_recent_watcher_does_not_alert()
+    {
+        Add(
+            // Ran 3 h ago, every 6 h: inside its window.
+            Watcher(BackendJobNames.GameNewsWatcher, 360),
+            Run(BackendJobNames.GameNewsWatcher, Now.AddHours(-3), JobRunStatus.Succeeded, producer: JobRunProducer.CatoBackend),
+            // A long cycle in progress.
+            Watcher(BackendJobNames.SteamReviewWatcher, 60),
+            Run(BackendJobNames.SteamReviewWatcher, Now.AddHours(-6), JobRunStatus.Succeeded, producer: JobRunProducer.CatoBackend),
+            Run(BackendJobNames.SteamReviewWatcher, Now.AddMinutes(-20), JobRunStatus.Running, producer: JobRunProducer.CatoBackend),
+            // Paused on the Jobs page.
+            Watcher(BackendJobNames.SteamPlayerProfileWatcher, 30, enabled: false),
+            Run(BackendJobNames.SteamPlayerProfileWatcher, Now.AddDays(-1), JobRunStatus.Succeeded, producer: JobRunProducer.CatoBackend));
+
+        await CycleAsync(Now);
+
+        Assert.Empty(Incidents());
+    }
+
     [Fact]
     public async Task A_dispatch_nobody_starts_is_a_missed_run_unless_its_group_is_busy()
     {

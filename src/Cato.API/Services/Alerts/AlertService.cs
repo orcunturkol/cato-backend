@@ -94,6 +94,7 @@ public sealed class AlertService
         checks.AddRange(await CheckAgentsAsync(nowUtc, ct));
         checks.AddRange(await CheckQueuesAsync(nowUtc, ct));
         checks.AddRange(await CheckFreshnessAsync(nowUtc, ct));
+        checks.AddRange(await CheckWatchersAsync(nowUtc, ct));
         var (opened, resolved) = await ApplyAsync(checks, nowUtc, ct);
         var sent = await DeliverAsync(nowUtc, ct);
         return new AlertCycleResult(checks.Count, opened, resolved, sent);
@@ -153,6 +154,39 @@ public sealed class AlertService
                     ? $"{items.Failed} of {items.Total} {items.Unit} failed ({share:P1}; the alert level is {ratio:P0}) in {started}"
                     : null,
                 run.Id));
+        }
+        return checks;
+    }
+
+    /// <summary>
+    /// watcher_stopped: an enabled watcher with no run for 2 x its interval + 1 h, counted from its
+    /// last run or the worker's start. On 2026-10-30 one Steam timeout ended
+    /// PlayerAchievementWatcher's loop; run_failed went out once and nothing more for six days.
+    /// </summary>
+    public async Task<List<AlertCheck>> CheckWatchersAsync(DateTime nowUtc, CancellationToken ct)
+    {
+        var workerStarted = AsUtc(await _workerStart.GetAsync(ct));
+        var watchers = await _db.ScheduledJobs.AsNoTracking()
+            .Where(j => j.ManagedBy == ScheduledJobManagedBy.Worker && j.Enabled && j.IntervalMinutes > 0)
+            .ToListAsync(ct);
+        var checks = new List<AlertCheck>();
+        foreach (var job in watchers)
+        {
+            var last = await _db.JobRuns.AsNoTracking()
+                .Where(r => r.JobName == job.Name && r.Producer == JobRunProducer.CatoBackend)
+                .OrderByDescending(r => r.StartTime)
+                .FirstOrDefaultAsync(ct);
+            // A run in progress is alive; a hung one is run_failed's case.
+            var lastSeen = last is null ? DateTime.MinValue : AsUtc(last.EndTime ?? last.StartTime);
+            var since = lastSeen > workerStarted ? lastSeen : workerStarted;
+            var silent = nowUtc - since;
+            var firing = last?.Status != JobRunStatus.Running
+                         && silent > TimeSpan.FromMinutes(2 * job.IntervalMinutes!.Value + 60);
+            checks.Add(new AlertCheck(job.Name, AlertRules.WatcherStopped, firing,
+                firing
+                    ? $"no run for {(int)silent.TotalHours} h {silent.Minutes} min (it runs every {job.IntervalMinutes} min); " +
+                      (last is null ? "it never ran" : $"the last run started {Stamp(last.StartTime)} UTC ({last.Status})")
+                    : null));
         }
         return checks;
     }
