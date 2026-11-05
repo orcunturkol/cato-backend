@@ -75,16 +75,17 @@ connection string in `cato/ogt/config`) and start `ogt-api` again.
 People reach Caddy through WireGuard on the edge node: `*.catoptricgames.duckdns.org` resolves to
 10.99.0.1 (wg0), and the devices connect to UDP 51820 on the Elastic IP. Tailscale was removed
 on 2026-11-04; without WireGuard, the emergency shell is AWS SSM (`aws ssm send-command`). One key
-per device, in two ranges:
+per device, in three ranges:
 
 | Role | Addresses | Reaches |
 |---|---|---|
 | admin | 10.99.0.2-254 | the whole edge node (SSH, Seq, CATO, OGT) and the VPC |
+| web | 10.99.2.1-254 | both sites, CATO and OGT: ports 443 and 53 (DNS) on 10.99.0.1; not the node, Seq or the VPC |
 | team | 10.99.1.1-254 | `https://ogt.catoptricgames.duckdns.org` only: ports 443 and 53 (DNS) on 10.99.0.1, and Caddy answers 403 for CATO |
 
 ```bash
 infra/phase2/wireguard-device.sh init                # once: the server key pair
-infra/phase2/wireguard-device.sh add <name> team     # or admin; writes ~/.config/cato-wireguard/<name>.conf, shows a QR code
+infra/phase2/wireguard-device.sh add <name> team     # or web, admin; writes ~/.config/cato-wireguard/<name>.conf, shows a QR code
 infra/phase2/wireguard-device.sh remove <name>       # the node drops the device within a minute
 infra/phase2/wireguard-device.sh list
 ```

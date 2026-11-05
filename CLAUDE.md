@@ -485,9 +485,10 @@ node and reads the hash from the secret `cato/caddy/admin-hash`; set it with
 `scripts/set-admin-password.sh`, which also restarts the caddy service). Reads stay open. The API
 has no public port: the collector agents call `http://api.cato.internal:8080` (Cloud Map,
 `CATO_API_BASE_URL`), OGT calls the same name (`Cato__BaseUrl`), and people go through Caddy
-on the edge node over WireGuard (`*.catoptricgames.duckdns.org` → 10.99.0.1 on wg0; admin devices
-see CATO and OGT, team devices only OGT; `infra/phase2/README.md`). Remember that the frontend's
-paths are `/api/api/...` (Caddy strips the first `/api`).
+on the edge node over WireGuard (`*.catoptricgames.duckdns.org` → 10.99.0.1 on wg0; admin and
+web devices see CATO and OGT, team devices only OGT, only admin devices reach the node and the VPC;
+`infra/phase2/README.md`). Remember that the frontend's paths are `/api/api/...` (Caddy strips
+the first `/api`).
 
 `GET /api/credentials/steamworks` shows the Steamworks login of the collector's jobs from
 the secret store: the masked account, the refresh token's expiry and days left, and the

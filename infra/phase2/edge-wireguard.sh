@@ -4,8 +4,9 @@
 #   cato-wireguard install <region> <secret id> <vpc cidr>   # once (edge-user-data.sh, or over ssh)
 #   cato-wireguard sync                                       # the timer, every minute
 #
-# Two ranges, one key per device (infra/phase2/wireguard-device.sh writes the secret):
+# Three ranges, one key per device (infra/phase2/wireguard-device.sh writes the secret):
 #   10.99.0.0/24 admin: the whole node (SSH, Seq, Caddy) and the VPC
+#   10.99.2.0/24 web:   ports 443 and 53 on 10.99.0.1 only; Caddy serves CATO and OGT
 #   10.99.1.0/24 team:  ports 443 and 53 on 10.99.0.1 only; Caddy serves the team OGT and nothing else
 # DNS for the devices (DNS = 10.99.0.1 in their configs) is a dnsmasq on wg0: the sites' names give
 # 10.99.0.1 (many home routers drop that private answer from public DNS), every other name comes
@@ -104,12 +105,12 @@ table inet cato_wg {
 	chain from_peers {
 		ct state established,related accept
 		ip saddr 10.99.0.0/24 accept
-		ip saddr 10.99.1.0/24 ip daddr 10.99.0.1 meta l4proto { tcp, udp } th dport { 53, 443 } accept
+		ip saddr { 10.99.1.0/24, 10.99.2.0/24 } ip daddr 10.99.0.1 meta l4proto { tcp, udp } th dport { 53, 443 } accept
 		limit rate 6/minute log prefix "cato-wg drop: "
 		drop
 	}
 
-	# The team forwards nothing: no VPC, no Seq (Docker DNAT), no other device.
+	# Web and team devices forward nothing: no VPC, no Seq (Docker DNAT), no other device.
 	chain forward {
 		type filter hook forward priority filter - 10; policy accept;
 		iifname "wg0" ip saddr 10.99.0.0/24 accept
@@ -132,9 +133,10 @@ EOF
 # A device counts only with an address in its role's range and well-formed keys.
 VALID='
   def key: type == "string" and test("^[A-Za-z0-9+/]{43}=$");
-  def valid: (.ip | type == "string" and test("^10\\.99\\.[01]\\.([1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-4])$"))
+  def valid: (.ip | type == "string" and test("^10\\.99\\.[012]\\.([1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-4])$"))
     and .ip != "10.99.0.1"
-    and ((.role == "admin" and (.ip | startswith("10.99.0."))) or (.role == "team" and (.ip | startswith("10.99.1."))))
+    and ((.role == "admin" and (.ip | startswith("10.99.0."))) or (.role == "team" and (.ip | startswith("10.99.1.")))
+      or (.role == "web" and (.ip | startswith("10.99.2."))))
     and (.public_key | key) and (.preshared_key | key);'
 
 render() {

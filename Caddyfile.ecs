@@ -7,10 +7,10 @@
 # wg0 (10.99.0.1), behind the security group. Never add an inbound rule for 443 to cato-edge-sg.
 #
 # Who sees which site: Caddy checks the client address (edge-wireguard.sh sets the ranges and
-# WireGuard binds each address to one device key). CATO: the admin range 10.99.0.0/24. OGT: both
-# WireGuard ranges (admins and the team, 10.99.1.0/24). Everyone else gets 403. The check sits
-# first in a route block: at the top level Caddy runs respond after handle, so a catch-all
-# handle would answer first.
+# WireGuard binds each address to one device key). CATO: the admin range 10.99.0.0/24 and the web
+# range 10.99.2.0/24. OGT: every WireGuard range (also the team, 10.99.1.0/24). Everyone else
+# gets 403. The check sits first in a route block: at the top level Caddy runs respond after
+# handle, so a catch-all handle would answer first.
 #
 # Upstreams: Cloud Map A records (*.cato.internal, TTL 10 s) through the VPC resolver (the
 # node's /etc/resolv.conf; wg0's dnsmasq is only for the devices). Caddy looks the names up
@@ -26,8 +26,8 @@ catoptricgames.duckdns.org {
 		dns duckdns {$DUCKDNS_TOKEN}
 	}
 
-	# Admins only (WireGuard admin range); the team gets 403.
-	@outsider not remote_ip 10.99.0.0/24
+	# Admin and web devices; the team gets 403.
+	@outsider not remote_ip 10.99.0.0/24 10.99.2.0/24
 
 	route {
 		respond @outsider 403
@@ -70,7 +70,7 @@ ogt.catoptricgames.duckdns.org {
 		dns duckdns {$DUCKDNS_TOKEN}
 	}
 
-	# Admins and the team (both WireGuard ranges).
+	# Every WireGuard range: admin, web and team devices.
 	@outsider not remote_ip 10.99.0.0/16
 
 	route {

@@ -3,11 +3,12 @@
 # the secret within a minute (edge-wireguard.sh).
 #
 #   infra/phase2/wireguard-device.sh init                     # once: the server key pair
-#   infra/phase2/wireguard-device.sh add <name> admin|team
+#   infra/phase2/wireguard-device.sh add <name> admin|web|team
 #   infra/phase2/wireguard-device.sh remove <name>
 #   infra/phase2/wireguard-device.sh list
 #
 #   admin  10.99.0.2-254: the whole edge node (SSH, Seq, CATO, OGT) and the VPC
+#   web    10.99.2.1-254: both sites, CATO and OGT, and the tunnel's DNS; not the node or the VPC
 #   team   10.99.1.1-254: OGT only (https://ogt.catoptricgames.duckdns.org) and the tunnel's DNS
 #
 # One key per device: two devices on one key take the session from each other. add writes the
@@ -48,8 +49,9 @@ add() {
   [[ $name =~ ^[a-z0-9][a-z0-9-]{0,31}$ ]] || die "name: up to 32 lower-case letters, digits and -"
   case $role in
     admin) net=10.99.0 first=2 routes="10.99.0.1/32, $VPC_CIDR" ;;
+    web) net=10.99.2 first=1 routes=10.99.0.1/32 ;;
     team) net=10.99.1 first=1 routes=10.99.0.1/32 ;;
-    *) die "role: admin or team" ;;
+    *) die "role: admin, web or team" ;;
   esac
   json=$(get)
   jq -e --arg n "$name" 'any(.peers[]; .name == $n)' <<<"$json" >/dev/null && die "$name exists"
@@ -111,5 +113,5 @@ list() {
 
 case ${1:-} in
   init | add | remove | list) cmd=$1 && shift && "$cmd" "$@" ;;
-  *) die "usage: $0 init | add <name> admin|team | remove <name> | list" ;;
+  *) die "usage: $0 init | add <name> admin|web|team | remove <name> | list" ;;
 esac
