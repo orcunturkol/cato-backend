@@ -52,6 +52,13 @@ public static class JobFreshnessChecks
             async (db, ct) => Midnight(await db.GroupMemberCountSnapshots
                 .Where(e => e.Source == GroupMemberCountSnapshot.SteamCommunitySource)
                 .MaxAsync(e => (DateOnly?)e.SnapshotDate, ct))),
+        // The same table and source as group_member_count, for the games it does not track. The
+        // newest day comes first in the (Source, SnapshotDate) index, so the scan stops early.
+        new("follower_watch", Collector, "group_member_count_snapshot", "SnapshotDate (Steam group, untracked games)", TimeSpan.FromDays(2),
+            async (db, ct) => Midnight(await db.GroupMemberCountSnapshots
+                .Where(e => e.Source == GroupMemberCountSnapshot.SteamCommunitySource
+                            && !GameTypes.Tracked.Contains(e.Game.GameType))
+                .MaxAsync(e => (DateOnly?)e.SnapshotDate, ct))),
         // No steamdb_followers check since 2026-10-24: a game's SteamDB history is fetched once and
         // the backlog is done, so new rows come only for a new tracked game or a request. The daily
         // follower numbers are group_member_count's (above).

@@ -69,7 +69,7 @@ public class CatoRoleTests
 
         var hosted = services.Where(d => d.ServiceType == typeof(IHostedService)).ToList();
 
-        Assert.Equal(17, hosted.Count);
+        Assert.Equal(18, hosted.Count);
         Assert.Equal(typeof(RedisBackfillHostedService), hosted[0].ImplementationType);
         Assert.Contains(hosted, d => d.ImplementationType == typeof(Cato.Infrastructure.Steam.ReviewTotalWatcherService));
         Assert.Equal(typeof(Cato.API.Services.Dispatch.JobDispatcherService), hosted[^3].ImplementationType);
