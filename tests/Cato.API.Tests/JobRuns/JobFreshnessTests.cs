@@ -60,6 +60,28 @@ public class JobFreshnessTests : JobRunsDbTestBase
     }
 
     [Fact]
+    public async Task The_follower_watch_check_reads_only_the_rows_of_untracked_games()
+    {
+        var tracked = new Game { Id = Guid.NewGuid(), AppId = 10, Name = "Tracked", GameType = GameTypes.Sourcing };
+        var other = new Game { Id = Guid.NewGuid(), AppId = 11, Name = "Other", GameType = GameTypes.Other };
+        Add(Job("follower_watch"), tracked, other,
+            Members(tracked, new DateOnly(2026, 10, 6)), Members(other, new DateOnly(2026, 10, 1)));
+
+        var watch = (await CheckAsync()).Single(r => r.JobName == "follower_watch");
+        Assert.True(watch.Stale);  // the tracked game's row of today does not count
+        Assert.Equal(new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc), watch.NewestAt);
+
+        Add(Members(other, new DateOnly(2026, 10, 6)));
+        Assert.False((await CheckAsync()).Single(r => r.JobName == "follower_watch").Stale);
+    }
+
+    private static GroupMemberCountSnapshot Members(Game game, DateOnly date) => new()
+    {
+        Id = Guid.NewGuid(), GameId = game.Id, SnapshotDate = date, MemberCount = 100,
+        Source = GroupMemberCountSnapshot.SteamCommunitySource, ScrapedAt = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+    };
+
+    [Fact]
     public async Task An_empty_table_is_stale_only_while_its_job_is_enabled()
     {
         Add(Job("steamworks_navstats"), Job("steamworks_traffic", enabled: false));

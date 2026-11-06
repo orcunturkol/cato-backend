@@ -125,6 +125,12 @@ public static class DbTableCatalog
         "https://steamcommunity.com/games/{appId}/memberslistxml/?xml=1",
         "Collector run_daily_db, daily, through rotating proxies → batch group_member_count", "group_member_count", Collector);
 
+    private static readonly DbTableSource WatchedGroupMembers = new(
+        DataSite.SteamCommunity, "Community hub member list XML (memberCount), untracked games",
+        "https://steamcommunity.com/games/{appId}/memberslistxml/?xml=1",
+        "Collector run_follower_watch: new pages daily, the rest weekly, through rotating proxies → batch group_member_count",
+        "follower_watch", Collector);
+
     private static readonly DbTableSource SteamDbFollowers = new(
         DataSite.SteamDb, "Follower history graph API (logged-in browser session)",
         "https://steamdb.info/api/GetGraphFollowersLoggedIn/?appid={appId}",
@@ -379,7 +385,7 @@ public static class DbTableCatalog
 
         new("group_member_count_snapshot", DataCollection.Automatic,
             "Community hub followers. Two series in one table, told apart by Source.",
-            [GroupMembers, SteamDbFollowers],
+            [GroupMembers, WatchedGroupMembers, SteamDbFollowers],
             [
                 "Every query and upsert filters on Source, so the daily scrape never overwrites the SteamDB history.",
                 "Follower history rows that do not parse are skipped; a date sent twice in one payload is written once.",

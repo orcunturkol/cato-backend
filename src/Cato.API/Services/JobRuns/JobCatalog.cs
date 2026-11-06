@@ -39,6 +39,7 @@ public sealed class JobCatalog : IJobCatalog
     private readonly PlayerProfileSettings _profiles;
     private readonly SteamWebApiSettings _webApi;
     private readonly FollowerHistorySweepSettings _followerSweep;
+    private readonly FollowerWatchSettings _followerWatch;
     private readonly NewsSettings _news;
     // Watcher rows of scheduled_job by name, read by LoadAsync; they win over the settings.
     private IReadOnlyDictionary<string, ScheduledJob> _watcherRows = new Dictionary<string, ScheduledJob>();
@@ -51,7 +52,8 @@ public sealed class JobCatalog : IJobCatalog
         IOptions<PlayerProfileSettings> profiles,
         IOptions<SteamWebApiSettings> webApi,
         IOptions<FollowerHistorySweepSettings> followerSweep,
-        IOptions<NewsSettings> news)
+        IOptions<NewsSettings> news,
+        IOptions<FollowerWatchSettings> followerWatch)
     {
         _db = db;
         _steam = steam.Value;
@@ -60,6 +62,7 @@ public sealed class JobCatalog : IJobCatalog
         _profiles = profiles.Value;
         _webApi = webApi.Value;
         _followerSweep = followerSweep.Value;
+        _followerWatch = followerWatch.Value;
         _news = news.Value;
     }
 
@@ -142,6 +145,9 @@ public sealed class JobCatalog : IJobCatalog
         yield return Interval(BackendJobNames.FollowerHistorySweep, "Follower history queue sweep",
             _followerSweep.IntervalMinutes, TimeSpan.FromMinutes(1),
             _followerSweep.Enabled, "FollowerHistorySweep:Enabled is false");
+        yield return Interval(BackendJobNames.FollowerWatchSweep, "Follower watch sweep",
+            _followerWatch.IntervalMinutes, TimeSpan.FromMinutes(2),
+            _followerWatch.Enabled, "FollowerWatch:Enabled is false");
     }
 
     /// <param name="settingsReason">Why it is off when the settings switch it off.</param>

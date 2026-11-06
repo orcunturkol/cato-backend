@@ -14,4 +14,5 @@ public static class BackendJobNames
     public const string PlayerAchievementWatcher = "PlayerAchievementWatcher";
     public const string SteamPlayerProfileWatcher = "SteamPlayerProfileWatcher";
     public const string FollowerHistorySweep = "FollowerHistorySweep";
+    public const string FollowerWatchSweep = "FollowerWatchSweep";
 }

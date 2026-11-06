@@ -17,6 +17,7 @@ public static class RoleHostingExtensions
     {
         services.AddHostedService<RedisBackfillHostedService>();
         services.AddHostedService<FollowerHistorySweepService>();
+        services.AddHostedService<FollowerWatchSweepService>();
         services.AddHostedService<RabbitMqConsumerService>();
         services.AddHostedService<SteamPlayerProfileWatcherService>();
         services.AddHostedService<GameEnrichmentWatcherService>();

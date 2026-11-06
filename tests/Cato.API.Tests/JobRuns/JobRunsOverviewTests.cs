@@ -141,7 +141,7 @@ public class JobRunsOverviewTests : JobRunsDbTestBase
 
         var overview = await OverviewAsync();
 
-        Assert.Equal(10 + CollectorSchedule().Length, overview.Jobs.Count);
+        Assert.Equal(11 + CollectorSchedule().Length, overview.Jobs.Count);
         var source = Assert.Single(overview.ScheduleSources);
         Assert.Equal(Collector, source.Producer);
         Assert.Equal(CollectorSchedule().Length, source.EntryCount);
