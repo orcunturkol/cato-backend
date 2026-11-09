@@ -160,7 +160,8 @@ public class CatoDbContext : DbContext
             entity.HasIndex(e => e.GameId);
             entity.HasIndex(e => e.TagName);
             entity.HasIndex(e => e.TagType);
-            entity.HasIndex(e => new { e.GameId, e.TagName }).IsUnique();
+            // Per type: a user tag and a store category can share a name ("Co-op").
+            entity.HasIndex(e => new { e.GameId, e.TagType, e.TagName }).IsUnique().IsCreatedConcurrently();
 
             entity.HasOne(e => e.Game)
                 .WithMany(g => g.Tags)
