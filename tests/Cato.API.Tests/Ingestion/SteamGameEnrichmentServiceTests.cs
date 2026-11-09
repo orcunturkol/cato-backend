@@ -73,6 +73,65 @@ public class SteamGameEnrichmentServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task User_tag_named_like_a_category_keeps_both_rows_and_its_rank()
+    {
+        // The store lists "Co-op" as a category and as the top user tag; one shared name set
+        // used to drop the user tag, so readers of TagType "UserTag" lost ranks 1 and 2.
+        var gameId = await SeedAsync(500);
+        var data = StoreData("Tagged", "Action");
+        data.Categories =
+        [
+            new SteamCategory { Id = 1, Description = "Single-player" },
+            new SteamCategory { Id = 2, Description = "Co-op" },
+            new SteamCategory { Id = 3, Description = "Online Co-op" },
+            new SteamCategory { Id = 4, Description = "online co-op" },
+        ];
+        _steam.Data[500] = data;
+        _steam.UserTags[500] =
+        [
+            new SteamUserTag { Name = "Co-op", Rank = 1 },
+            new SteamUserTag { Name = "Online Co-Op", Rank = 2 },
+            new SteamUserTag { Name = "Survival", Rank = 3 },
+            new SteamUserTag { Name = "survival", Rank = 4 },
+        ];
+
+        for (var run = 0; run < 2; run++)
+        {
+            await using (var db = NewContext())
+                Assert.True(await NewService(db).EnrichGameAsync(gameId));
+
+            await using var check = NewContext();
+            var tags = await check.GenreTags.Where(t => t.GameId == gameId).ToListAsync();
+            Assert.Equal(
+                ["Co-op", "Online Co-op", "Single-player"],
+                tags.Where(t => t.TagType == "Mechanic").Select(t => t.TagName).Order());
+            Assert.All(tags.Where(t => t.TagType == "Mechanic"), t => Assert.Equal(0, t.Weight));
+            Assert.Equal(
+                [("Co-op", 1), ("Online Co-Op", 2), ("Survival", 3)],
+                tags.Where(t => t.TagType == "UserTag").OrderBy(t => t.Weight).Select(t => (t.TagName, t.Weight)));
+        }
+    }
+
+    [Fact]
+    public async Task The_schema_allows_one_name_once_per_type()
+    {
+        var gameId = await SeedAsync(600);
+        GenreTag Tag(string type) => new() { Id = Guid.NewGuid(), GameId = gameId, TagName = "Co-op", TagType = type };
+
+        await using (var db = NewContext())
+        {
+            db.GenreTags.AddRange(Tag("Mechanic"), Tag("UserTag"));
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = NewContext())
+        {
+            db.GenreTags.Add(Tag("UserTag"));
+            await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        }
+    }
+
+    [Fact]
     public async Task Two_enrichments_of_one_game_run_one_after_the_other()
     {
         // The PICS watcher and the enrichment watcher picked the same new stub; both replaced its
@@ -180,8 +239,10 @@ public class SteamGameEnrichmentServiceTests : IDisposable
             IReadOnlyList<int> appIds, CancellationToken ct = default) =>
             throw new NotImplementedException();
 
+        public Dictionary<int, List<SteamUserTag>> UserTags { get; } = [];
+
         public Task<List<SteamUserTag>> GetUserTagsAsync(int appId, CancellationToken ct = default) =>
-            Task.FromResult(new List<SteamUserTag>());
+            Task.FromResult(UserTags.GetValueOrDefault(appId) ?? []);
 
         public Task<SteamAppReviewsResponse?> GetAppReviewsAsync(int appId, string cursor = "*", CancellationToken ct = default) =>
             throw new NotImplementedException();

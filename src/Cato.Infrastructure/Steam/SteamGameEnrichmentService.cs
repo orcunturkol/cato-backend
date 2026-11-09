@@ -270,14 +270,17 @@ public class SteamGameEnrichmentService : ISteamGameEnrichmentService
         }
 
         {
-            var addedTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            // One set per type: a user tag may share its name with a category ("Co-op" is both),
+            // and both rows are kept. Only duplicates within one type are skipped.
+            var addedCategories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var addedUserTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             if (steamData.Categories is not null)
             {
                 foreach (var cat in steamData.Categories)
                 {
                     if (string.IsNullOrWhiteSpace(cat.Description)) continue;
-                    if (!addedTags.Add(cat.Description)) continue;
+                    if (!addedCategories.Add(cat.Description)) continue;
 
                     _db.GenreTags.Add(new GenreTag
                     {
@@ -294,7 +297,7 @@ public class SteamGameEnrichmentService : ISteamGameEnrichmentService
             foreach (var tag in userTags)
             {
                 if (string.IsNullOrWhiteSpace(tag.Name)) continue;
-                if (!addedTags.Add(tag.Name)) continue;
+                if (!addedUserTags.Add(tag.Name)) continue;
 
                 _db.GenreTags.Add(new GenreTag
                 {

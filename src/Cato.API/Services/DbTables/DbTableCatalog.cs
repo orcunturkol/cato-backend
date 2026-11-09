@@ -297,7 +297,7 @@ public static class DbTableCatalog
         new("genre_tag", DataCollection.Automatic,
             "Store categories and user tags of a game.",
             [StoreEnrichment, StoreUserTags],
-            ["Deleted and written again on every enrichment.", "Case-insensitive duplicates are skipped; a category wins over a user tag."],
+            ["Deleted and written again on every enrichment.", "Case-insensitive duplicates within one TagType are skipped; a user tag and a category with the same name are both kept."],
             ["If the store page scrape fails, only the categories are stored."],
             new Dictionary<string, DbColumnDoc>
             {

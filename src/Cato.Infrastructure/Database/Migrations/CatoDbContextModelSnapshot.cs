@@ -898,8 +898,9 @@ namespace Cato.Infrastructure.Database.Migrations
 
                     b.HasIndex("TagType");
 
-                    b.HasIndex("GameId", "TagName")
-                        .IsUnique();
+                    b.HasIndex("GameId", "TagType", "TagName")
+                        .IsUnique()
+                        .HasAnnotation("Npgsql:CreatedConcurrently", true);
 
                     b.ToTable("genre_tag", (string)null);
                 });
