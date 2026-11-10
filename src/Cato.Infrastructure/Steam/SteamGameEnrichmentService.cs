@@ -150,7 +150,8 @@ public class SteamGameEnrichmentService : ISteamGameEnrichmentService
         game.ShortDescription = steamData.ShortDescription;
         game.DetailedDescription = steamData.DetailedDescription;
         game.HeaderImageUrl = steamData.HeaderImage;
-        game.CapsuleImageUrl = steamData.CapsuleImage;
+        // The store page shows the 616x353 main capsule; app details only has the 231x87 one.
+        game.CapsuleImageUrl = await _steam.GetMainCapsuleUrlAsync(game.AppId, ct) ?? steamData.CapsuleImage;
         game.ScreenshotUrls = steamData.Screenshots?
             .Select(s => s.PathFull)
             .OfType<string>()

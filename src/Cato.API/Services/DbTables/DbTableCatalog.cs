@@ -246,7 +246,7 @@ public static class DbTableCatalog
                 ["PublisherId"] = new("Steam Store app details: publishers[0] → legal_entity (find or create)", null, "Never cleared"),
                 ["IsEarlyAccess"] = new("Steam Store app details: genres contains \"Early Access\"", null, "Enrichment never sets it back to false"),
                 ["HeaderImageUrl"] = new("Steam Store app details: header_image", null, "Overwritten on every enrichment, also with null"),
-                ["CapsuleImageUrl"] = new("Steam Store app details: capsule_image", null, "Overwritten on every enrichment, also with null"),
+                ["CapsuleImageUrl"] = new("Steam IStoreBrowseService/GetItems: main_capsule (616x353); app details capsule_image (231x87) when that fails", null, "Overwritten on every enrichment, also with null"),
                 ["ScreenshotUrls"] = new("Steam Store app details: screenshots[].path_full", null, "Overwritten on every enrichment, also with null"),
                 ["TrailerUrl"] = new("Steam Store app details: highlighted movie, else the first; mp4.max → mp4.480 → webm.max → webm.480 → hls_h264", null, "Overwritten on every enrichment, also with null"),
                 ["TrailerThumbnailUrl"] = new("Steam Store app details: movie thumbnail", null, "Overwritten on every enrichment, also with null"),

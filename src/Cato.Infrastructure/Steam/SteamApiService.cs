@@ -43,6 +43,10 @@ public class SteamApiService : ISteamApiService
     // price watcher no longer wait behind it, and the keyed calls do not either.
     private static readonly SemaphoreSlim ReviewsRateLimiter = new(1, 1);
 
+    // GetItems (main capsule) runs once per enrichment, keyless. Its own limiter keeps the
+    // enrichment pace out of the line that the news and achievement watchers use.
+    private static readonly SemaphoreSlim StoreBrowseRateLimiter = new(1, 1);
+
     public async Task<SteamAppData?> GetAppDetailsAsync(int appId, CancellationToken ct = default)
     {
         var url = $"https://store.steampowered.com/api/appdetails?appids={appId}&cc=us&l=english";
@@ -596,16 +600,85 @@ public class SteamApiService : ISteamApiService
         return result;
     }
 
+    /// <summary>Apps per <see cref="GetMainCapsuleUrlsAsync"/> call.</summary>
+    public const int MaxCapsuleBatch = 100;
+
+    public async Task<string?> GetMainCapsuleUrlAsync(int appId, CancellationToken ct = default)
+    {
+        try
+        {
+            return (await GetMainCapsuleUrlsAsync([appId], ct)).GetValueOrDefault(appId);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException
+                                   || (ex is OperationCanceledException && !ct.IsCancellationRequested))
+        {
+            // The capsule is optional: a failure here must not fail the enrichment.
+            _logger.LogWarning(ex, "GetItems failed for AppId {AppId}", appId);
+            return null;
+        }
+    }
+
+    public async Task<IReadOnlyDictionary<int, string>> GetMainCapsuleUrlsAsync(
+        IReadOnlyList<int> appIds, CancellationToken ct = default)
+    {
+        if (appIds.Count == 0) return new Dictionary<int, string>();
+        if (appIds.Count > MaxCapsuleBatch)
+            throw new ArgumentException($"At most {MaxCapsuleBatch} apps per call.", nameof(appIds));
+
+        var input = JsonSerializer.Serialize(new
+        {
+            ids = appIds.Select(id => new { appid = id }),
+            context = new { language = "english", country_code = "US" },
+            data_request = new { include_assets = true },
+        });
+        var url = "https://api.steampowered.com/IStoreBrowseService/GetItems/v1/?input_json=" + Uri.EscapeDataString(input);
+        var (status, content) = await GetPublicAsync(url, "GetItems", appIds[0], ct, StoreBrowseRateLimiter);
+        if (content is null) throw new HttpRequestException($"GetItems answered {status?.ToString() ?? "nothing"}.");
+        return ParseMainCapsuleUrls(content);
+    }
+
+    /// <summary>
+    /// Builds the main capsule URL of each app in a GetItems answer: <c>asset_url_format</c>
+    /// ("steam/apps/{id}/${FILENAME}?t=…") with <c>main_capsule</c> ("{hash}/capsule_616x353.jpg").
+    /// Apps without both are left out.
+    /// </summary>
+    public static IReadOnlyDictionary<int, string> ParseMainCapsuleUrls(string json)
+    {
+        var result = new Dictionary<int, string>();
+        using var doc = JsonDocument.Parse(json);
+        if (!doc.RootElement.TryGetProperty("response", out var response)
+            || !response.TryGetProperty("store_items", out var items)
+            || items.ValueKind != JsonValueKind.Array)
+            return result;
+
+        foreach (var item in items.EnumerateArray())
+        {
+            if (!item.TryGetProperty("appid", out var idEl) || !idEl.TryGetInt32(out var appId)
+                || !item.TryGetProperty("assets", out var assets)
+                || !assets.TryGetProperty("asset_url_format", out var formatEl) || formatEl.ValueKind != JsonValueKind.String
+                || !assets.TryGetProperty("main_capsule", out var fileEl) || fileEl.ValueKind != JsonValueKind.String)
+                continue;
+
+            var format = formatEl.GetString();
+            var file = fileEl.GetString();
+            if (string.IsNullOrEmpty(format) || string.IsNullOrEmpty(file) || !format.Contains("${FILENAME}"))
+                continue;
+            result[appId] = "https://shared.akamai.steamstatic.com/store_item_assets/" + format.Replace("${FILENAME}", file);
+        }
+        return result;
+    }
+
     /// <summary>
     /// A keyless Web API GET through the shared limiter, retrying 429s and network
     /// errors. Returns the final status and the body of a 2xx (null otherwise).
     /// </summary>
     private async Task<(System.Net.HttpStatusCode? Status, string? Content)> GetPublicAsync(
-        string url, string what, int appId, CancellationToken ct)
+        string url, string what, int appId, CancellationToken ct, SemaphoreSlim? limiter = null)
     {
+        limiter ??= WebApiRateLimiter;
         for (var attempt = 0; attempt <= MaxRetries; attempt++)
         {
-            await WebApiRateLimiter.WaitAsync(ct);
+            await limiter.WaitAsync(ct);
             try
             {
                 var response = await _httpClient.GetAsync(url, ct);
@@ -631,7 +704,7 @@ public class SteamApiService : ISteamApiService
                 _ = Task.Run(async () =>
                 {
                     await Task.Delay(WebApiDelayBetweenRequestsMs, CancellationToken.None);
-                    WebApiRateLimiter.Release();
+                    limiter.Release();
                 }, CancellationToken.None);
             }
         }

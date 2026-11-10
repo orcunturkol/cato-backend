@@ -136,6 +136,18 @@ public class GamesController : ControllerBase
         return Results.Ok(await _mediator.Send(command));
     }
 
+    /// <summary>Set the Steam main capsule (616x353) on the given games, without a full enrichment.</summary>
+    [HttpPost("main-capsules")]
+    [ProducesResponseType(typeof(RefreshMainCapsulesResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> RefreshMainCapsules([FromBody] RefreshMainCapsulesCommand command, CancellationToken ct)
+    {
+        var result = await _mediator.Send(command, ct);
+        return result.IsSuccess
+            ? Results.Ok(result.Data)
+            : Results.BadRequest(new { error = result.ErrorMessage });
+    }
+
     /// <summary>Enrich a game from Steam by its AppId (for sibling services keyed on AppId).</summary>
     [HttpPost("by-appid/{appId:int}/enrich")]
     [ProducesResponseType(typeof(GameDto), StatusCodes.Status200OK)]

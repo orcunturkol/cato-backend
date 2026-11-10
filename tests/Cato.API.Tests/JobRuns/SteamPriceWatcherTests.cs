@@ -157,6 +157,13 @@ public class SteamPriceWatcherTests : JobRunsDbTestBase
         public Task<List<SteamUserTag>> GetUserTagsAsync(int appId, CancellationToken ct = default) =>
             throw new NotImplementedException();
 
+        public Task<string?> GetMainCapsuleUrlAsync(int appId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+
+        public Task<IReadOnlyDictionary<int, string>> GetMainCapsuleUrlsAsync(
+            IReadOnlyList<int> appIds, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+
         public Task<SteamAppReviewsResponse?> GetAppReviewsAsync(int appId, string cursor = "*", CancellationToken ct = default) =>
             throw new NotImplementedException();
 

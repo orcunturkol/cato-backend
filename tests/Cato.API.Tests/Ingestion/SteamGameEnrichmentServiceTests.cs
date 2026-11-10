@@ -73,6 +73,29 @@ public class SteamGameEnrichmentServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Capsule_is_the_main_capsule_and_falls_back_to_the_small_one()
+    {
+        // App details only has the 231x87 capsule; the store page shows the 616x353 one.
+        var withMain = await SeedAsync(600);
+        var withoutMain = await SeedAsync(601);
+        const string small = "https://cdn.example/apps/601/capsule_231x87.jpg";
+        const string main = "https://cdn.example/apps/600/abc/capsule_616x353.jpg";
+        _steam.Data[600] = new SteamAppData { Name = "A", CapsuleImage = "https://cdn.example/apps/600/def/capsule_231x87.jpg" };
+        _steam.Data[601] = new SteamAppData { Name = "B", CapsuleImage = small };
+        _steam.MainCapsules[600] = main;
+
+        await using (var db = NewContext())
+        {
+            Assert.True(await NewService(db).EnrichGameAsync(withMain));
+            Assert.True(await NewService(db).EnrichGameAsync(withoutMain));
+        }
+
+        await using var check = NewContext();
+        Assert.Equal(main, (await check.Games.SingleAsync(g => g.Id == withMain)).CapsuleImageUrl);
+        Assert.Equal(small, (await check.Games.SingleAsync(g => g.Id == withoutMain)).CapsuleImageUrl);
+    }
+
+    [Fact]
     public async Task User_tag_named_like_a_category_keeps_both_rows_and_its_rank()
     {
         // The store lists "Co-op" as a category and as the top user tag; one shared name set
@@ -243,6 +266,15 @@ public class SteamGameEnrichmentServiceTests : IDisposable
 
         public Task<List<SteamUserTag>> GetUserTagsAsync(int appId, CancellationToken ct = default) =>
             Task.FromResult(UserTags.GetValueOrDefault(appId) ?? []);
+
+        public Dictionary<int, string> MainCapsules { get; } = [];
+
+        public Task<string?> GetMainCapsuleUrlAsync(int appId, CancellationToken ct = default) =>
+            Task.FromResult(MainCapsules.GetValueOrDefault(appId));
+
+        public Task<IReadOnlyDictionary<int, string>> GetMainCapsuleUrlsAsync(
+            IReadOnlyList<int> appIds, CancellationToken ct = default) =>
+            throw new NotImplementedException();
 
         public Task<SteamAppReviewsResponse?> GetAppReviewsAsync(int appId, string cursor = "*", CancellationToken ct = default) =>
             throw new NotImplementedException();
