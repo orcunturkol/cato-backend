@@ -75,6 +75,16 @@ public class FinancialIngestionTests : IDisposable
     private static JsonElement Item(string salesDate, params object[] lines) =>
         JsonSerializer.SerializeToElement(new { transactions = lines, reference_data = new { }, sales_date = salesDate });
 
+    // An item of the multi-partner collector: data.partner_id is the partner of the key.
+    private static JsonElement PartnerItem(object partnerId, string salesDate, params object[] lines) =>
+        JsonSerializer.SerializeToElement(new { transactions = lines, reference_data = new { }, sales_date = salesDate, partner_id = partnerId });
+
+    private const int PlanB = 216530;
+    private const int Planzet = 337008;
+
+    private async Task<List<(int Partner, int Units)>> UnitsByPartnerAsync() =>
+        (await SalesAsync()).OrderBy(s => s.ReportPartnerId).Select(s => (s.ReportPartnerId, s.SalesUnits)).ToList();
+
     private async Task<ItemIngestResult> IngestAsync(params JsonElement[] items)
     {
         await using var db = NewContext();
@@ -238,6 +248,153 @@ public class FinancialIngestionTests : IDisposable
         var sales = await SalesAsync();
         Assert.Equal(2, sales.Count);
         Assert.Equal(4, sales.Single(s => s.SaleDate == new DateOnly(2026, 10, 5)).SalesUnits);
+    }
+
+    [Fact]
+    public async Task TwoPartnersOnOneGameAndDateBothStay()
+    {
+        await SeedGameAsync();
+
+        // A game moved to another partner mid-day: both partners report lines for the date.
+        await IngestAsync(PartnerItem(PlanB, "2025/08/01", Line("2025/08/01", "US", 2, "25.9800")));
+        await IngestAsync(PartnerItem(Planzet, "2025/08/01", Line("2025/08/01", "US", 3, "38.9700")));
+
+        var sales = await SalesAsync();
+        Assert.Equal([(PlanB, 2), (Planzet, 3)], sales.Select(s => (s.ReportPartnerId, s.SalesUnits)));
+        // PartnerId stays Steam's line value; the Line helper always sends 216530.
+        Assert.All(sales, s => Assert.Equal(PlanB, s.PartnerId));
+    }
+
+    [Fact]
+    public async Task ResendForOnePartnerReplacesOnlyThatPartner()
+    {
+        await SeedGameAsync();
+        await IngestAsync(
+            PartnerItem(PlanB, "2025/08/01", Line("2025/08/01", "US", 2, "25.9800")),
+            PartnerItem(Planzet, "2025/08/01", Line("2025/08/01", "US", 3, "38.9700"), Line("2025/08/01", "DE", 1, "12.9900")));
+
+        // 337008 restates the date: one line now.
+        await IngestAsync(PartnerItem(Planzet, "2025/08/01", Line("2025/08/01", "US", 4, "51.9600")));
+
+        var sales = await SalesAsync();
+        Assert.Equal([(PlanB, 2), (Planzet, 4)], sales.Select(s => (s.ReportPartnerId, s.SalesUnits)));
+    }
+
+    [Fact]
+    public async Task OneBatchWithBothPartnersAndARepeatedCopyKeepsTwoSets()
+    {
+        await SeedGameAsync();
+
+        // Pile Up!-like batch: 216530, then 337008, then the repeated 216530 copy. The second
+        // 216530 copy must drop only the first 216530 copy's staged lines, not 337008's.
+        await IngestAsync(
+            PartnerItem(PlanB, "2025/08/01", Line("2025/08/01", "US", 2, "25.9800")),
+            PartnerItem(Planzet, "2025/08/01", Line("2025/08/01", "US", 3, "38.9700")),
+            PartnerItem(PlanB, "2025/08/01", Line("2025/08/01", "US", 2, "25.9800")));
+
+        var sales = await SalesAsync();
+        Assert.Equal([(PlanB, 2), (Planzet, 3)], sales.Select(s => (s.ReportPartnerId, s.SalesUnits)));
+        Assert.Equal(64.95m, sales.Sum(s => s.NetRevenueUsd));
+    }
+
+    [Fact]
+    public async Task ItemWithoutPartnerIdCountsAs216530()
+    {
+        await SeedGameAsync();
+        await IngestAsync(PartnerItem(Planzet, "2025/08/01", Line("2025/08/01", "US", 3, "38.9700")));
+
+        // The collector before partners sends no partner_id: it replaces 216530's lines only.
+        await IngestAsync(Item("2025/08/01", Line("2025/08/01", "US", 2, "25.9800")));
+        await IngestAsync(Item("2025/08/01", Line("2025/08/01", "US", 5, "64.9500")));
+
+        Assert.Equal([(PlanB, 5), (Planzet, 3)], await UnitsByPartnerAsync());
+    }
+
+    [Fact]
+    public async Task NullPartnerIdCountsAs216530()
+    {
+        await SeedGameAsync();
+
+        await IngestAsync(PartnerItem(null!, "2025/08/01", Line("2025/08/01", "US", 2, "25.9800")));
+
+        Assert.Equal(PlanB, Assert.Single(await SalesAsync()).ReportPartnerId);
+    }
+
+    [Theory]
+    [InlineData("\"337008\"")]
+    [InlineData("0")]
+    [InlineData("-5")]
+    [InlineData("1.5")]
+    public async Task InvalidPartnerIdFailsTheLinesAndWritesNothing(string partnerJson)
+    {
+        await SeedGameAsync();
+        await IngestAsync(Item("2025/08/01", Line("2025/08/01", "US", 2, "25.9800")));
+
+        var result = await IngestAsync(PartnerItem(JsonDocument.Parse(partnerJson).RootElement, "2025/08/01",
+            Line("2025/08/01", "US", 3, "38.9700"), Line("2025/08/01", "DE", 1, "12.9900")));
+
+        Assert.Equal((2, 0, 2), (result.Processed, result.Inserted, result.Failed));
+        var sale = Assert.Single(await SalesAsync());
+        Assert.Equal((PlanB, 2), (sale.ReportPartnerId, sale.SalesUnits));
+    }
+
+    [Fact]
+    public async Task ManualUploadReplacesOnlyItsPartner()
+    {
+        await SeedGameAsync();
+        await IngestAsync(
+            PartnerItem(PlanB, "2025/08/01", Line("2025/08/01", "US", 2, "25.9800")),
+            PartnerItem(Planzet, "2025/08/01", Line("2025/08/01", "US", 3, "38.9700")));
+
+        async Task UploadAsync(int? partnerId, int units)
+        {
+            var json = JsonSerializer.Serialize(new { transactions = new[] { Line("2025/08/01", "US", units, "1.0000") } });
+            var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+            await using var db = NewContext();
+            var command = partnerId is { } id
+                ? new IngestFinancialDataCommand(AppId, "sales.json", stream, id)
+                : new IngestFinancialDataCommand(AppId, "sales.json", stream);
+            await new IngestionService(db, NullLogger<IngestionService>.Instance).IngestFinancialDataAsync(command);
+        }
+
+        await UploadAsync(Planzet, 7);
+        Assert.Equal([(PlanB, 2), (Planzet, 7)], await UnitsByPartnerAsync());
+
+        // Without a partner the upload is 216530's.
+        await UploadAsync(null, 9);
+        Assert.Equal([(PlanB, 9), (Planzet, 7)], await UnitsByPartnerAsync());
+    }
+
+    [Fact]
+    public async Task LegacyDispatcherFilesAreFor216530()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            await File.WriteAllTextAsync(path, "{\"transactions\":[]}");
+            var mediator = DispatchProxy.Create<MediatR.IMediator, CapturingMediator>();
+            var dispatcher = new IngestionDispatcher(mediator, NullLogger<IngestionDispatcher>.Instance);
+
+            await dispatcher.DispatchAsync(JsonSerializer.Serialize(new { source = "steam_financial", appId = AppId, filePath = path }), default);
+
+            var command = Assert.IsType<IngestFinancialDataCommand>(((CapturingMediator)(object)mediator).Sent);
+            Assert.Equal((AppId, PlanB), (command.AppId, command.ReportPartnerId));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    public class CapturingMediator : DispatchProxy
+    {
+        public object? Sent { get; private set; }
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            Sent = args?[0];
+            return Task.FromResult(new IngestionResult(0, 0, 0, 0, Guid.Empty));
+        }
     }
 
     [Fact]
