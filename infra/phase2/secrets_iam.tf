@@ -47,7 +47,7 @@ locals {
 # injected key by key. Set from the host with a copy script (user approval), never from state.
 resource "aws_secretsmanager_secret" "ogt_config" {
   name                    = "cato/ogt/config"
-  description             = "ogt-api settings as JSON: connection string, invite code, Discord webhook, screener e-mails, public URL."
+  description             = "ogt-api settings as JSON: connection string, invite code, Discord webhook, screener e-mails, public URL, Google Drive reader (OAuth client + refresh token)."
   recovery_window_in_days = 7
 }
 

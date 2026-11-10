@@ -68,8 +68,10 @@ locals {
         Cato__BaseUrl                        = "http://api.${local.namespace}:8080"
         Serilog__WriteTo__1__Args__serverUrl = "http://seq.${local.namespace}:5341"
       }
+      # GoogleDrive__*: the Google account that reads the meeting notes documents (drive.readonly).
       secrets = { for k in ["ConnectionStrings__DefaultConnection", "Auth__InviteCode", "Notifications__DiscordWebhookUrl",
-      "Ogt__ScreenerEmails__0", "Ogt__PublicBaseUrl"] : k => "${aws_secretsmanager_secret.ogt_config.arn}:${k}::" }
+        "Ogt__ScreenerEmails__0", "Ogt__PublicBaseUrl", "GoogleDrive__ClientId", "GoogleDrive__ClientSecret",
+      "GoogleDrive__RefreshToken", "GoogleDrive__AccountEmail"] : k => "${aws_secretsmanager_secret.ogt_config.arn}:${k}::" }
       health = null, min_healthy = 100, max_percent = 200
     }
     "ogt-frontend" = {
