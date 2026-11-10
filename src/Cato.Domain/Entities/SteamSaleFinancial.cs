@@ -4,7 +4,7 @@ namespace Cato.Domain.Entities;
 /// One line of Steam's <c>GetDetailedSales</c> report, stored under the game of its
 /// primary app. Steam sends several lines that share date, country, package and
 /// platform (standalone vs bundle, different discounts or prices), so there is no
-/// business key: ingestion replaces all of a game's lines for a date at once.
+/// business key: ingestion replaces all of a game's lines for a date and report partner at once.
 /// </summary>
 public class SteamSaleFinancial
 {
@@ -38,7 +38,11 @@ public class SteamSaleFinancial
     public int? AppId { get; set; }
     public int? PrimaryAppId { get; set; }
     public int? BundleId { get; set; }
+    // Steam's partnerid of the line.
     public int? PartnerId { get; set; }
+    // The partner whose Financial API key sent the line (item data.partner_id).
+    // A game can have sales under two partners on one date (a transfer).
+    public int ReportPartnerId { get; set; } = SteamworksPartner.LegacyPartnerId;
     public string? LineItemType { get; set; }
     public int? KeyRequestId { get; set; }
     public DateTime CreatedAt { get; set; }

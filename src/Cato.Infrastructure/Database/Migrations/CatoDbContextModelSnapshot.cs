@@ -2023,6 +2023,11 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.Property<int?>("PrimaryAppId")
                         .HasColumnType("integer");
 
+                    b.Property<int>("ReportPartnerId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(216530);
+
                     b.Property<int>("ReturnsUnits")
                         .HasColumnType("integer");
 
@@ -2060,7 +2065,7 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.HasIndex("SaleDate")
                         .HasDatabaseName("idx_steam_sale_date");
 
-                    b.HasIndex("GameId", "SaleDate")
+                    b.HasIndex("GameId", "SaleDate", "ReportPartnerId")
                         .HasDatabaseName("idx_steam_sale_game_date");
 
                     b.ToTable("steam_sale_financial", (string)null);
@@ -2621,6 +2626,30 @@ namespace Cato.Infrastructure.Database.Migrations
                         .HasDatabaseName("unique_steamworks_nextfest_stat");
 
                     b.ToTable("steamworks_nextfest_stat", (string)null);
+                });
+
+            modelBuilder.Entity("Cato.Domain.Entities.SteamworksPartner", b =>
+                {
+                    b.Property<int>("PartnerId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("DiscoveredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("PartnerId");
+
+                    b.ToTable("steamworks_partner", (string)null);
                 });
 
             modelBuilder.Entity("Cato.Domain.Entities.SteamworksPlayerCountry", b =>

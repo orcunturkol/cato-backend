@@ -238,12 +238,34 @@ Three traps worth knowing:
 lines grouped by primary app, plus `sales_date`). Steam sends **several lines per
 (date, country, package, platform)** — standalone vs bundle, two prices, a discount
 change — about a third of all lines. So the table has no business key:
-`IngestFinancialDataItemAsync` deletes the game's rows for that date (`ExecuteDeleteAsync`,
-inside the batch transaction) and inserts the new set. Restated dates update; a date sent
-twice is idempotent (staged rows of the first copy are detached). The manual upload uses
-the same replace. Until 2026-10 a unique index on those five columns sent every batch to
-the DLQ; the collector's highwatermark had advanced anyway, so recovering needs a resync
-from the collector side (`run_daily_financial --since`).
+`IngestFinancialDataItemAsync` deletes the game's rows for that date and report partner
+(`ExecuteDeleteAsync`, inside the batch transaction) and inserts the new set. Restated dates
+update; a date sent twice is idempotent (staged rows of the first copy are detached). The
+manual upload uses the same replace. Until 2026-10 a unique index on those five columns sent
+every batch to the DLQ; the collector's highwatermark had advanced anyway, so recovering
+needs a resync from the collector side (`run_daily_financial --since`).
+
+**Several partners.** A game can sell under two Steamworks partners (Pile Up! moved from
+PLAN B 216530 to PLANZET 337008 on about 2025-08-01), and each partner has its own
+Financial API key. Each item carries `data.partner_id`, the partner of the key; it goes to
+`ReportPartnerId` (NOT NULL, database default 216530). `PartnerId` stays Steam's line
+value. A missing `partner_id` means 216530 (the collector before partners); a value that is
+not a positive number fails the item's lines and writes nothing. The replace and the
+detach of staged rows match game, date **and** `ReportPartnerId`, so one partner's resend
+never deletes the other partner's lines. The manual upload takes an optional `partnerId`
+form field (default 216530); the legacy file path (`IngestionDispatcher`) is 216530. The
+reads sum all partners. **Rollback:** a build without `ReportPartnerId` deletes across
+partners: remove the extra Financial API keys and pause `financial` first. The migration
+`AddSteamworksPartners` stops with `RAISE` when a stored line has a `PartnerId` other than
+216530.
+
+`steamworks_partner` lists the partners the collector's Steamworks login sees (seed: 216530).
+`GET /api/steamworks-partners` (open) returns them by id. The collector posts the "View as"
+list of partner.steampowered.com to `POST /api/steamworks-partners/discovered`
+(`{"partners":[{"partnerId","name"}]}`): a new partner is enabled, a known one gets its name
+and `LastSeenAt`, a disabled one stays disabled. `PUT /api/steamworks-partners/{partnerId}`
+(`{"enabled":bool}`, 404 if unknown) switches one off. The collector fetches the enabled
+partners that have a key `STEAM_FINANCIAL_API_KEY_<id>` in `cato/collector/config`.
 
 Each item's `reference_data` also refreshes `steam_country` (code → name, Steam region) and
 `steamworks_bundle` (id → name); sales by region join through `steam_country`. Read side:

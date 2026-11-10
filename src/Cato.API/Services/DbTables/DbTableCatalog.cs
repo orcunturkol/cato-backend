@@ -311,7 +311,8 @@ public static class DbTableCatalog
             "Steam sales lines per game, date, country, package and platform.",
             [Financials, new(DataSite.Manual, "Sales JSON file", null, "POST /api/ingestion/financial")],
             [
-                "No business key: Steam sends several lines per (date, country, package, platform). The game's rows for each date are deleted and the new set is inserted.",
+                "No business key: Steam sends several lines per (date, country, package, platform). The game's rows for each date and report partner are deleted and the new set is inserted; the rows of another partner on the same date stay.",
+                "The report partner is the item's data.partner_id (the partner of the Financial API key); a missing value means 216530. A partner_id that is not a positive number fails the item's lines and writes nothing.",
                 "Returns are stored as positive numbers; key activations go to ActivatedUnits, not SalesUnits.",
                 "A line without a date that parses is skipped and counted as failed. Text longer than the column is cut.",
             ],
@@ -339,6 +340,8 @@ public static class DbTableCatalog
                 ["CombinedDiscountId"] = new("GetDetailedSales: combined_discount_id"),
                 ["RevenueShareTier"] = new("GetDetailedSales: additional_revenue_share_tier"),
                 ["PrimaryAppId"] = new("GetDetailedSales: primary_appid"),
+                ["PartnerId"] = new("GetDetailedSales: partnerid"),
+                ["ReportPartnerId"] = new("Collector: data.partner_id, the partner of the Financial API key", null, "216530 when missing (also the database default); upload: form field partnerId, default 216530"),
             }),
 
         new("steam_traffic", DataCollection.NoWriter,
@@ -521,6 +524,22 @@ public static class DbTableCatalog
             [Financials, BundleSales],
             ["Upsert by BundleId from reference_data.bundle_info of each sales batch and from each bundle sales item."],
             ["Name falls back to \"Bundle {id}\". Never deleted."]),
+
+        new("steamworks_partner", DataCollection.Automatic,
+            "Steamworks partners (organizations) the collector's login sees. The collector fetches the enabled ones.",
+            [
+                new(DataSite.Steamworks, "\"View as\" list (select runasPubid) of partner.steampowered.com", "https://partner.steampowered.com/",
+                    "Collector Steamworks jobs → POST /api/steamworks-partners/discovered"),
+                new(DataSite.Manual, "Enable or disable a partner", null, "PUT /api/steamworks-partners/{partnerId}"),
+            ],
+            [
+                "Upsert by PartnerId. A new partner is enabled; a known one gets the current name and LastSeenAt. A disabled partner stays disabled.",
+                "A partnerId must be positive and a name not empty, or the whole list is refused. The name is cut to 200 characters.",
+            ],
+            [
+                "Seeded with 216530 (PLAN B YAZILIM). A partner missing from a later list is kept.",
+                "The financial job needs the partner's key STEAM_FINANCIAL_API_KEY_<id> in cato/collector/config; 216530 falls back to STEAM_FINANCIAL_API_KEY.",
+            ]),
 
         new("steamworks_nav_stat", DataCollection.Automatic,
             "Store impressions and visits per product of the publisher (demos and playtests too), per period and filter.",

@@ -150,7 +150,7 @@ These exist in the Excel but don't clearly map to an MVP table yet. They could e
 | File | Has Ingestion Endpoint? | Target Table |
 |---|---|---|
 | `peak_ccu_history.json` | Done - `POST /api/ingestion/peak-ccu` | ccu_history |
-| `regional_sales_history.json` | Done - `POST /api/ingestion/financial` | steam_sale_financial |
+| `regional_sales_history.json` | Done - `POST /api/ingestion/financial` (optional `partnerId` form field, default 216530) | steam_sale_financial |
 | `steamworks_wishlists.csv` | Done - `POST /api/ingestion/wishlists` | owned_game_data |
 | `group_member_count.json` | Done - via ingestion service | group_member_count_snapshot |
 | `store_details.json` | Done - via game enrichment | main_game + game_genre + genre_tag |

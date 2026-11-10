@@ -169,7 +169,10 @@ Status 2026-10-22: done except OGT's data-protection keys and the Caddy image. S
 - The agent id is `group@hostname`; every ECS task has a new hostname, so after a deploy the old
   id stays "seen this week" and the `agent_offline` rule fires. Fix before Step B.
 - Step A copies Redis to Valkey, including the three `cato:collector:*` keys; without the
-  financial key the light agent re-syncs every sale date.
+  financial key the light agent re-syncs every sale date. Since 2026-11 (`feat/multi-partner`) the
+  cursor is per Steamworks partner, `cato:collector:financial:highwatermark:<partnerId>`; the old
+  key seeds 216530 once and stays as the rollback. A missing partner key re-syncs only that
+  partner (337008: 467 dates).
 - Seq on today's host listens on 127.0.0.1 and the Tailscale IP only: bind it to the private IP
   and open 5341 from the ECS groups, or ECS logs go to CloudWatch only until Step D3.
 - OGT keeps its data-protection keys in a container volume; on Fargate they are lost at every

@@ -1,5 +1,6 @@
 using Cato.API.DTOs;
 using Cato.API.Models.Ingestion;
+using Cato.Domain.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -30,16 +31,21 @@ public class IngestionController : ControllerBase
         return Results.Ok(result);
     }
 
-    /// <summary>Ingest regional sales history from an uploaded JSON file.</summary>
+    /// <summary>
+    /// Ingest regional sales history from an uploaded JSON file. <paramref name="partnerId"/> is the
+    /// Steamworks partner of the file (default 216530); only that partner's lines are replaced.
+    /// </summary>
     [HttpPost("financial")]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(IngestionResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IResult> IngestFinancialData([FromForm] int appId, IFormFile file, CancellationToken ct)
+    public async Task<IResult> IngestFinancialData([FromForm] int appId, IFormFile file, [FromForm] int? partnerId, CancellationToken ct)
     {
         if (file is null || file.Length == 0) return Results.BadRequest("File is required.");
+        if (partnerId is <= 0) return Results.BadRequest("partnerId must be a positive number.");
         await using var stream = file.OpenReadStream();
-        var result = await _mediator.Send(new IngestFinancialDataCommand(appId, file.FileName, stream), ct);
+        var result = await _mediator.Send(
+            new IngestFinancialDataCommand(appId, file.FileName, stream, partnerId ?? SteamworksPartner.LegacyPartnerId), ct);
         return Results.Ok(result);
     }
 

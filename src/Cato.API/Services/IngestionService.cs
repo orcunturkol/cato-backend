@@ -248,7 +248,7 @@ public class IngestionService : IIngestionService
                 // overwrites the dates it covers instead of skipping them. The
                 // delete runs at once, so it shares a transaction with the inserts.
                 await using var tx = await _db.Database.BeginTransactionAsync(ct);
-                (processed, inserted, failed) = await ReplaceFinancialSalesAsync(game.Id, transactions, null, ct);
+                (processed, inserted, failed) = await ReplaceFinancialSalesAsync(game.Id, request.ReportPartnerId, transactions, null, ct);
                 await _db.SaveChangesAsync(ct);
                 await tx.CommitAsync(ct);
                 if (failed > 0)
@@ -2186,21 +2186,37 @@ public class IngestionService : IIngestionService
 
     /// <summary>
     /// One app's Steam sales for one date: the <c>GetDetailedSales</c> lines the
-    /// collector grouped under this primary app. Replaces everything stored for the
-    /// game on that date, so restated dates update and lines that share a
-    /// date/country/package/platform are all kept.
+    /// collector grouped under this primary app, read with the Financial API key of
+    /// partner <c>partner_id</c> (missing: 216530, the collector before partners).
+    /// Replaces everything stored for the game, date and partner, so restated dates
+    /// update, lines that share a date/country/package/platform are all kept, and the
+    /// lines of another partner on the same date stay.
     /// </summary>
     public async Task<ItemIngestResult> IngestFinancialDataItemAsync(int appId, DateTimeOffset scrapedAt, JsonElement data, CancellationToken ct = default)
     {
         if (!data.TryGetProperty("transactions", out var transactions) || transactions.ValueKind != JsonValueKind.Array)
             return new ItemIngestResult(0, 0, 0, 0);
 
+        // A partner_id that is not a positive number must not fall back to 216530:
+        // the replace would delete 216530's lines. Count the item's lines as failed.
+        int partnerId = SteamworksPartner.LegacyPartnerId;
+        if (data.TryGetProperty("partner_id", out var partnerEl) && partnerEl.ValueKind != JsonValueKind.Null)
+        {
+            if (partnerEl.ValueKind != JsonValueKind.Number || !partnerEl.TryGetInt32(out partnerId) || partnerId <= 0)
+            {
+                var lines = transactions.GetArrayLength();
+                _logger.LogWarning("Financial item for AppId {AppId}: invalid partner_id {PartnerId}, {Lines} lines skipped",
+                    appId, partnerEl.GetRawText(), lines);
+                return new ItemIngestResult(lines, 0, 0, lines);
+            }
+        }
+
         var game = await FindOrStubGameAsync(appId, null, ct);
         DateOnly? salesDate = data.TryGetProperty("sales_date", out var sdEl)
             && sdEl.ValueKind == JsonValueKind.String
             && TryParseSaleDate(sdEl.GetString(), out var sd) ? sd : null;
 
-        var (processed, inserted, failed) = await ReplaceFinancialSalesAsync(game.Id, transactions, salesDate, ct);
+        var (processed, inserted, failed) = await ReplaceFinancialSalesAsync(game.Id, partnerId, transactions, salesDate, ct);
         if (data.TryGetProperty("reference_data", out var reference) && reference.ValueKind == JsonValueKind.Object)
             await UpsertFinancialReferenceAsync(reference, ct);
         if (failed > 0)
@@ -2210,20 +2226,25 @@ public class IngestionService : IIngestionService
     }
 
     /// <summary>
-    /// Parses sale lines and replaces the game's stored lines for every date they
-    /// cover (plus <paramref name="salesDate"/>, the date the payload was fetched
-    /// for). Runs inside the batch transaction: the delete is immediate, the
-    /// inserts are staged, and a failure rolls both back.
+    /// Parses sale lines and replaces the game's stored lines of report partner
+    /// <paramref name="partnerId"/> for every date they cover (plus
+    /// <paramref name="salesDate"/>, the date the payload was fetched for). Runs inside
+    /// the batch transaction: the delete is immediate, the inserts are staged, and a
+    /// failure rolls both back.
     /// </summary>
     private async Task<(int Processed, int Inserted, int Failed)> ReplaceFinancialSalesAsync(
-        Guid gameId, JsonElement transactions, DateOnly? salesDate, CancellationToken ct)
+        Guid gameId, int partnerId, JsonElement transactions, DateOnly? salesDate, CancellationToken ct)
     {
         int processed = 0, failed = 0;
         var rows = new List<SteamSaleFinancial>();
         foreach (var txn in transactions.EnumerateArray())
         {
             processed++;
-            if (TryReadSaleLine(txn, gameId, out var row)) rows.Add(row);
+            if (TryReadSaleLine(txn, gameId, out var row))
+            {
+                row.ReportPartnerId = partnerId;
+                rows.Add(row);
+            }
             else failed++;
         }
 
@@ -2237,13 +2258,14 @@ public class IngestionService : IIngestionService
         foreach (var entry in _db.ChangeTracker.Entries<SteamSaleFinancial>()
                      .Where(e => e.State == EntityState.Added
                               && e.Entity.GameId == gameId
+                              && e.Entity.ReportPartnerId == partnerId
                               && dates.Contains(e.Entity.SaleDate))
                      .ToList())
             entry.State = EntityState.Detached;
 
         var dateList = dates.ToList();
         await _db.SteamSaleFinancials
-            .Where(f => f.GameId == gameId && dateList.Contains(f.SaleDate))
+            .Where(f => f.GameId == gameId && f.ReportPartnerId == partnerId && dateList.Contains(f.SaleDate))
             .ExecuteDeleteAsync(ct);
 
         _db.SteamSaleFinancials.AddRange(rows);

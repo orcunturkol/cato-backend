@@ -36,6 +36,7 @@ public class CatoDbContext : DbContext
     public DbSet<SteamworksWishlistCountry> SteamworksWishlistCountries => Set<SteamworksWishlistCountry>();
     public DbSet<SteamCountry> SteamCountries => Set<SteamCountry>();
     public DbSet<SteamworksBundle> SteamworksBundles => Set<SteamworksBundle>();
+    public DbSet<SteamworksPartner> SteamworksPartners => Set<SteamworksPartner>();
     public DbSet<SteamworksBundleSale> SteamworksBundleSales => Set<SteamworksBundleSale>();
     public DbSet<SteamworksBundlePackageSale> SteamworksBundlePackageSales => Set<SteamworksBundlePackageSale>();
     public DbSet<SteamTrafficBreakdown> SteamTrafficBreakdowns => Set<SteamTrafficBreakdown>();
@@ -192,7 +193,10 @@ public class CatoDbContext : DbContext
             entity.Property(e => e.NetUnits)
                 .HasComputedColumnSql("\"SalesUnits\" - \"ReturnsUnits\"", stored: true);
 
-            entity.HasIndex(e => new { e.GameId, e.SaleDate }).HasDatabaseName("idx_steam_sale_game_date");
+            // A database default too: rows from a build without the column belong to 216530.
+            entity.Property(e => e.ReportPartnerId).HasDefaultValue(SteamworksPartner.LegacyPartnerId);
+
+            entity.HasIndex(e => new { e.GameId, e.SaleDate, e.ReportPartnerId }).HasDatabaseName("idx_steam_sale_game_date");
             entity.HasIndex(e => e.CountryCode).HasDatabaseName("idx_steam_sale_country");
             entity.HasIndex(e => e.SaleDate).HasDatabaseName("idx_steam_sale_date");
 
@@ -455,6 +459,15 @@ public class CatoDbContext : DbContext
             entity.HasKey(e => e.BundleId);
             entity.Property(e => e.BundleId).ValueGeneratedNever();
             entity.Property(e => e.Name).HasMaxLength(300).IsRequired();
+        });
+
+        // ── SteamworksPartner ──
+        modelBuilder.Entity<SteamworksPartner>(entity =>
+        {
+            entity.ToTable("steamworks_partner");
+            entity.HasKey(e => e.PartnerId);
+            entity.Property(e => e.PartnerId).ValueGeneratedNever();
+            entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
         });
 
         // ── SteamworksWishlistCountry ──

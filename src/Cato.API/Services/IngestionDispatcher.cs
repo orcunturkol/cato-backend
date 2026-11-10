@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Cato.API.Models.Ingestion;
+using Cato.Domain.Entities;
 using Cato.Infrastructure.Messaging;
 using MediatR;
 
@@ -42,7 +43,9 @@ public class IngestionDispatcher : IIngestionDispatcher
             case "steam_financial":
             {
                 await using var fs = File.OpenRead(message.FilePath);
-                await _mediator.Send(new IngestFinancialDataCommand(RequireAppId(), Path.GetFileName(message.FilePath), fs), ct);
+                // The legacy file path predates partners: its files are 216530's.
+                await _mediator.Send(new IngestFinancialDataCommand(
+                    RequireAppId(), Path.GetFileName(message.FilePath), fs, SteamworksPartner.LegacyPartnerId), ct);
                 break;
             }
             case "steamworks_wishlist":
