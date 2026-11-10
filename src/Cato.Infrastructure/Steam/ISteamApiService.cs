@@ -23,6 +23,21 @@ public interface ISteamApiService
     Task<List<SteamUserTag>> GetUserTagsAsync(int appId, CancellationToken ct = default);
 
     /// <summary>
+    /// The URL of the main capsule (616x353) that the store page shows, from the Web API's
+    /// IStoreBrowseService/GetItems, without a key. App details only gives the small 231x87
+    /// capsule, and on newer apps each asset has its own hash folder, so the URL cannot be
+    /// built from it. Returns null when Steam fails or the app has no main capsule.
+    /// </summary>
+    Task<string?> GetMainCapsuleUrlAsync(int appId, CancellationToken ct = default);
+
+    /// <summary>
+    /// <see cref="GetMainCapsuleUrlAsync"/> for up to <see cref="SteamApiService.MaxCapsuleBatch"/>
+    /// apps in one call. The answer holds only apps with a main capsule. Throws when Steam fails.
+    /// </summary>
+    Task<IReadOnlyDictionary<int, string>> GetMainCapsuleUrlsAsync(
+        IReadOnlyList<int> appIds, CancellationToken ct = default);
+
+    /// <summary>
     /// Fetches a page of recent reviews (all languages) for the given appId from the Web API's
     /// IUserReviewsService/GetAppReviews, without a key.
     /// Pass cursor="*" for the first page; use the cursor from the previous response for subsequent pages.
