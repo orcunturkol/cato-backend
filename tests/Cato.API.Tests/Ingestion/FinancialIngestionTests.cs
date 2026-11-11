@@ -219,6 +219,112 @@ public class FinancialIngestionTests : IDisposable
         Assert.Equal(1427.4734m, day.NetUsd);
     }
 
+    // A key activation line of key request keyRequestId (no sale, no revenue).
+    private static object KeyLine(string date, string country, int activated, int? keyRequestId) => new
+    {
+        date, country_code = country, packageid = 874080, platform = "Windows",
+        gross_units_activated = activated, key_request_id = keyRequestId, primary_appid = AppId,
+    };
+
+    // Real shapes of reference_data.key_request_info: a free license is a synthetic request
+    // with no game code and no territory; a real key request has both.
+    private static object FreeRequest(int id) => new { key_request_id = id, key_request_notes = "Synthetic request" };
+
+    private static object KeyRequest(int id, string notes = "For participation in the October Humble Choice") => new
+    {
+        key_request_id = id, key_request_notes = notes,
+        game_code_id = 1234, game_code_description = "Toy Shire",
+        territory_code_id = 0, territory_code_description = "Worldwide",
+    };
+
+    private static JsonElement ItemWithRequests(string salesDate, object[] requests, params object[] lines) =>
+        JsonSerializer.SerializeToElement(new { transactions = lines, reference_data = new { key_request_info = requests }, sales_date = salesDate });
+
+    [Fact]
+    public async Task KeyRequestsAreStoredAndUpdated()
+    {
+        await SeedGameAsync();
+
+        await IngestAsync(ItemWithRequests("2026/10/05", [FreeRequest(1007134), KeyRequest(2001)]));
+
+        await using (var db = NewContext())
+        {
+            var requests = await db.SteamKeyRequests.OrderBy(k => k.KeyRequestId).ToListAsync();
+            Assert.Equal([(2001, false), (1007134, true)], requests.Select(k => (k.KeyRequestId, k.IsFreeLicense)));
+            var key = requests[0];
+            Assert.Equal(("For participation in the October Humble Choice", "Toy Shire", "Worldwide"),
+                (key.Notes, key.GameCodeDescription, key.TerritoryDescription));
+            Assert.Equal("Synthetic request", requests[1].Notes);
+            Assert.NotEqual(default, key.UpdatedAt);
+        }
+
+        // A later batch re-sends 2001 with new notes; " synthetic REQUEST " is still free.
+        await IngestAsync(ItemWithRequests("2026/10/06",
+            [KeyRequest(2001, "Press keys"), new { key_request_id = 3001, key_request_notes = " synthetic REQUEST ", game_code_id = 5 }]));
+
+        await using (var db = NewContext())
+        {
+            var requests = await db.SteamKeyRequests.OrderBy(k => k.KeyRequestId).ToListAsync();
+            Assert.Equal([(2001, false), (3001, true), (1007134, true)], requests.Select(k => (k.KeyRequestId, k.IsFreeLicense)));
+            Assert.Equal("Press keys", requests[0].Notes);
+        }
+    }
+
+    [Fact]
+    public async Task DailySplitsKeyActivationsFromFreeLicenses()
+    {
+        await SeedGameAsync();
+
+        await IngestAsync(ItemWithRequests("2026/10/05", [FreeRequest(1007134), KeyRequest(2001)],
+            KeyLine("2026/10/05", "US", 500, 1007134),
+            KeyLine("2026/10/05", "DE", 7, 2001),
+            KeyLine("2026/10/05", "FR", 3, null),
+            Line("2026/10/05", "US", 2, "25.9800")));
+
+        await using var db = NewContext();
+        var day = Assert.Single(await new GameDataService(db).GetSalesDailyAsync(new GetSalesDailyQuery(AppId, null, null)));
+        Assert.Equal((2, 10, 500), (day.GrossUnits, day.ActivatedUnits, day.FreeLicenseUnits));
+    }
+
+    [Fact]
+    public async Task SummarySplitsKeyActivationsFromFreeLicenses()
+    {
+        await SeedGameAsync();
+
+        await IngestAsync(
+            ItemWithRequests("2026/10/05", [FreeRequest(1007134), KeyRequest(2001)],
+                KeyLine("2026/10/05", "US", 500, 1007134), KeyLine("2026/10/05", "DE", 7, 2001)),
+            ItemWithRequests("2026/10/06", [], KeyLine("2026/10/06", "US", 40, 1007134), KeyLine("2026/10/06", "FR", 3, null)));
+
+        await using var db = NewContext();
+        var game = Assert.Single((await new GameDataService(db).GetSalesSummaryAsync()).Games);
+        Assert.Equal((10, 540), (game.ActivatedUnits, game.FreeLicenseUnits));
+    }
+
+    [Fact]
+    public async Task UnknownKeyRequestCountsAsKeyActivation()
+    {
+        await SeedGameAsync();
+
+        // Existing rows before the reference data arrives: the request is not stored yet.
+        await IngestAsync(Item("2026/10/05", KeyLine("2026/10/05", "US", 500, 1007134)));
+
+        await using (var db = NewContext())
+        {
+            var day = Assert.Single(await new GameDataService(db).GetSalesDailyAsync(new GetSalesDailyQuery(AppId, null, null)));
+            Assert.Equal((500, 0), (day.ActivatedUnits, day.FreeLicenseUnits));
+        }
+
+        // A resync of another date brings the request: the stored line now counts as free.
+        await IngestAsync(ItemWithRequests("2026/10/06", [FreeRequest(1007134)]));
+
+        await using (var db = NewContext())
+        {
+            var day = Assert.Single(await new GameDataService(db).GetSalesDailyAsync(new GetSalesDailyQuery(AppId, null, null)));
+            Assert.Equal((0, 500), (day.ActivatedUnits, day.FreeLicenseUnits));
+        }
+    }
+
     [Fact]
     public async Task FourDecimalAmountsArePreserved()
     {

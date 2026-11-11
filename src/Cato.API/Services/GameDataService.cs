@@ -218,6 +218,7 @@ public class GameDataService : IGameDataService
         if (request.From is { } from) query = query.Where(s => s.SaleDate >= from);
         if (request.To is { } to) query = query.Where(s => s.SaleDate <= to);
 
+        var freeIds = await FreeLicenseRequestIdsAsync(ct);
         var days = await query
             .GroupBy(s => s.SaleDate)
             .Select(g => new
@@ -225,7 +226,8 @@ public class GameDataService : IGameDataService
                 Date = g.Key,
                 Gross = g.Sum(s => s.SalesUnits),
                 Returned = g.Sum(s => s.ReturnsUnits),
-                Activated = g.Sum(s => s.ActivatedUnits),
+                Activated = g.Sum(s => s.KeyRequestId != null && freeIds.Contains(s.KeyRequestId.Value) ? 0 : s.ActivatedUnits),
+                FreeLicense = g.Sum(s => s.KeyRequestId != null && freeIds.Contains(s.KeyRequestId.Value) ? s.ActivatedUnits : 0),
                 GrossUsd = g.Sum(s => s.GrossRevenueUsd),
                 ReturnsUsd = g.Sum(s => s.GrossReturnsUsd),
                 NetUsd = g.Sum(s => s.NetRevenueUsd),
@@ -234,7 +236,7 @@ public class GameDataService : IGameDataService
 
         return days
             .OrderBy(d => d.Date)
-            .Select(d => new SalesDailyDto(d.Date, d.Gross, d.Returned, d.Gross - d.Returned, d.Activated, d.GrossUsd, d.ReturnsUsd, d.NetUsd))
+            .Select(d => new SalesDailyDto(d.Date, d.Gross, d.Returned, d.Gross - d.Returned, d.Activated, d.FreeLicense, d.GrossUsd, d.ReturnsUsd, d.NetUsd))
             .ToList();
     }
 
@@ -295,6 +297,7 @@ public class GameDataService : IGameDataService
         // Same inclusive 30-day window as the wishlist summary.
         var from30 = latest.Value.AddDays(-29);
 
+        var freeIds = await FreeLicenseRequestIdsAsync(ct);
         var totals = await _db.SteamSaleFinancials
             .AsNoTracking()
             .GroupBy(s => s.GameId)
@@ -305,7 +308,8 @@ public class GameDataService : IGameDataService
                 LastDate = g.Max(s => s.SaleDate),
                 Gross = g.Sum(s => s.SalesUnits),
                 Returned = g.Sum(s => s.ReturnsUnits),
-                Activated = g.Sum(s => s.ActivatedUnits),
+                Activated = g.Sum(s => s.KeyRequestId != null && freeIds.Contains(s.KeyRequestId.Value) ? 0 : s.ActivatedUnits),
+                FreeLicense = g.Sum(s => s.KeyRequestId != null && freeIds.Contains(s.KeyRequestId.Value) ? s.ActivatedUnits : 0),
                 GrossUsd = g.Sum(s => s.GrossRevenueUsd),
                 NetUsd = g.Sum(s => s.NetRevenueUsd),
                 NetUnits30d = g.Sum(s => s.SaleDate >= from30 ? s.SalesUnits - s.ReturnsUnits : 0),
@@ -328,7 +332,7 @@ public class GameDataService : IGameDataService
                 return new SalesGameSummaryDto(
                     t.GameId, game.AppId, game.Name, game.GameType, game.HeaderImageUrl,
                     t.FirstDate, t.LastDate,
-                    t.Gross, t.Returned, t.Gross - t.Returned, t.Activated,
+                    t.Gross, t.Returned, t.Gross - t.Returned, t.Activated, t.FreeLicense,
                     t.GrossUsd, t.NetUsd, t.NetUnits30d, t.NetUsd30d);
             })
             .OrderByDescending(r => r.NetUsd)
@@ -336,6 +340,15 @@ public class GameDataService : IGameDataService
 
         return new SalesSummaryDto(latest, rows);
     }
+
+    // Key requests whose activations are free licenses (steam_key_request, a small
+    // table). A line with no request id, or an id not stored yet, is a key activation.
+    private Task<List<int>> FreeLicenseRequestIdsAsync(CancellationToken ct) =>
+        _db.SteamKeyRequests
+            .AsNoTracking()
+            .Where(k => k.IsFreeLicense)
+            .Select(k => k.KeyRequestId)
+            .ToListAsync(ct);
 
     // Store traffic CSV categories that are not page sources (see SteamTrafficBreakdown).
     private const string TrafficCountryCategory = "Country";

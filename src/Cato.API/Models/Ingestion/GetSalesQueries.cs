@@ -6,6 +6,9 @@ namespace Cato.API.Models.Ingestion;
 // net_sales_usd: gross sales minus refunds and VAT, before Steam's revenue share.
 // Units: gross = sold through Steam, returned = refunded (positive), net = gross − returned.
 // Activated = retail/CD keys activated on Steam: not sales, no Steam revenue.
+// FreeLicense = free-license claims ("add to library" of a free product): Steam sends them
+// as activations under a free-license key request (steam_key_request.IsFreeLicense).
+// A line whose key request is not stored yet counts as a key activation.
 
 /// <summary>A game's sales per day, oldest first. A day with no row had no sales.</summary>
 public record GetSalesDailyQuery(int AppId, DateOnly? From, DateOnly? To) : IRequest<List<SalesDailyDto>>;
@@ -16,6 +19,7 @@ public record SalesDailyDto(
     int ReturnedUnits,
     int NetUnits,
     int ActivatedUnits,
+    int FreeLicenseUnits,
     decimal GrossUsd,
     decimal ReturnsUsd,
     decimal NetUsd);
@@ -64,6 +68,7 @@ public record SalesGameSummaryDto(
     int ReturnedUnits,
     int NetUnits,
     int ActivatedUnits,
+    int FreeLicenseUnits,
     decimal GrossUsd,
     decimal NetUsd,
     int NetUnits30d,

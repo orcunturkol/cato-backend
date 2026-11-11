@@ -277,6 +277,17 @@ stores `ReturnsUnits`/`GrossReturnsUsd` positive so the `NetUnits` column
 third of all lines, no revenue) go to `ActivatedUnits`, never `SalesUnits`. Decimal `Sum` works on the
 SQLite test database (EF's `ef_sum`), so the tests cover the real queries.
 
+**Free licenses.** For free products (free prologues, demos, e.g. Toy Shire: Room One
+2517850) Steam also sends free-license claims ("add to library") as `gross_units_activated`:
+Room One had 487,292 free licenses and 68 retail keys. Each line has a `KeyRequestId`;
+`reference_data.key_request_info` lists the requests and goes to `steam_key_request`
+(upsert by id). `IsFreeLicense` = notes `Synthetic request` (any case), or no
+`game_code_id` and no `territory_code_id`. The daily and summary reads load the free ids
+once and split the sum: `ActivatedUnits` = key activations (no id, a non-free id, or an id
+not stored yet), `FreeLicenseUnits` = lines of a free request. The split is done at read
+time, so a resync that re-sends `reference_data` (`run_daily_financial --since`) fixes old
+rows too; until then they all count as key activations.
+
 ### Steamworks store traffic (`steam_traffic_breakdown`)
 
 The `/apps/navtrafficstats/{appid}` CSV (partner.steamgames.com) has no date column: each
