@@ -246,6 +246,7 @@ public class FinancialIngestionTests : IDisposable
         await SeedGameAsync();
 
         await IngestAsync(ItemWithRequests("2026/10/05", [FreeRequest(1007134), KeyRequest(2001)]));
+        (DateTime Key, DateTime Free) firstUpdatedAt;
 
         await using (var db = NewContext())
         {
@@ -256,17 +257,24 @@ public class FinancialIngestionTests : IDisposable
                 (key.Notes, key.GameCodeDescription, key.TerritoryDescription));
             Assert.Equal("Synthetic request", requests[1].Notes);
             Assert.NotEqual(default, key.UpdatedAt);
+            firstUpdatedAt = (key.UpdatedAt, requests[1].UpdatedAt);
         }
 
-        // A later batch re-sends 2001 with new notes; " synthetic REQUEST " is still free.
+        // A later batch flips both stored requests; " synthetic REQUEST " is still free.
         await IngestAsync(ItemWithRequests("2026/10/06",
-            [KeyRequest(2001, "Press keys"), new { key_request_id = 3001, key_request_notes = " synthetic REQUEST ", game_code_id = 5 }]));
+            [FreeRequest(2001), KeyRequest(1007134, "Press keys"),
+             new { key_request_id = 3001, key_request_notes = " synthetic REQUEST ", game_code_id = 5 }]));
 
         await using (var db = NewContext())
         {
             var requests = await db.SteamKeyRequests.OrderBy(k => k.KeyRequestId).ToListAsync();
-            Assert.Equal([(2001, false), (3001, true), (1007134, true)], requests.Select(k => (k.KeyRequestId, k.IsFreeLicense)));
-            Assert.Equal("Press keys", requests[0].Notes);
+            Assert.Equal([(2001, true), (3001, true), (1007134, false)], requests.Select(k => (k.KeyRequestId, k.IsFreeLicense)));
+            Assert.Equal(("Synthetic request", (string?)null, (string?)null),
+                (requests[0].Notes, requests[0].GameCodeDescription, requests[0].TerritoryDescription));
+            Assert.Equal(("Press keys", "Toy Shire", "Worldwide"),
+                (requests[2].Notes, requests[2].GameCodeDescription, requests[2].TerritoryDescription));
+            Assert.True(requests[0].UpdatedAt > firstUpdatedAt.Key);
+            Assert.True(requests[2].UpdatedAt > firstUpdatedAt.Free);
         }
     }
 
