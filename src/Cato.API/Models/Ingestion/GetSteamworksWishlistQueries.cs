@@ -51,7 +51,30 @@ public record GetSteamworksWishlistSummaryQuery : IRequest<SteamworksWishlistSum
 
 public record SteamworksWishlistSummaryDto(
     DateOnly? LatestDate,
-    List<SteamworksWishlistGameSummaryDto> Games);
+    List<SteamworksWishlistGameSummaryDto> Games,
+    // Per partner (by partner id): the sums over the apps it lists, as on the Steamworks
+    // "Lifetime Wishlist Summary" page. AllPartners counts each app once.
+    List<SteamworksWishlistPartnerSummaryDto> Partners,
+    SteamworksWishlistTotalsDto AllPartners);
+
+/// <summary>Lifetime totals of a set of apps. AppCount includes apps with no wishlist data.</summary>
+public record SteamworksWishlistTotalsDto(
+    int AppCount,
+    int Adds,
+    int Deletes,
+    int PurchasesAndActivations,
+    int Gifts,
+    int Outstanding);
+
+public record SteamworksWishlistPartnerSummaryDto(
+    int PartnerId,
+    string Name,
+    int AppCount,
+    int Adds,
+    int Deletes,
+    int PurchasesAndActivations,
+    int Gifts,
+    int Outstanding);
 
 public record SteamworksWishlistGameSummaryDto(
     Guid GameId,

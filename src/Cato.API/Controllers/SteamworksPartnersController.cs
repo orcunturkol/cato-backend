@@ -54,4 +54,23 @@ public class SteamworksPartnersController : ControllerBase
         var partner = await _mediator.Send(new UpdateSteamworksPartnerCommand(partnerId, enabled), ct);
         return partner is null ? Results.NotFound() : Results.Ok(partner);
     }
+
+    /// <summary>
+    /// Replace the apps the partner lists on partner.steampowered.com (the collector's
+    /// wishlist listing). An empty list clears them. Answers with the stored app ids.
+    /// </summary>
+    [HttpPut("{partnerId:int}/apps")]
+    [ProducesResponseType(typeof(List<int>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IResult> ReplaceApps(int partnerId, [FromBody] ReplaceSteamworksPartnerAppsRequest request, CancellationToken ct)
+    {
+        if (request.AppIds is null)
+            return Results.BadRequest("appIds is required.");
+        if (request.AppIds.Any(id => id <= 0))
+            return Results.BadRequest("Each app id must be positive.");
+
+        var stored = await _mediator.Send(new ReplaceSteamworksPartnerAppsCommand(partnerId, request.AppIds), ct);
+        return stored is null ? Results.NotFound() : Results.Ok(stored);
+    }
 }

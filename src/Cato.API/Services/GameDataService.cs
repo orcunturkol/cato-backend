@@ -161,7 +161,7 @@ public class GameDataService : IGameDataService
     {
         var latest = await _db.SteamworksWishlistDaily.MaxAsync(d => (DateOnly?)d.DateLocal, ct);
         if (latest is null)
-            return new SteamworksWishlistSummaryDto(null, []);
+            return new SteamworksWishlistSummaryDto(null, [], [], new SteamworksWishlistTotalsDto(0, 0, 0, 0, 0, 0));
 
         // Same inclusive 30-day window as the per-game view: the latest day and the 29 before it.
         var from30 = latest.Value.AddDays(-29);
@@ -206,7 +206,48 @@ public class GameDataService : IGameDataService
             .OrderByDescending(r => r.Outstanding)
             .ToList();
 
-        return new SteamworksWishlistSummaryDto(latest, rows);
+        var (partners, allPartners) = await SumWishlistsPerPartnerAsync(rows, ct);
+        return new SteamworksWishlistSummaryDto(latest, rows, partners, allPartners);
+    }
+
+    /// <summary>
+    /// Sums the per-game lifetime totals over each partner's apps (steamworks_partner_app); an
+    /// app with no wishlist data counts in AppCount with zeros. The all-partners total counts an
+    /// app that two partners list once.
+    /// </summary>
+    private async Task<(List<SteamworksWishlistPartnerSummaryDto>, SteamworksWishlistTotalsDto)> SumWishlistsPerPartnerAsync(
+        List<SteamworksWishlistGameSummaryDto> rows, CancellationToken ct)
+    {
+        var partners = await _db.SteamworksPartners.AsNoTracking()
+            .OrderBy(p => p.PartnerId)
+            .Select(p => new { p.PartnerId, p.Name })
+            .ToListAsync(ct);
+        var partnerApps = await _db.SteamworksPartnerApps.AsNoTracking()
+            .Select(a => new { a.PartnerId, a.AppId })
+            .ToListAsync(ct);
+        var byApp = rows.GroupBy(r => r.AppId).ToDictionary(g => g.Key, g => g.ToList());
+
+        SteamworksWishlistTotalsDto Sum(IReadOnlyCollection<int> appIds)
+        {
+            var games = appIds.SelectMany(a => byApp.GetValueOrDefault(a) ?? []).ToList();
+            return new SteamworksWishlistTotalsDto(
+                appIds.Count,
+                games.Sum(g => g.Adds),
+                games.Sum(g => g.Deletes),
+                games.Sum(g => g.PurchasesAndActivations),
+                games.Sum(g => g.Gifts),
+                games.Sum(g => g.Outstanding));
+        }
+
+        var perPartner = partners
+            .Select(p =>
+            {
+                var t = Sum(partnerApps.Where(a => a.PartnerId == p.PartnerId).Select(a => a.AppId).ToList());
+                return new SteamworksWishlistPartnerSummaryDto(
+                    p.PartnerId, p.Name, t.AppCount, t.Adds, t.Deletes, t.PurchasesAndActivations, t.Gifts, t.Outstanding);
+            })
+            .ToList();
+        return (perPartner, Sum(partnerApps.Select(a => a.AppId).Distinct().ToList()));
     }
 
     public async Task<List<SalesDailyDto>> GetSalesDailyAsync(GetSalesDailyQuery request, CancellationToken ct = default)

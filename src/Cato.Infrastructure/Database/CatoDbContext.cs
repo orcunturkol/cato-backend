@@ -38,6 +38,7 @@ public class CatoDbContext : DbContext
     public DbSet<SteamworksBundle> SteamworksBundles => Set<SteamworksBundle>();
     public DbSet<SteamKeyRequest> SteamKeyRequests => Set<SteamKeyRequest>();
     public DbSet<SteamworksPartner> SteamworksPartners => Set<SteamworksPartner>();
+    public DbSet<SteamworksPartnerApp> SteamworksPartnerApps => Set<SteamworksPartnerApp>();
     public DbSet<SteamworksBundleSale> SteamworksBundleSales => Set<SteamworksBundleSale>();
     public DbSet<SteamworksBundlePackageSale> SteamworksBundlePackageSales => Set<SteamworksBundlePackageSale>();
     public DbSet<SteamTrafficBreakdown> SteamTrafficBreakdowns => Set<SteamTrafficBreakdown>();
@@ -480,6 +481,18 @@ public class CatoDbContext : DbContext
             entity.HasKey(e => e.PartnerId);
             entity.Property(e => e.PartnerId).ValueGeneratedNever();
             entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
+        });
+
+        // ── SteamworksPartnerApp ──
+        modelBuilder.Entity<SteamworksPartnerApp>(entity =>
+        {
+            entity.ToTable("steamworks_partner_app");
+            entity.HasKey(e => new { e.PartnerId, e.AppId });
+
+            entity.HasOne<SteamworksPartner>()
+                .WithMany()
+                .HasForeignKey(e => e.PartnerId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // ── SteamworksWishlistCountry ──
