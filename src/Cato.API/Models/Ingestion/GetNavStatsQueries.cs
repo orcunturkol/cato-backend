@@ -10,7 +10,9 @@ namespace Cato.API.Models.Ingestion;
 /// <summary>
 /// Store page traffic of every product of a publisher over a range: totals per
 /// traffic source, "all" totals per period (oldest first) and per product (most
-/// visits first). Without a publisher id, the publisher with the latest data.
+/// visits first). Without a publisher id, PLAN B (216530) when it has data, else the
+/// publisher with the latest data. Publishers are never summed: the same product can
+/// show under two publishers with different numbers (Pile Up! after its move).
 /// </summary>
 public record GetNavStatsQuery(int? PublisherId, DateOnly? From, DateOnly? To) : IRequest<NavStatsDto>;
 
@@ -23,7 +25,11 @@ public record NavStatsDto(
     // "all", then its parts "store", "steamworks" (Steam platform) and "external".
     List<NavStatsTotalDto> Totals,
     List<NavStatsPeriodDto> Periods,
-    List<NavStatsProductDto> Products);
+    List<NavStatsProductDto> Products,
+    // Every publisher with nav stats, for the partner selector (name from steamworks_partner).
+    List<NavStatsPublisherDto> Publishers);
+
+public record NavStatsPublisherDto(int PublisherId, string? Name);
 
 public record NavStatsTotalDto(string Attribution, long Impressions, long Visits);
 

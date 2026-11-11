@@ -40,9 +40,12 @@ public class NavStatsTests : IDisposable
         new { app_id = appId, name, impressions, visits };
 
     private static JsonElement Item(string start, string end, string attribution, params object[] rows) =>
+        PublisherItem(Publisher, start, end, attribution, rows);
+
+    private static JsonElement PublisherItem(int publisher, string start, string end, string attribution, params object[] rows) =>
         JsonSerializer.SerializeToElement(new
         {
-            publisher_id = Publisher,
+            publisher_id = publisher,
             period_start = start,
             period_end = end,
             attribution,
@@ -57,11 +60,11 @@ public class NavStatsTests : IDisposable
         Row(3028820, "Ominous Stew Playtest", 1, 0),
     ];
 
-    private async Task<ItemIngestResult> IngestAsync(JsonElement item)
+    private async Task<ItemIngestResult> IngestAsync(JsonElement item, int publisher = Publisher)
     {
         await using var db = NewContext();
         var result = await new IngestionService(db, NullLogger<IngestionService>.Instance)
-            .IngestSteamworksNavStatsItemAsync(Publisher, DateTimeOffset.UtcNow, item);
+            .IngestSteamworksNavStatsItemAsync(publisher, DateTimeOffset.UtcNow, item);
         await db.SaveChangesAsync();
         return result;
     }
@@ -152,6 +155,35 @@ public class NavStatsTests : IDisposable
     }
 
     [Fact]
+    public async Task QueryShowsOnePublisherAndListsThemAll()
+    {
+        const int planzet = 337008, bekir = 356969;
+        await using (var seed = NewContext())
+        {
+            seed.SteamworksPartners.Add(new SteamworksPartner { PartnerId = planzet, Name = "PLANZET - FZCO", Enabled = true, DiscoveredAt = DateTime.UtcNow });
+            await seed.SaveChangesAsync();
+        }
+        await IngestAsync(Item("2026-11-09", "2026-11-09", "all", Row(2094910, "Pile Up!", 9000, 900)));
+        await IngestAsync(PublisherItem(planzet, "2026-11-09", "2026-11-09", "all", Row(2094910, "Pile Up!", 2000, 250)), planzet);
+        // Bekir's export is the newest: without a choice the page still shows PLAN B.
+        await IngestAsync(PublisherItem(bekir, "2026-11-10", "2026-11-10", "all", Row(4904560, "The Waking Grove", 100, 50)), bekir);
+
+        await using var db = NewContext();
+        var service = new GameDataService(db);
+        var standard = await service.GetNavStatsAsync(new GetNavStatsQuery(null, null, null));
+        Assert.Equal(Publisher, standard.PublisherId);
+        Assert.Equal([(2094910, 900L)], standard.Products.Select(p => (p.AppId, p.Visits)).ToList());
+        Assert.Equal([Publisher, planzet, bekir], standard.Publishers.Select(p => p.PublisherId).ToList());
+        Assert.Equal("PLANZET - FZCO", standard.Publishers[1].Name);
+        Assert.Null(standard.Publishers[2].Name); // no registry row: the page shows the id
+
+        // Publishers are never summed: the same product shows under both with its own numbers.
+        var chosen = await service.GetNavStatsAsync(new GetNavStatsQuery(planzet, null, null));
+        Assert.Equal(planzet, chosen.PublisherId);
+        Assert.Equal([(2094910, 250L)], chosen.Products.Select(p => (p.AppId, p.Visits)).ToList());
+    }
+
+    [Fact]
     public async Task QueryWithoutDataIsEmpty()
     {
         await using var db = NewContext();
@@ -159,5 +191,6 @@ public class NavStatsTests : IDisposable
 
         Assert.Null(dto.PublisherId);
         Assert.Empty(dto.Products);
+        Assert.Empty(dto.Publishers);
     }
 }
