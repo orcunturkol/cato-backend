@@ -2683,6 +2683,22 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.ToTable("steamworks_partner", (string)null);
                 });
 
+            modelBuilder.Entity("Cato.Domain.Entities.SteamworksPartnerApp", b =>
+                {
+                    b.Property<int>("PartnerId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("AppId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("PartnerId", "AppId");
+
+                    b.ToTable("steamworks_partner_app", (string)null);
+                });
+
             modelBuilder.Entity("Cato.Domain.Entities.SteamworksPlayerCountry", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3310,6 +3326,15 @@ namespace Cato.Infrastructure.Database.Migrations
                         .IsRequired();
 
                     b.Navigation("Game");
+                });
+
+            modelBuilder.Entity("Cato.Domain.Entities.SteamworksPartnerApp", b =>
+                {
+                    b.HasOne("Cato.Domain.Entities.SteamworksPartner", null)
+                        .WithMany()
+                        .HasForeignKey("PartnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Cato.Domain.Entities.SteamworksPlayerCountry", b =>

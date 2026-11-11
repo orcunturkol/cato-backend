@@ -558,6 +558,21 @@ public static class DbTableCatalog
                 "The financial job needs the partner's key STEAM_FINANCIAL_API_KEY_<id> in cato/collector/config; 216530 falls back to STEAM_FINANCIAL_API_KEY.",
             ]),
 
+        new("steamworks_partner_app", DataCollection.Automatic,
+            "The apps each Steamworks partner lists on its partner.steampowered.com wishlist pages. GET /api/steamworks-wishlist/summary sums the lifetime wishlist totals per partner over these apps.",
+            [
+                new(DataSite.Steamworks, "Wishlist overview page (/wishlist/daily/) per partner after a \"View as\" switch", "https://partner.steampowered.com/wishlist/daily/",
+                    "Collector run_steamworks_wishlist → PUT /api/steamworks-partners/{partnerId}/apps", "steamworks_wishlist", Collector),
+            ],
+            [
+                "Replace per partner: apps missing from the list are deleted, new ones added, LastSeenAt set on all. An empty list clears the partner.",
+                "The partner must exist (404). App ids must be positive, or the whole list is refused.",
+            ],
+            [
+                "Only a partner whose listing succeeded is sent; a failed listing keeps the old set. --app-ids runs send nothing.",
+                "Empty until the first wishlist run after the deploy.",
+            ]),
+
         new("steamworks_nav_stat", DataCollection.Automatic,
             "Store impressions and visits per product of the publisher (demos and playtests too), per period and filter.",
             [NavStats],

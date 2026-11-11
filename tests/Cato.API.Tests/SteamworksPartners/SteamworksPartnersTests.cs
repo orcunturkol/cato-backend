@@ -44,10 +44,11 @@ public class SteamworksPartnersTests : IDisposable
 
     private CatoDbContext NewContext() => new(_options);
 
-    private SteamworksPartnersController NewController(CatoDbContext db)
+    private SteamworksPartnersController NewController(CatoDbContext db, DateTime? now = null)
     {
         var mediator = DispatchProxy.Create<IMediator, HandlerMediator>();
         ((HandlerMediator)(object)mediator).Db = db;
+        ((HandlerMediator)(object)mediator).Now = now ?? Now;
         return new SteamworksPartnersController(mediator);
     }
 
@@ -148,16 +149,69 @@ public class SteamworksPartnersTests : IDisposable
         Assert.IsType<BadRequest<string>>(await controller.Update(216530, new UpdateSteamworksPartnerRequest(null), default));
     }
 
+    private static readonly DateTime Later = new(2026, 11, 12, 10, 0, 0, DateTimeKind.Utc);
+
+    private async Task<IResult> ReplaceAppsAsync(int partnerId, List<int>? appIds, DateTime? now = null)
+    {
+        await using var db = NewContext();
+        return await NewController(db, now).ReplaceApps(partnerId, new ReplaceSteamworksPartnerAppsRequest(appIds), default);
+    }
+
+    private async Task<List<(int AppId, DateTime LastSeenAt)>> StoredAppsAsync(int partnerId)
+    {
+        await using var db = NewContext();
+        return (await db.SteamworksPartnerApps.Where(a => a.PartnerId == partnerId).OrderBy(a => a.AppId).ToListAsync())
+            .Select(a => (a.AppId, a.LastSeenAt)).ToList();
+    }
+
+    [Fact]
+    public async Task ReplaceAppsDeletesMissingAddsNewAndMarksAllSeen()
+    {
+        Assert.Equal([10, 20, 30], Assert.IsType<Ok<List<int>>>(await ReplaceAppsAsync(216530, [30, 10, 20, 10])).Value);
+
+        var answer = await ReplaceAppsAsync(216530, [20, 40], Later);
+
+        Assert.Equal([20, 40], Assert.IsType<Ok<List<int>>>(answer).Value);
+        Assert.Equal([(20, Later), (40, Later)], await StoredAppsAsync(216530));
+    }
+
+    [Fact]
+    public async Task ReplaceAppsTouchesOnlyThatPartner()
+    {
+        await DiscoverAsync(new DiscoveredPartner(337008, "PLANZET - FZCO"));
+        await ReplaceAppsAsync(216530, [10, 20]);
+        await ReplaceAppsAsync(337008, [20, 30]);
+
+        await ReplaceAppsAsync(216530, [], Later);
+
+        Assert.Empty(await StoredAppsAsync(216530));
+        Assert.Equal([(20, Now), (30, Now)], await StoredAppsAsync(337008));
+    }
+
+    [Fact]
+    public async Task ReplaceAppsRefusesBadInputAndUnknownPartner()
+    {
+        await ReplaceAppsAsync(216530, [10]);
+
+        Assert.IsType<NotFound>(await ReplaceAppsAsync(999999, [10]));
+        Assert.IsType<BadRequest<string>>(await ReplaceAppsAsync(216530, null));
+        Assert.IsType<BadRequest<string>>(await ReplaceAppsAsync(216530, [20, 0]));
+
+        Assert.Equal([(10, Now)], await StoredAppsAsync(216530));
+    }
+
     /// <summary>An <see cref="IMediator"/> that runs the registry's real handlers.</summary>
     public class HandlerMediator : DispatchProxy
     {
         public CatoDbContext Db { get; set; } = null!;
+        public DateTime Now { get; set; } = SteamworksPartnersTests.Now;
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) => args?[0] switch
         {
             GetSteamworksPartnersQuery q => new GetSteamworksPartnersHandler(Db).Handle(q, default),
             ReportDiscoveredPartnersCommand c => new ReportDiscoveredPartnersHandler(Db, new FixedTime(Now)).Handle(c, default),
             UpdateSteamworksPartnerCommand c => new UpdateSteamworksPartnerHandler(Db).Handle(c, default),
+            ReplaceSteamworksPartnerAppsCommand c => new ReplaceSteamworksPartnerAppsHandler(Db, new FixedTime(Now)).Handle(c, default),
             _ => throw new NotSupportedException(targetMethod?.Name),
         };
     }

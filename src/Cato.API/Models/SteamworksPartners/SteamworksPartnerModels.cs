@@ -25,3 +25,9 @@ public record UpdateSteamworksPartnerRequest(bool? Enabled);
 
 /// <summary>Null when the partner is unknown.</summary>
 public record UpdateSteamworksPartnerCommand(int PartnerId, bool Enabled) : IRequest<SteamworksPartnerDto?>;
+
+/// <summary>Body of PUT /api/steamworks-partners/{partnerId}/apps.</summary>
+public record ReplaceSteamworksPartnerAppsRequest(List<int>? AppIds);
+
+/// <summary>Null when the partner is unknown; else the stored app ids, sorted.</summary>
+public record ReplaceSteamworksPartnerAppsCommand(int PartnerId, List<int> AppIds) : IRequest<List<int>?>;

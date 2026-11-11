@@ -267,6 +267,13 @@ and `LastSeenAt`, a disabled one stays disabled. `PUT /api/steamworks-partners/{
 (`{"enabled":bool}`, 404 if unknown) switches one off. The collector fetches the enabled
 partners that have a key `STEAM_FINANCIAL_API_KEY_<id>` in `cato/collector/config`.
 
+`steamworks_partner_app` (PK `PartnerId, AppId`, FK to `steamworks_partner`) holds the apps
+each partner lists on its partner.steampowered.com wishlist pages. After its listing the
+collector's `run_steamworks_wishlist` sends `PUT /api/steamworks-partners/{partnerId}/apps`
+(`{"appIds":[...]}`) per partner whose listing succeeded: apps missing from the list are
+deleted, new ones added, `LastSeenAt` set; an empty list clears; 404 if the partner is
+unknown, 400 when `appIds` is missing or an id is not positive.
+
 Each item's `reference_data` also refreshes `steam_country` (code → name, Steam region) and
 `steamworks_bundle` (id → name); sales by region join through `steam_country`. Read side:
 `GET /api/games/{appId}/sales/daily|countries` and `GET /api/sales/summary`. "Net" is Steam's
@@ -392,6 +399,13 @@ totals are a GROUP BY, no lookup table.
 promotes every app the collector's Steamworks login can see to `GameType = "Owned"` (Redis after save) and
 queues Steam enrichment in the background for rows with `LastEnrichedAt == null`. It is
 synchronous so the wishlist batch never stubs a new game as `Other`.
+
+`GET /api/steamworks-wishlist/summary` also returns `partners` (by partner id: `appCount`
+and the lifetime `adds`, `deletes`, `purchasesAndActivations`, `gifts`, `outstanding`
+summed over the partner's apps in `steamworks_partner_app`) and `allPartners` (the same
+over the union of the apps, so an app two partners list counts once). These match the
+Steamworks "Lifetime Wishlist Summary" (`/wishlist/summary/`, row "All games") of that
+partner up to the last daily fetch. An app with no wishlist rows adds zeros.
 
 `GroupMemberCountSnapshot` holds **two series in one table**, discriminated by `Source` and keyed `(GameId, SnapshotDate, Source)`:
 `steam_community_group` (the live daily scrape) and `steamdb_follower_history` (the SteamDB backfill of the same metric, reaching years further back). Any query or upsert against this table must filter on `Source`, or the daily scrape will silently overwrite backfilled history.
