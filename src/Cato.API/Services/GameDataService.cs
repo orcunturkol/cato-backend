@@ -428,13 +428,24 @@ public class GameDataService : IGameDataService
 
     public async Task<NavStatsDto> GetNavStatsAsync(GetNavStatsQuery request, CancellationToken ct = default)
     {
-        var publisherId = request.PublisherId ?? await _db.SteamworksNavStats
-            .AsNoTracking()
-            .OrderByDescending(n => n.PeriodEnd)
-            .Select(n => (int?)n.PublisherId)
-            .FirstOrDefaultAsync(ct);
+        var publisherIds = await _db.SteamworksNavStats.AsNoTracking()
+            .Select(n => n.PublisherId).Distinct().ToListAsync(ct);
+        var partnerNames = await _db.SteamworksPartners.AsNoTracking()
+            .Where(p => publisherIds.Contains(p.PartnerId))
+            .ToDictionaryAsync(p => p.PartnerId, p => p.Name, ct);
+        var publishers = publisherIds.Order()
+            .Select(id => new NavStatsPublisherDto(id, partnerNames.GetValueOrDefault(id)))
+            .ToList();
+
+        var publisherId = request.PublisherId
+            ?? (publisherIds.Contains(SteamworksPartner.LegacyPartnerId) ? SteamworksPartner.LegacyPartnerId : (int?)null)
+            ?? await _db.SteamworksNavStats
+                .AsNoTracking()
+                .OrderByDescending(n => n.PeriodEnd)
+                .Select(n => (int?)n.PublisherId)
+                .FirstOrDefaultAsync(ct);
         if (publisherId is null)
-            return new NavStatsDto(null, null, null, null, [], [], []);
+            return new NavStatsDto(null, null, null, null, [], [], [], publishers);
 
         var all = _db.SteamworksNavStats.AsNoTracking()
             .Where(n => n.PublisherId == publisherId && n.Region == NavStatsAllRegions);
@@ -499,7 +510,7 @@ public class GameDataService : IGameDataService
                 byApp.Where(a => a.Attribution == attr).Sum(a => a.Visits)))
             .ToList();
 
-        return new NavStatsDto(publisherId, firstDate, lastDate, firstDailyDate, totals, periods, products);
+        return new NavStatsDto(publisherId, firstDate, lastDate, firstDailyDate, totals, periods, products, publishers);
     }
 
     public async Task<PlayersDto> GetPlayersAsync(GetPlayersQuery request, CancellationToken ct = default)
