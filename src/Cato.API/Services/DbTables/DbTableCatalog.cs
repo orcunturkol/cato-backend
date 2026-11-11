@@ -314,6 +314,7 @@ public static class DbTableCatalog
                 "No business key: Steam sends several lines per (date, country, package, platform). The game's rows for each date and report partner are deleted and the new set is inserted; the rows of another partner on the same date stay.",
                 "The report partner is the item's data.partner_id (the partner of the Financial API key); a missing value means 216530. A partner_id that is not a positive number fails the item's lines and writes nothing.",
                 "Returns are stored as positive numbers; key activations go to ActivatedUnits, not SalesUnits.",
+                "Free-license claims of free products also come as activations; the sales reads count lines whose KeyRequestId is a free-license request in steam_key_request apart, as free licenses.",
                 "A line without a date that parses is skipped and counted as failed. Text longer than the column is cut.",
             ],
             [
@@ -328,7 +329,7 @@ public static class DbTableCatalog
                 ["Platform"] = new("GetDetailedSales: platform", null, "\"Steam\" when missing"),
                 ["SalesUnits"] = new("GetDetailedSales: gross_units_sold", null, "0 when missing"),
                 ["ReturnsUnits"] = new("GetDetailedSales: gross_units_returned, stored positive"),
-                ["ActivatedUnits"] = new("GetDetailedSales: gross_units_activated", null, "0 when missing"),
+                ["ActivatedUnits"] = new("GetDetailedSales: gross_units_activated (key activations and free licenses; split by KeyRequestId on read)", null, "0 when missing"),
                 ["NetUnits"] = new("Database: SalesUnits - ReturnsUnits (stored computed column)"),
                 ["GrossRevenueUsd"] = new("GetDetailedSales: gross_sales_usd", null, "0 when not a number"),
                 ["GrossReturnsUsd"] = new("GetDetailedSales: gross_returns_usd, stored positive", null, "0 when not a number"),
@@ -524,6 +525,22 @@ public static class DbTableCatalog
             [Financials, BundleSales],
             ["Upsert by BundleId from reference_data.bundle_info of each sales batch and from each bundle sales item."],
             ["Name falls back to \"Bundle {id}\". Never deleted."]),
+
+        new("steam_key_request", DataCollection.Automatic,
+            "Steam key requests, used to split free licenses from key activations in sales.",
+            [Financials],
+            [
+                "Upsert by KeyRequestId from reference_data.key_request_info of each sales batch; changed fields are updated.",
+                "IsFreeLicense: the notes are \"Synthetic request\" (any case), or the request has no game_code_id and no territory_code_id.",
+            ],
+            ["Never deleted. A sale line whose KeyRequestId is not stored yet counts as a key activation."],
+            new Dictionary<string, DbColumnDoc>
+            {
+                ["Notes"] = new("GetDetailedSales reference_data.key_request_info: key_request_notes"),
+                ["GameCodeDescription"] = new("GetDetailedSales reference_data.key_request_info: game_code_description"),
+                ["TerritoryDescription"] = new("GetDetailedSales reference_data.key_request_info: territory_code_description"),
+                ["IsFreeLicense"] = new("CATO: from the notes, game_code_id and territory_code_id"),
+            }),
 
         new("steamworks_partner", DataCollection.Automatic,
             "Steamworks partners (organizations) the collector's login sees. The collector fetches the enabled ones.",

@@ -1686,6 +1686,37 @@ namespace Cato.Infrastructure.Database.Migrations
                     b.ToTable("steamdb_snapshot", (string)null);
                 });
 
+            modelBuilder.Entity("Cato.Domain.Entities.SteamKeyRequest", b =>
+                {
+                    b.Property<int>("KeyRequestId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("GameCodeDescription")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<bool>("IsFreeLicense")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("TerritoryDescription")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("KeyRequestId");
+
+                    b.ToTable("steam_key_request", (string)null);
+                });
+
             modelBuilder.Entity("Cato.Domain.Entities.SteamPlayerAchievement", b =>
                 {
                     b.Property<Guid>("Id")

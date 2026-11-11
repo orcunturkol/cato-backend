@@ -36,6 +36,7 @@ public class CatoDbContext : DbContext
     public DbSet<SteamworksWishlistCountry> SteamworksWishlistCountries => Set<SteamworksWishlistCountry>();
     public DbSet<SteamCountry> SteamCountries => Set<SteamCountry>();
     public DbSet<SteamworksBundle> SteamworksBundles => Set<SteamworksBundle>();
+    public DbSet<SteamKeyRequest> SteamKeyRequests => Set<SteamKeyRequest>();
     public DbSet<SteamworksPartner> SteamworksPartners => Set<SteamworksPartner>();
     public DbSet<SteamworksBundleSale> SteamworksBundleSales => Set<SteamworksBundleSale>();
     public DbSet<SteamworksBundlePackageSale> SteamworksBundlePackageSales => Set<SteamworksBundlePackageSale>();
@@ -459,6 +460,17 @@ public class CatoDbContext : DbContext
             entity.HasKey(e => e.BundleId);
             entity.Property(e => e.BundleId).ValueGeneratedNever();
             entity.Property(e => e.Name).HasMaxLength(300).IsRequired();
+        });
+
+        // ── SteamKeyRequest ──
+        modelBuilder.Entity<SteamKeyRequest>(entity =>
+        {
+            entity.ToTable("steam_key_request");
+            entity.HasKey(e => e.KeyRequestId);
+            entity.Property(e => e.KeyRequestId).ValueGeneratedNever();
+            entity.Property(e => e.Notes).HasMaxLength(500);
+            entity.Property(e => e.GameCodeDescription).HasMaxLength(200);
+            entity.Property(e => e.TerritoryDescription).HasMaxLength(200);
         });
 
         // ── SteamworksPartner ──
@@ -1426,6 +1438,19 @@ public class CatoDbContext : DbContext
         }
 
         foreach (var entry in ChangeTracker.Entries<SteamworksBundle>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<SteamKeyRequest>())
         {
             if (entry.State == EntityState.Added)
             {

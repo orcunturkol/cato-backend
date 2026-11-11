@@ -18,7 +18,8 @@ public class SteamSaleFinancial
     public int SalesUnits { get; set; }
     // Positive: Steam sends gross_units_returned / gross_returns_usd as negatives.
     public int ReturnsUnits { get; set; }
-    // Retail/CD keys activated on Steam (gross_units_activated); no Steam revenue.
+    // gross_units_activated: retail/CD key activations and free-license claims (split on
+    // read by KeyRequestId → steam_key_request.IsFreeLicense); no Steam revenue.
     public int ActivatedUnits { get; set; }
     public int NetUnits { get; set; } // Computed: sales_units - returns_units
     public decimal GrossRevenueUsd { get; set; }

@@ -2276,11 +2276,12 @@ public class IngestionService : IIngestionService
     // same ~25 countries and a few bundles.
     private Dictionary<string, SteamCountry>? _steamCountries;
     private Dictionary<int, SteamworksBundle>? _steamworksBundles;
+    private Dictionary<int, SteamKeyRequest>? _steamKeyRequests;
 
     /// <summary>
-    /// Keeps <c>steam_country</c> and <c>steamworks_bundle</c> current from a financial
-    /// item's <c>reference_data</c>. Tracked rows: a changed name or region is saved
-    /// with the batch.
+    /// Keeps <c>steam_country</c>, <c>steamworks_bundle</c> and <c>steam_key_request</c>
+    /// current from a financial item's <c>reference_data</c>. Tracked rows: a changed
+    /// name, region or key request field is saved with the batch.
     /// </summary>
     private async Task UpsertFinancialReferenceAsync(JsonElement reference, CancellationToken ct)
     {
@@ -2325,6 +2326,43 @@ public class IngestionService : IIngestionService
                 bundle = new SteamworksBundle { BundleId = id, Name = name };
                 _db.SteamworksBundles.Add(bundle);
                 _steamworksBundles[id] = bundle;
+            }
+        }
+
+        if (reference.TryGetProperty("key_request_info", out var keyRequests) && keyRequests.ValueKind == JsonValueKind.Array)
+        {
+            _steamKeyRequests ??= await _db.SteamKeyRequests.ToDictionaryAsync(k => k.KeyRequestId, ct);
+            foreach (var info in keyRequests.EnumerateArray())
+            {
+                if (info.ValueKind != JsonValueKind.Object || SaleInt(info, "key_request_id") is not { } id)
+                    continue;
+                var notes = SaleText(info, "key_request_notes", 500);
+                var gameCode = SaleText(info, "game_code_description", 200);
+                var territory = SaleText(info, "territory_code_description", 200);
+                // Free licenses ("add to library" of a free product) come as a synthetic
+                // request with no game code and no territory.
+                var isFree = string.Equals(notes?.Trim(), "Synthetic request", StringComparison.OrdinalIgnoreCase)
+                    || (SaleInt(info, "game_code_id") is null && SaleInt(info, "territory_code_id") is null);
+
+                if (_steamKeyRequests.TryGetValue(id, out var request))
+                {
+                    if (request.Notes != notes) request.Notes = notes;
+                    if (request.GameCodeDescription != gameCode) request.GameCodeDescription = gameCode;
+                    if (request.TerritoryDescription != territory) request.TerritoryDescription = territory;
+                    if (request.IsFreeLicense != isFree) request.IsFreeLicense = isFree;
+                    continue;
+                }
+
+                request = new SteamKeyRequest
+                {
+                    KeyRequestId = id,
+                    Notes = notes,
+                    GameCodeDescription = gameCode,
+                    TerritoryDescription = territory,
+                    IsFreeLicense = isFree,
+                };
+                _db.SteamKeyRequests.Add(request);
+                _steamKeyRequests[id] = request;
             }
         }
     }
