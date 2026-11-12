@@ -56,6 +56,8 @@ public static class AlertRules
     public const string StaleData = "stale_data";
     /// <summary>A backend watcher has not run for much longer than its interval.</summary>
     public const string WatcherStopped = "watcher_stopped";
+    /// <summary>The stored Steamworks login is missing, expired or close to its expiry.</summary>
+    public const string SteamworksLoginExpiring = "steamworks_login_expiring";
 
     public static string Title(string rule) => rule switch
     {
@@ -67,6 +69,7 @@ public static class AlertRules
         QueueStuck => "queue stuck",
         StaleData => "stale data",
         WatcherStopped => "watcher stopped",
+        SteamworksLoginExpiring => "Steamworks login expiring",
         _ => rule,
     };
 }

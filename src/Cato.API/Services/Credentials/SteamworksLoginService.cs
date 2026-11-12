@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Cato.API.DTOs;
+using Cato.API.Services.Alerts;
 using Cato.Infrastructure.Secrets;
 using Microsoft.Extensions.Options;
 
@@ -27,20 +28,23 @@ public sealed class SteamworksLoginService
     public const string SessionCookie = "steamLoginSecure";
     // A session token lives a day; a refresh token months. Below this it is the wrong cookie.
     private static readonly TimeSpan MinRefreshLifetime = TimeSpan.FromDays(7);
-    private const double WarnDaysLeft = 14;
 
     private readonly ISecretStore _store;
     private readonly SecretStoreSettings _settings;
     private readonly TimeProvider _time;
     private readonly ILogger<SteamworksLoginService> _logger;
+    // The same value as the steamworks_login_expiring alert.
+    private readonly int _warnDaysLeft;
 
     public SteamworksLoginService(
-        ISecretStore store, IOptions<SecretStoreSettings> settings, TimeProvider time, ILogger<SteamworksLoginService> logger)
+        ISecretStore store, IOptions<SecretStoreSettings> settings, TimeProvider time, ILogger<SteamworksLoginService> logger,
+        IOptions<AlertSettings> alerts)
     {
         _store = store;
         _settings = settings.Value;
         _time = time;
         _logger = logger;
+        _warnDaysLeft = alerts.Value.SteamworksLoginWarnDays;
     }
 
     public async Task<SteamworksLoginStatus> GetStatusAsync(CancellationToken ct)
@@ -56,12 +60,34 @@ public sealed class SteamworksLoginService
             warnings.Add("No Steamworks login is stored: the Steamworks jobs fail with auth_required until one is saved.");
         else if (refresh.ExpiresAt <= now)
             warnings.Add($"The Steamworks login expired on {refresh.ExpiresAt:yyyy-MM-dd}. Save a new one.");
-        else if ((refresh.ExpiresAt - now).TotalDays < WarnDaysLeft)
+        else if ((refresh.ExpiresAt - now).TotalDays < _warnDaysLeft)
             warnings.Add($"The Steamworks login expires in {(refresh.ExpiresAt - now).TotalDays:0} days. Save a new one soon.");
         if (refresh is not null && session is not null && refresh.Account != session.Account)
             warnings.Add("The last session belongs to another account than the stored login; the next run uses the stored login.");
 
         return new SteamworksLoginStatus(_settings.Backend, Describe(refresh, now), Describe(session, now), warnings);
+    }
+
+    /// <summary>
+    /// The stored refresh login, or null when none is stored or it cannot be read as a Steam
+    /// login token. A secret store that cannot be reached throws.
+    /// </summary>
+    public async Task<SteamLoginToken?> ReadRefreshTokenAsync(CancellationToken ct)
+    {
+        var json = await _store.GetAsync(SecretIds.SteamworksRefresh, ct);
+        if (json is null)
+            return null;
+        Dictionary<string, string>? cookies;
+        try
+        {
+            cookies = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+        }
+        catch (JsonException)
+        {
+            // Not a JSON object of cookies: as unusable as no login.
+            return null;
+        }
+        return cookies is not null && RefreshName(cookies) is { } name ? SteamLoginToken.TryParse(cookies[name]) : null;
     }
 
     /// <summary>Checks a pasted cookie (header or bare value) and stores it as the new refresh login.</summary>

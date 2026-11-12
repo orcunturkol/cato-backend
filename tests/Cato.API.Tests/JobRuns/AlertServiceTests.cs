@@ -1,4 +1,5 @@
 using Cato.API.Services.Alerts;
+using Cato.API.Services.Credentials;
 using Cato.API.Services.JobRuns;
 using Cato.Domain.Entities;
 using Cato.Infrastructure.Database;
@@ -18,11 +19,13 @@ public class AlertServiceTests : JobRunsDbTestBase
     private readonly FakeQueues _queues = new();
     private readonly QueueProgressTracker _progress = new();
     private IJobFreshnessSource _freshness = new FakeFreshness([]);
+    // A login with 200 days left: quiet unless a test changes it.
+    private readonly FakeSteamworksLogin _steamworks = new() { Token = Login(Now.AddDays(200)) };
 
     private AlertService Service(CatoDbContext db) => new(
         db, NewCatalog(db), WorkerStart(db), [_email, _discord], _queues, _progress,
         Options.Create(new AlertSettings()), Options.Create(new RabbitMqSettings()), _freshness,
-        NullLogger<AlertService>.Instance);
+        _steamworks, NullLogger<AlertService>.Instance);
 
     private async Task<AlertCycleResult> CycleAsync(DateTime now)
     {
@@ -384,7 +387,7 @@ public class AlertServiceTests : JobRunsDbTestBase
 
         var result = await CycleAsync(Now);
 
-        Assert.Equal(0, result.Checks);
+        Assert.Equal(1, result.Checks); // the Steamworks login check only
     }
 
     [Fact]
@@ -484,6 +487,124 @@ public class AlertServiceTests : JobRunsDbTestBase
         _freshness = new FakeFreshness([]);
         await CycleAsync(Now.AddMinutes(10));
         Assert.NotNull(Assert.Single(Incidents()).ResolvedAt);
+    }
+
+    private static SteamLoginToken Login(DateTime expiresAt) =>
+        new("76561198000008567", ["web", "renew", "derive"], expiresAt.AddDays(-207), expiresAt);
+
+    private List<AlertIncident> SteamworksIncidents() =>
+        Incidents().Where(i => i.Rule == AlertRules.SteamworksLoginExpiring).ToList();
+
+    [Fact]
+    public async Task A_steamworks_login_close_to_its_expiry_alerts_with_how_to_renew()
+    {
+        _steamworks.Token = Login(Now.AddDays(13.5));
+
+        var result = await CycleAsync(Now);
+
+        Assert.Equal((1, 2), (result.Opened, result.Sent));
+        var incident = Assert.Single(SteamworksIncidents());
+        Assert.Equal("steamworks_login|steamworks_login_expiring", incident.OpenKey);
+        Assert.Contains("account …8567 expires on 2026-10-20 03:21 UTC, in 13 day(s)", incident.Message);
+        Assert.Contains("PUT /api/credentials/steamworks/refresh-cookie", incident.Message);
+        Assert.Contains("--set-refresh-cookie", incident.Message);
+        Assert.Equal("[CATO] steamworks_login: Steamworks login expiring", _email.Sent.Single().Subject);
+    }
+
+    [Fact]
+    public async Task An_expired_or_missing_steamworks_login_alerts()
+    {
+        _steamworks.Token = Login(Now.AddDays(-1));
+        await CycleAsync(Now);
+        Assert.Contains("expired on 2026-10-05 15:21 UTC", Assert.Single(SteamworksIncidents()).Message);
+
+        _steamworks.Token = null;
+        await CycleAsync(Now.AddMinutes(1));
+        var incident = Assert.Single(SteamworksIncidents());
+        Assert.Null(incident.ResolvedAt);
+        Assert.StartsWith("No readable Steamworks login is stored", incident.Message);
+    }
+
+    [Fact]
+    public async Task A_steamworks_login_with_enough_days_left_is_quiet()
+    {
+        _steamworks.Token = Login(Now.AddDays(14.5));
+
+        var result = await CycleAsync(Now);
+
+        Assert.Equal((1, 0, 0), (result.Checks, result.Opened, result.Sent));
+        Assert.Empty(Incidents());
+    }
+
+    [Fact]
+    public async Task A_renewed_steamworks_login_resolves_the_alert()
+    {
+        _steamworks.Token = Login(Now.AddDays(3));
+        await CycleAsync(Now);
+
+        _steamworks.Token = Login(Now.AddDays(207));
+        var result = await CycleAsync(Now.AddMinutes(30));
+
+        Assert.Equal((1, 2), (result.Resolved, result.Sent));
+        Assert.NotNull(Assert.Single(SteamworksIncidents()).ResolvedAt);
+    }
+
+    [Fact]
+    public async Task A_steamworks_login_that_cannot_be_read_keeps_the_open_alert_and_sends_nothing()
+    {
+        _steamworks.Token = Login(Now.AddDays(3));
+        await CycleAsync(Now);
+        Assert.Equal(2, _email.Sent.Count + _discord.Sent.Count);
+
+        _steamworks.Failed = true;
+        var result = await CycleAsync(Now.AddMinutes(30));
+
+        Assert.Equal((0, 0, 0, 0), (result.Checks, result.Opened, result.Resolved, result.Sent));
+        var incident = Assert.Single(SteamworksIncidents());
+        Assert.Null(incident.ResolvedAt);
+        Assert.Contains("in 3 day(s)", incident.Message);
+    }
+
+    [Fact]
+    public async Task The_steamworks_login_cache_reads_the_store_once_per_max_age_and_keeps_a_failure()
+    {
+        var store = new CountingStore();
+        var service = new SteamworksLoginService(store,
+            Options.Create(new Cato.Infrastructure.Secrets.SecretStoreSettings()), TimeProvider.System,
+            NullLogger<SteamworksLoginService>.Instance, Options.Create(new AlertSettings()));
+        var cache = new SteamworksLoginCache(NullLogger<SteamworksLoginCache>.Instance);
+
+        store.Fail = true;
+        Assert.True((await cache.GetAsync(service, Now, default)).Failed);
+        Assert.True((await cache.GetAsync(service, Now.AddMinutes(29), default)).Failed);
+        Assert.Equal(1, store.Reads);
+
+        store.Fail = false;
+        var read = await cache.GetAsync(service, Now.AddMinutes(30), default);
+        Assert.Equal((false, null, 2), (read.Failed, read.Token, store.Reads));
+    }
+
+    private sealed class FakeSteamworksLogin : ISteamworksLoginSource
+    {
+        public SteamLoginToken? Token { get; set; }
+        public bool Failed { get; set; }
+
+        public Task<SteamworksLoginRead> GetAsync(DateTime nowUtc, CancellationToken ct) =>
+            Task.FromResult(new SteamworksLoginRead(Failed ? null : Token, Failed));
+    }
+
+    private sealed class CountingStore : Cato.Infrastructure.Secrets.ISecretStore
+    {
+        public int Reads { get; private set; }
+        public bool Fail { get; set; }
+
+        public Task<string?> GetAsync(string id, CancellationToken ct)
+        {
+            Reads++;
+            return Fail ? throw new HttpRequestException("AccessDenied") : Task.FromResult<string?>(null);
+        }
+
+        public Task PutAsync(string id, string value, CancellationToken ct) => Task.CompletedTask;
     }
 
     private sealed class FakeFreshness(List<JobFreshnessDto> results) : IJobFreshnessSource
