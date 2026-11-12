@@ -491,46 +491,90 @@ public class GameDataService : IGameDataService
             .Select(id => new NavStatsPublisherDto(id, partnerNames.GetValueOrDefault(id)))
             .ToList();
 
-        var publisherId = request.PublisherId
-            ?? (publisherIds.Contains(SteamworksPartner.LegacyPartnerId) ? SteamworksPartner.LegacyPartnerId : (int?)null)
-            ?? await _db.SteamworksNavStats
-                .AsNoTracking()
-                .OrderByDescending(n => n.PeriodEnd)
-                .Select(n => (int?)n.PublisherId)
-                .FirstOrDefaultAsync(ct);
-        if (publisherId is null)
+        // No id or 0 = all organizations. A specific id keeps that publisher alone.
+        int? publisherId = request.PublisherId is { } requested and not 0 ? requested : null;
+        if (publisherIds.Count == 0)
             return new NavStatsDto(null, null, null, null, [], [], [], publishers);
 
-        var all = _db.SteamworksNavStats.AsNoTracking()
-            .Where(n => n.PublisherId == publisherId && n.Region == NavStatsAllRegions);
-        var firstDate = await all.MinAsync(n => (DateOnly?)n.PeriodStart, ct);
-        var lastDate = await all.MaxAsync(n => (DateOnly?)n.PeriodEnd, ct);
-        var firstDailyDate = await all.Where(n => n.PeriodStart == n.PeriodEnd).MinAsync(n => (DateOnly?)n.PeriodStart, ct);
+        var allRows = _db.SteamworksNavStats.AsNoTracking().Where(n => n.Region == NavStatsAllRegions);
+        var rangeRows = allRows;
+        if (request.From is { } f) rangeRows = rangeRows.Where(n => n.PeriodStart >= f);
+        if (request.To is { } e) rangeRows = rangeRows.Where(n => n.PeriodEnd <= e);
 
-        var inRange = all;
-        if (request.From is { } f) inRange = inRange.Where(n => n.PeriodStart >= f);
-        if (request.To is { } e) inRange = inRange.Where(n => n.PeriodEnd <= e);
+        // The rows that count. One publisher: all its rows. All organizations: the same
+        // product can sit under two publishers with identical numbers but different
+        // coverage, so each product keeps only the publisher with the most lifetime "all"
+        // visits (tie: lowest id; independent of From/To, so the chart and the totals agree) and the publishers are never summed.
+        var sources = new List<(IQueryable<SteamworksNavStat> All, IQueryable<SteamworksNavStat> InRange)>();
+        if (publisherId is { } one)
+        {
+            sources.Add((allRows.Where(n => n.PublisherId == one), rangeRows.Where(n => n.PublisherId == one)));
+        }
+        else
+        {
+            var visitsByPair = await allRows
+                .GroupBy(n => new { n.AppId, n.PublisherId })
+                .Select(g => new { g.Key.AppId, g.Key.PublisherId, Visits = g.Sum(n => n.Attribution == NavStatsAll ? n.Visits : 0) })
+                .ToListAsync(ct);
+            var appsByPublisher = visitsByPair
+                .GroupBy(v => v.AppId)
+                .Select(g => g.OrderByDescending(v => v.Visits).ThenBy(v => v.PublisherId).First())
+                .GroupBy(v => v.PublisherId)
+                .ToDictionary(g => g.Key, g => g.Select(v => v.AppId).ToList());
+            foreach (var (pub, apps) in appsByPublisher.OrderBy(kv => kv.Key))
+                sources.Add((allRows.Where(n => n.PublisherId == pub && apps.Contains(n.AppId)),
+                    rangeRows.Where(n => n.PublisherId == pub && apps.Contains(n.AppId))));
+        }
 
-        var byApp = await inRange
-            .GroupBy(n => new { n.AppId, n.Attribution })
-            .Select(g => new { g.Key.AppId, g.Key.Attribution, Impressions = g.Sum(n => n.Impressions), Visits = g.Sum(n => n.Visits) })
-            .ToListAsync(ct);
+        DateOnly? firstDate = null, lastDate = null, firstDailyDate = null;
+        var byApp = new List<(int AppId, string Attribution, long Impressions, long Visits)>();
+        var periodSums = new Dictionary<(DateOnly, DateOnly), (long Impressions, long Visits)>();
+        var nameRows = new List<(int AppId, string? AppName, DateOnly PeriodEnd)>();
+        foreach (var (all, inRange) in sources)
+        {
+            var first = await all.MinAsync(n => (DateOnly?)n.PeriodStart, ct);
+            var last = await all.MaxAsync(n => (DateOnly?)n.PeriodEnd, ct);
+            var firstDaily = await all.Where(n => n.PeriodStart == n.PeriodEnd).MinAsync(n => (DateOnly?)n.PeriodStart, ct);
+            if (first is { } fv && (firstDate is null || fv < firstDate)) firstDate = fv;
+            if (last is { } lv && (lastDate is null || lv > lastDate)) lastDate = lv;
+            if (firstDaily is { } dv && (firstDailyDate is null || dv < firstDailyDate)) firstDailyDate = dv;
 
-        var periods = (await inRange
-            .Where(n => n.Attribution == NavStatsAll)
-            .GroupBy(n => new { n.PeriodStart, n.PeriodEnd })
-            .Select(g => new NavStatsPeriodDto(g.Key.PeriodStart, g.Key.PeriodEnd, g.Sum(n => n.Impressions), g.Sum(n => n.Visits)))
-            .ToListAsync(ct))
+            byApp.AddRange((await inRange
+                .GroupBy(n => new { n.AppId, n.Attribution })
+                .Select(g => new { g.Key.AppId, g.Key.Attribution, Impressions = g.Sum(n => n.Impressions), Visits = g.Sum(n => n.Visits) })
+                .ToListAsync(ct))
+                .Select(r => (r.AppId, r.Attribution, r.Impressions, r.Visits)));
+
+            foreach (var p in await inRange
+                .Where(n => n.Attribution == NavStatsAll)
+                .GroupBy(n => new { n.PeriodStart, n.PeriodEnd })
+                .Select(g => new { g.Key.PeriodStart, g.Key.PeriodEnd, Impressions = g.Sum(n => n.Impressions), Visits = g.Sum(n => n.Visits) })
+                .ToListAsync(ct))
+            {
+                var key = (p.PeriodStart, p.PeriodEnd);
+                var prev = periodSums.GetValueOrDefault(key);
+                periodSums[key] = (prev.Impressions + p.Impressions, prev.Visits + p.Visits);
+            }
+
+            nameRows.AddRange((await inRange
+                .Where(n => n.Attribution == NavStatsAll && n.AppName != null)
+                .Select(n => new { n.AppId, n.AppName, n.PeriodEnd })
+                .ToListAsync(ct))
+                .Select(n => (n.AppId, n.AppName, n.PeriodEnd)));
+        }
+
+        // Periods of different products can differ in shape (a month and its days); each
+        // product's days still count once, and the chart reads the shape it needs.
+        var periods = periodSums
+            .Select(kv => new NavStatsPeriodDto(kv.Key.Item1, kv.Key.Item2, kv.Value.Impressions, kv.Value.Visits))
             .OrderBy(p => p.PeriodStart)
+            .ThenBy(p => p.PeriodEnd)
             .ToList();
 
         // The name the latest export gave each product.
-        var names = (await inRange
-            .Where(n => n.Attribution == NavStatsAll && n.AppName != null)
-            .Select(n => new { n.AppId, n.AppName, n.PeriodEnd })
-            .ToListAsync(ct))
+        var names = nameRows
             .GroupBy(n => n.AppId)
-            .ToDictionary(g => g.Key, g => g.MaxBy(n => n.PeriodEnd)!.AppName);
+            .ToDictionary(g => g.Key, g => g.MaxBy(n => n.PeriodEnd).AppName);
 
         var appIds = byApp.Select(a => a.AppId).Distinct().ToList();
         var gameIds = await _db.Games.AsNoTracking()

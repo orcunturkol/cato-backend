@@ -16,7 +16,7 @@ public class NavStatsController : ControllerBase
         _mediator = mediator;
     }
 
-    /// <summary>Steamworks Nav Stats: store page traffic of every product of a publisher over a date range.</summary>
+    /// <summary>Steamworks Nav Stats: store page traffic of every product over a date range. No publisherId (or 0) = all organizations, each product counted once; an id = that publisher alone.</summary>
     [HttpGet]
     [ProducesResponseType(typeof(NavStatsDto), StatusCodes.Status200OK)]
     public async Task<IResult> Get(
