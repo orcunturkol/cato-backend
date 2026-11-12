@@ -319,6 +319,12 @@ history, never overlapping). A product's `all` visits equal its store traffic vi
 bot visits; the rows add up to slightly less than the page headline, which counts products
 the CSV leaves out. Batch source `steamworks_nav_stats`; the envelope's `app_id` carries the
 publisher id. Rows missing from a later export are kept. Read side: `GET /api/nav-stats`.
+`publisherId` absent or `0` (the default) = **all organizations**: each product (app id) is
+read from ONE publisher, the one with the most `all` visits for it in the requested range
+(tie: lowest id), using all its attributions and periods; publishers are never summed because
+the same product can sit under two of them with identical numbers but different coverage
+(monthly vs daily rows). The DTO then has `publisherId` null; `periods` may mix month and day
+shapes (each product's days count once). A positive `publisherId` shows that publisher alone.
 
 ### Steamworks players and app details (`steamworks_players`)
 

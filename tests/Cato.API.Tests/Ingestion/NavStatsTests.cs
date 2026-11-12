@@ -132,7 +132,7 @@ public class NavStatsTests : IDisposable
 
         await using var db = NewContext();
         var dto = await new GameDataService(db).GetNavStatsAsync(
-            new GetNavStatsQuery(null, new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 18)));
+            new GetNavStatsQuery(Publisher, new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 18)));
 
         Assert.Equal(Publisher, dto.PublisherId);
         Assert.Equal((new DateOnly(2026, 9, 1), new DateOnly(2026, 10, 18), new DateOnly(2026, 10, 17)),
@@ -165,12 +165,11 @@ public class NavStatsTests : IDisposable
         }
         await IngestAsync(Item("2026-11-09", "2026-11-09", "all", Row(2094910, "Pile Up!", 9000, 900)));
         await IngestAsync(PublisherItem(planzet, "2026-11-09", "2026-11-09", "all", Row(2094910, "Pile Up!", 2000, 250)), planzet);
-        // Bekir's export is the newest: without a choice the page still shows PLAN B.
         await IngestAsync(PublisherItem(bekir, "2026-11-10", "2026-11-10", "all", Row(4904560, "The Waking Grove", 100, 50)), bekir);
 
         await using var db = NewContext();
         var service = new GameDataService(db);
-        var standard = await service.GetNavStatsAsync(new GetNavStatsQuery(null, null, null));
+        var standard = await service.GetNavStatsAsync(new GetNavStatsQuery(Publisher, null, null));
         Assert.Equal(Publisher, standard.PublisherId);
         Assert.Equal([(2094910, 900L)], standard.Products.Select(p => (p.AppId, p.Visits)).ToList());
         Assert.Equal([Publisher, planzet, bekir], standard.Publishers.Select(p => p.PublisherId).ToList());
@@ -181,6 +180,53 @@ public class NavStatsTests : IDisposable
         var chosen = await service.GetNavStatsAsync(new GetNavStatsQuery(planzet, null, null));
         Assert.Equal(planzet, chosen.PublisherId);
         Assert.Equal([(2094910, 250L)], chosen.Products.Select(p => (p.AppId, p.Visits)).ToList());
+    }
+
+    [Fact]
+    public async Task AllOrganizationsCountsEachProductOnceFromTheBetterCoveredPublisher()
+    {
+        const int planzet = 337008, bekir = 356969;
+        // Pile Up! under PLAN B: daily Nov 8-10. Under PLANZET: a month row (Nov 1-7) and the same
+        // three days with identical numbers. The month row is outside PLAN B's coverage.
+        await IngestAsync(Item("2026-11-08", "2026-11-08", "all", Row(2094910, "Pile Up!", 800, 80), Row(111, "Only B", 10, 5)));
+        await IngestAsync(Item("2026-11-09", "2026-11-09", "all", Row(2094910, "Pile Up!", 900, 90)));
+        await IngestAsync(Item("2026-11-10", "2026-11-10", "all", Row(2094910, "Pile Up!", 1000, 100)));
+        await IngestAsync(PublisherItem(planzet, "2026-11-01", "2026-11-07", "all", Row(2094910, "Pile Up!", 7000, 700)), planzet);
+        await IngestAsync(PublisherItem(planzet, "2026-11-08", "2026-11-08", "all", Row(2094910, "Pile Up!", 800, 80), Row(222, "Only P", 20, 7)), planzet);
+        await IngestAsync(PublisherItem(planzet, "2026-11-09", "2026-11-09", "all", Row(2094910, "Pile Up!", 900, 90)), planzet);
+        await IngestAsync(PublisherItem(planzet, "2026-11-10", "2026-11-10", "all", Row(2094910, "Pile Up!", 1000, 100)), planzet);
+        await IngestAsync(PublisherItem(planzet, "2026-11-10", "2026-11-10", "store", Row(2094910, "Pile Up!", 500, 40)), planzet);
+        await IngestAsync(PublisherItem(bekir, "2026-11-10", "2026-11-10", "all", Row(4904560, "The Waking Grove", 100, 50)), bekir);
+
+        await using var db = NewContext();
+        var service = new GameDataService(db);
+        var all = await service.GetNavStatsAsync(new GetNavStatsQuery(null, null, null));
+
+        Assert.Null(all.PublisherId);
+        Assert.Equal(3, all.Publishers.Count);
+        // PLANZET covers Pile Up! better (970 vs 270 visits): counted once from PLANZET.
+        var pileUp = all.Products.Single(p => p.AppId == 2094910);
+        Assert.Equal((970L, 40L), (pileUp.Visits, pileUp.StoreVisits));
+        Assert.Equal([2094910, 4904560, 222, 111], all.Products.Select(p => p.AppId).ToList());
+        Assert.Equal((970L + 50 + 7 + 5, 40L), (all.Totals[0].Visits, all.Totals[1].Visits));
+        Assert.Equal(
+            [(new DateOnly(2026, 11, 1), 700L), (new DateOnly(2026, 11, 8), 92L), (new DateOnly(2026, 11, 9), 90L), (new DateOnly(2026, 11, 10), 150L)],
+            all.Periods.Select(p => (p.PeriodStart, p.Visits)).ToList());
+        Assert.Equal((new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 10), new DateOnly(2026, 11, 8)),
+            (all.FirstDate!.Value, all.LastDate!.Value, all.FirstDailyDate!.Value));
+
+        // 0 means all too; a specific id keeps its own rows (PLAN B has no month row).
+        var zero = await service.GetNavStatsAsync(new GetNavStatsQuery(0, null, null));
+        Assert.Equal(all.Totals[0].Visits, zero.Totals[0].Visits);
+        var planB = await service.GetNavStatsAsync(new GetNavStatsQuery(Publisher, null, null));
+        Assert.Equal(Publisher, planB.PublisherId);
+        Assert.Equal(270L, planB.Products.Single(p => p.AppId == 2094910).Visits);
+        Assert.DoesNotContain(planB.Products, p => p.AppId == 222);
+
+        // The winner depends on the range: inside Nov 9-10 both publishers tie, so the lowest id wins.
+        var tie = await service.GetNavStatsAsync(new GetNavStatsQuery(null, new DateOnly(2026, 11, 9), new DateOnly(2026, 11, 10)));
+        Assert.Equal(190L, tie.Products.Single(p => p.AppId == 2094910).Visits);
+        Assert.Equal(0L, tie.Products.Single(p => p.AppId == 2094910).StoreVisits);
     }
 
     [Fact]
