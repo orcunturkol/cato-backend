@@ -67,11 +67,15 @@ locals {
         ASPNETCORE_ENVIRONMENT               = "Production"
         Cato__BaseUrl                        = "http://api.${local.namespace}:8080"
         Serilog__WriteTo__1__Args__serverUrl = "http://seq.${local.namespace}:5341"
+        # Games that enter In review from this time on get an AI review by themselves.
+        AiReview__AutoSince = "2026-11-12T15:32:00Z"
       }
       # GoogleDrive__*: the Google account that reads the meeting notes documents (drive.readonly).
+      # AiReview__*: the AI review keys (Anthropic, OpenRouter).
       secrets = { for k in ["ConnectionStrings__DefaultConnection", "Auth__InviteCode", "Notifications__DiscordWebhookUrl",
         "Ogt__ScreenerEmails__0", "Ogt__PublicBaseUrl", "GoogleDrive__ClientId", "GoogleDrive__ClientSecret",
-      "GoogleDrive__RefreshToken", "GoogleDrive__AccountEmail"] : k => "${aws_secretsmanager_secret.ogt_config.arn}:${k}::" }
+        "GoogleDrive__RefreshToken", "GoogleDrive__AccountEmail",
+      "AiReview__AnthropicApiKey", "AiReview__AnthropicWorkspaceId", "AiReview__OpenRouterApiKey"] : k => "${aws_secretsmanager_secret.ogt_config.arn}:${k}::" }
       health = null, min_healthy = 100, max_percent = 200
     }
     "ogt-frontend" = {
