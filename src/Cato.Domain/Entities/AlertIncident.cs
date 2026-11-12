@@ -58,6 +58,8 @@ public static class AlertRules
     public const string WatcherStopped = "watcher_stopped";
     /// <summary>The stored Steamworks login is missing, expired or close to its expiry.</summary>
     public const string SteamworksLoginExpiring = "steamworks_login_expiring";
+    /// <summary>The Webshare plan's bandwidth is nearly or fully used up.</summary>
+    public const string WebshareBandwidthLow = "webshare_bandwidth_low";
 
     public static string Title(string rule) => rule switch
     {
@@ -70,6 +72,7 @@ public static class AlertRules
         StaleData => "stale data",
         WatcherStopped => "watcher stopped",
         SteamworksLoginExpiring => "Steamworks login expiring",
+        WebshareBandwidthLow => "Webshare bandwidth low",
         _ => rule,
     };
 }

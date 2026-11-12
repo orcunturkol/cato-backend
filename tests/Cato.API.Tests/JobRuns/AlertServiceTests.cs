@@ -21,11 +21,13 @@ public class AlertServiceTests : JobRunsDbTestBase
     private IJobFreshnessSource _freshness = new FakeFreshness([]);
     // A login with 200 days left: quiet unless a test changes it.
     private readonly FakeSteamworksLogin _steamworks = new() { Token = Login(Now.AddDays(200)) };
+    // No Webshare API key: the rule is off unless a test sets a usage.
+    private readonly FakeWebshare _webshare = new();
 
     private AlertService Service(CatoDbContext db) => new(
         db, NewCatalog(db), WorkerStart(db), [_email, _discord], _queues, _progress,
         Options.Create(new AlertSettings()), Options.Create(new RabbitMqSettings()), _freshness,
-        _steamworks, NullLogger<AlertService>.Instance);
+        _steamworks, _webshare, NullLogger<AlertService>.Instance);
 
     private async Task<AlertCycleResult> CycleAsync(DateTime now)
     {
@@ -592,6 +594,76 @@ public class AlertServiceTests : JobRunsDbTestBase
         store.Fail = false;
         var read = await cache.GetAsync(service, Now.AddMinutes(30), default);
         Assert.Equal((false, null, 2), (read.Failed, read.Token, store.Reads));
+    }
+
+    private const long Gib = 1L << 30;
+
+    private static WebshareUsage Usage(double usedGb) =>
+        new((long)(usedGb * Gib), 3 * Gib, Now.AddDays(-20), Now.AddDays(10));
+
+    private List<AlertIncident> WebshareIncidents() =>
+        Incidents().Where(i => i.Rule == AlertRules.WebshareBandwidthLow).ToList();
+
+    [Fact]
+    public async Task Webshare_with_under_a_fifth_of_its_bandwidth_left_alerts()
+    {
+        _webshare.Usage = Usage(2.5);
+
+        var result = await CycleAsync(Now);
+
+        Assert.Equal((1, 2), (result.Opened, result.Sent));
+        var incident = Assert.Single(WebshareIncidents());
+        Assert.Equal("webshare|webshare_bandwidth_low", incident.OpenKey);
+        Assert.StartsWith("The Webshare plan has 17% of its bandwidth left (2.50 of 3.00 GB used since 2026-09-16 15:21 UTC)", incident.Message);
+        Assert.Contains("402 Payment Required", incident.Message);
+        Assert.Contains("renewal on 2026-10-16 15:21 UTC", incident.Message);
+        Assert.Equal("[CATO] webshare: Webshare bandwidth low", _email.Sent.Single().Subject);
+    }
+
+    [Fact]
+    public async Task Used_up_webshare_bandwidth_says_so()
+    {
+        _webshare.Usage = Usage(3.01);
+
+        await CycleAsync(Now);
+
+        Assert.StartsWith("The Webshare plan's bandwidth is used up (3.01 of 3.00 GB used", Assert.Single(WebshareIncidents()).Message);
+    }
+
+    [Fact]
+    public async Task Webshare_with_enough_bandwidth_is_quiet_and_resolves_the_alert()
+    {
+        _webshare.Usage = Usage(2.9);
+        await CycleAsync(Now);
+
+        _webshare.Usage = Usage(0.1) with { PeriodStart = Now };
+        var result = await CycleAsync(Now.AddMinutes(30));
+
+        Assert.Equal((2, 1), (result.Checks, result.Resolved));
+        Assert.NotNull(Assert.Single(WebshareIncidents()).ResolvedAt);
+    }
+
+    [Fact]
+    public async Task Webshare_without_a_key_or_with_a_failed_read_decides_nothing()
+    {
+        _webshare.Usage = Usage(2.9);
+        await CycleAsync(Now);
+
+        _webshare.Usage = null;
+        _webshare.Failed = true;
+        var result = await CycleAsync(Now.AddMinutes(30));
+
+        Assert.Equal((1, 0), (result.Checks, result.Resolved));
+        Assert.Null(Assert.Single(WebshareIncidents()).ResolvedAt);
+    }
+
+    private sealed class FakeWebshare : IWebshareUsageSource
+    {
+        public WebshareUsage? Usage { get; set; }
+        public bool Failed { get; set; }
+
+        public Task<WebshareUsageRead> GetAsync(DateTime nowUtc, CancellationToken ct) =>
+            Task.FromResult(new WebshareUsageRead(Failed ? null : Usage, Failed));
     }
 
     private sealed class FakeSteamworksLogin : ISteamworksLoginSource

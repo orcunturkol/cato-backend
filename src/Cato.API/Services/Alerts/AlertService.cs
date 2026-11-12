@@ -61,6 +61,7 @@ public sealed class AlertService
     private readonly AlertSettings _settings;
     private readonly IJobFreshnessSource _freshness;
     private readonly ISteamworksLoginSource _steamworksLogin;
+    private readonly IWebshareUsageSource _webshare;
     private readonly string _deadLetterQueue;
     private readonly ILogger<AlertService> _logger;
 
@@ -75,6 +76,7 @@ public sealed class AlertService
         IOptions<Cato.Infrastructure.Messaging.RabbitMqSettings> rabbit,
         IJobFreshnessSource freshness,
         ISteamworksLoginSource steamworksLogin,
+        IWebshareUsageSource webshare,
         ILogger<AlertService> logger)
     {
         _db = db;
@@ -86,6 +88,7 @@ public sealed class AlertService
         _settings = settings.Value;
         _freshness = freshness;
         _steamworksLogin = steamworksLogin;
+        _webshare = webshare;
         _deadLetterQueue = rabbit.Value.DeadLetterQueue;
         _logger = logger;
     }
@@ -100,6 +103,7 @@ public sealed class AlertService
         checks.AddRange(await CheckFreshnessAsync(nowUtc, ct));
         checks.AddRange(await CheckWatchersAsync(nowUtc, ct));
         checks.AddRange(await CheckSteamworksLoginAsync(nowUtc, ct));
+        checks.AddRange(await CheckWebshareAsync(nowUtc, ct));
         var (opened, resolved) = await ApplyAsync(checks, nowUtc, ct);
         var sent = await DeliverAsync(nowUtc, ct) + await RemindAsync(nowUtc, ct);
         return new AlertCycleResult(checks.Count, opened, resolved, sent);
@@ -361,6 +365,35 @@ public sealed class AlertService
         }
         return [new AlertCheck("steamworks_login", AlertRules.SteamworksLoginExpiring, message is not null, message)];
     }
+
+    /// <summary>
+    /// webshare_bandwidth_low: the Webshare plan has less than
+    /// <see cref="AlertSettings.WebshareWarnPercentLeft"/> % of its bandwidth left in this billing
+    /// period. When it is used up the gateway answers 402 and every proxy job reads nothing
+    /// (2026-11-12). No API key, no plan limit or an API that cannot be read decides nothing.
+    /// </summary>
+    public async Task<List<AlertCheck>> CheckWebshareAsync(DateTime nowUtc, CancellationToken ct)
+    {
+        var read = await _webshare.GetAsync(nowUtc, ct);
+        if (read.Usage is not { } usage)
+            return [];
+
+        var left = Math.Max(0, usage.LimitBytes - usage.UsedBytes);
+        var percentLeft = 100.0 * left / usage.LimitBytes;
+        string? message = null;
+        if (percentLeft < _settings.WebshareWarnPercentLeft)
+        {
+            var used = $"{Gb(usage.UsedBytes)} of {Gb(usage.LimitBytes)} GB used since {Stamp(usage.PeriodStart)} UTC";
+            var effect = "follower_watch, group member counts and the SteamDB jobs then fail with 402 Payment Required.";
+            var fix = $"Add bandwidth on dashboard.webshare.io, or wait for the renewal on {Stamp(usage.PeriodEnd)} UTC.";
+            message = left == 0
+                ? $"The Webshare plan's bandwidth is used up ({used}): {effect} {fix}"
+                : $"The Webshare plan has {percentLeft:0}% of its bandwidth left ({used}). When it is used up, {effect} {fix}";
+        }
+        return [new AlertCheck("webshare", AlertRules.WebshareBandwidthLow, message is not null, message)];
+    }
+
+    private static string Gb(long bytes) => (bytes / (double)(1L << 30)).ToString("0.00", CultureInfo.InvariantCulture);
 
     // ── incidents ──
 

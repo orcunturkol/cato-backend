@@ -39,6 +39,12 @@ public sealed class AlertSettings
     public int SteamworksLoginWarnDays { get; set; } = 14;
 
     /// <summary>
+    /// webshare_bandwidth_low fires below this share (percent) of the Webshare plan's bandwidth
+    /// left. 20 % of the 3 GB plan is about 4 days at the November 2026 rate (~130 MB a day).
+    /// </summary>
+    public double WebshareWarnPercentLeft { get; set; } = 20;
+
+    /// <summary>
     /// An open incident repeats its message this often (0: never). One message is easy to miss:
     /// on 2026-10-30 a stopped watcher's alert went out once and stayed open for six days.
     /// </summary>

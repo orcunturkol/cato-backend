@@ -487,6 +487,7 @@ state and returns firing / not firing; firing opens one incident per job and rul
 | `stale_data` | the newest data of an enabled job is older than its limit | newer data arrives |
 | `watcher_stopped` | an enabled watcher has no run for 2 x its interval + 1 h (from its last run or the worker's start) and none is running | the watcher runs again |
 | `steamworks_login_expiring` | the stored Steamworks login (`cato/steamworks/refresh`) is missing, unreadable, expired, or has under `Alerts:SteamworksLoginWarnDays` (14) days left (one incident, `steamworks_login`) | a new login with more days left is saved |
+| `webshare_bandwidth_low` | the Webshare plan has under `Alerts:WebshareWarnPercentLeft` (20) % of its bandwidth left in the current renewal term, or none (one incident, `webshare`); needs `Webshare:ApiKey` in `cato/backend/config`, off without it | bandwidth is added or the term renews |
 
 `stale_data` reads `JobFreshnessChecks` (`Services/JobRuns/JobFreshness.cs`): per job the
 newest value of a date column in the table it writes (`ccu_history.Timestamp` within

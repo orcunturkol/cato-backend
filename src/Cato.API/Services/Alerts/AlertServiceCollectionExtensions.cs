@@ -47,6 +47,8 @@ public static class AlertServiceCollectionExtensions
         services.AddScoped<Cato.API.Services.JobRuns.IJobFreshnessSource, Cato.API.Services.JobRuns.CachedJobFreshness>();
         services.AddSingleton<SteamworksLoginCache>();
         services.AddScoped<ISteamworksLoginSource, CachedSteamworksLogin>();
+        services.AddHttpClient(WebshareUsageSource.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(15));
+        services.AddSingleton<IWebshareUsageSource, WebshareUsageSource>();
         services.AddScoped<AlertService>();
         return services;
     }
