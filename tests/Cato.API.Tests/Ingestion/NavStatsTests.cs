@@ -223,10 +223,12 @@ public class NavStatsTests : IDisposable
         Assert.Equal(270L, planB.Products.Single(p => p.AppId == 2094910).Visits);
         Assert.DoesNotContain(planB.Products, p => p.AppId == 222);
 
-        // The winner depends on the range: inside Nov 9-10 both publishers tie, so the lowest id wins.
+        // The source does not depend on the range: PLANZET stays the source inside Nov 9-10 (its store row counts).
         var tie = await service.GetNavStatsAsync(new GetNavStatsQuery(null, new DateOnly(2026, 11, 9), new DateOnly(2026, 11, 10)));
         Assert.Equal(190L, tie.Products.Single(p => p.AppId == 2094910).Visits);
-        Assert.Equal(0L, tie.Products.Single(p => p.AppId == 2094910).StoreVisits);
+        Assert.Equal(40L, tie.Products.Single(p => p.AppId == 2094910).StoreVisits);
+        Assert.Equal(all.FirstDate, tie.FirstDate);
+        Assert.Equal(all.FirstDailyDate, tie.FirstDailyDate);
     }
 
     [Fact]

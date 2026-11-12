@@ -11,8 +11,8 @@ namespace Cato.API.Models.Ingestion;
 /// Store page traffic of every product over a range: totals per traffic source, "all"
 /// totals per period (oldest first) and per product (most visits first).
 /// <c>PublisherId</c> null or 0 (the default) means ALL organizations: each product (app
-/// id) is read from ONE publisher, the one with the most "all" visits for it in the range
-/// (tie: lowest id), with all its attributions and periods. Publishers are never summed,
+/// id) is read from ONE publisher, the one with the most lifetime "all" visits for it
+/// (tie: lowest id; independent of From/To), with all its attributions and periods. Publishers are never summed,
 /// because the same product can sit under two of them with identical numbers but different
 /// coverage (monthly vs daily rows); the response then has PublisherId = null. A positive
 /// <c>PublisherId</c> shows that publisher alone, as before.

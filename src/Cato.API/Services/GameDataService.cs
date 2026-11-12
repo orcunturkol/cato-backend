@@ -503,8 +503,8 @@ public class GameDataService : IGameDataService
 
         // The rows that count. One publisher: all its rows. All organizations: the same
         // product can sit under two publishers with identical numbers but different
-        // coverage, so each product keeps only the publisher with the most "all" visits in
-        // the range (tie: lowest id) and the publishers are never summed.
+        // coverage, so each product keeps only the publisher with the most lifetime "all"
+        // visits (tie: lowest id; independent of From/To, so the chart and the totals agree) and the publishers are never summed.
         var sources = new List<(IQueryable<SteamworksNavStat> All, IQueryable<SteamworksNavStat> InRange)>();
         if (publisherId is { } one)
         {
@@ -512,7 +512,7 @@ public class GameDataService : IGameDataService
         }
         else
         {
-            var visitsByPair = await rangeRows
+            var visitsByPair = await allRows
                 .GroupBy(n => new { n.AppId, n.PublisherId })
                 .Select(g => new { g.Key.AppId, g.Key.PublisherId, Visits = g.Sum(n => n.Attribution == NavStatsAll ? n.Visits : 0) })
                 .ToListAsync(ct);
