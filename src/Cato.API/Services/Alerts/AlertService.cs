@@ -357,7 +357,7 @@ public sealed class AlertService
             if (daysLeft <= 0)
                 message = $"{login} expired on {Stamp(token.ExpiresAt)} UTC: the Steamworks jobs fail with auth_required. {renew}";
             else if (daysLeft < _settings.SteamworksLoginWarnDays)
-                message = $"{login} expires on {Stamp(token.ExpiresAt)} UTC, in {(int)daysLeft} day(s). {renew}";
+                message = $"{login} expires on {Stamp(token.ExpiresAt)} UTC, in {(daysLeft < 1 ? "less than a day" : $"{(int)daysLeft} day(s)")}. {renew}";
         }
         return [new AlertCheck("steamworks_login", AlertRules.SteamworksLoginExpiring, message is not null, message)];
     }

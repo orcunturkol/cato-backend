@@ -496,6 +496,16 @@ public class AlertServiceTests : JobRunsDbTestBase
         Incidents().Where(i => i.Rule == AlertRules.SteamworksLoginExpiring).ToList();
 
     [Fact]
+    public async Task A_steamworks_login_with_under_a_day_left_says_so()
+    {
+        _steamworks.Token = Login(Now.AddHours(5));
+
+        await CycleAsync(Now);
+
+        Assert.Contains("in less than a day.", Assert.Single(SteamworksIncidents()).Message);
+    }
+
+    [Fact]
     public async Task A_steamworks_login_close_to_its_expiry_alerts_with_how_to_renew()
     {
         _steamworks.Token = Login(Now.AddDays(13.5));
