@@ -480,6 +480,7 @@ state and returns firing / not firing; firing opens one incident per job and rul
 | `queue_stuck` | a queue has messages and the count has not dropped for 30 min | the count drops |
 | `stale_data` | the newest data of an enabled job is older than its limit | newer data arrives |
 | `watcher_stopped` | an enabled watcher has no run for 2 x its interval + 1 h (from its last run or the worker's start) and none is running | the watcher runs again |
+| `steamworks_login_expiring` | the stored Steamworks login (`cato/steamworks/refresh`) is missing, unreadable, expired, or has under `Alerts:SteamworksLoginWarnDays` (14) days left (one incident, `steamworks_login`) | a new login with more days left is saved |
 
 `stale_data` reads `JobFreshnessChecks` (`Services/JobRuns/JobFreshness.cs`): per job the
 newest value of a date column in the table it writes (`ccu_history.Timestamp` within
@@ -551,7 +552,12 @@ last session token (its issue time is the last refresh). `PUT
 whole cookie header, checks it like the collector's `--set-refresh-cookie` (a Steam JWT,
 lifetime over a week, not expired, a warning for a second account in the paste) and
 writes `cato/steamworks/refresh`. No endpoint returns a cookie, and the log has only the
-masked account.
+masked account. The status warns, and the alert `steamworks_login_expiring` fires, below
+`Alerts:SteamworksLoginWarnDays` (14, one setting for both) days left. The worker reads the
+secret at most every 30 min (`SteamworksLoginCache`), so a new login resolves the alert
+within 30 min; a failed read is logged once per 30 min and decides nothing (an open
+incident stays open). The worker task role needs read access to `cato/steamworks/refresh`
+(`infra/phase2/secrets_iam.tf`). The Jobs page shows the login's days left.
 
 ### Deploying and the AWS layout
 

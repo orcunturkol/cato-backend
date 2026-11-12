@@ -16,7 +16,8 @@ public class SteamworksLoginServiceTests
     private readonly ListLogger _log = new();
 
     private SteamworksLoginService Service() => new(
-        _store, Options.Create(new SecretStoreSettings { Backend = "aws" }), new FixedTime(Now), _log);
+        _store, Options.Create(new SecretStoreSettings { Backend = "aws" }), new FixedTime(Now), _log,
+        Options.Create(new Cato.API.Services.Alerts.AlertSettings()));
 
     /// <summary>"&lt;steamid&gt;%7C%7C&lt;JWT&gt;", as the partner site sets it; the signature is fake.</summary>
     private static string Token(string account, TimeSpan lifetime, DateTime? issued = null, string audience = "\"web\",\"renew\",\"derive\"")

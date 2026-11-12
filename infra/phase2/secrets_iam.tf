@@ -126,7 +126,7 @@ locals {
       r  = ["cato/backend/config", "cato/alerts/discord-webhook", "cato/steamworks/cookies"]
       rw = ["cato/steamworks/refresh"] # the Steamworks login form
     }
-    worker             = { r = ["cato/backend/config", "cato/alerts/discord-webhook"], rw = ["cato/steam/steamkit-auth"] }
+    worker             = { r = ["cato/backend/config", "cato/alerts/discord-webhook", "cato/steamworks/refresh"], rw = ["cato/steam/steamkit-auth"] } # refresh: steamworks_login_expiring
     migrate            = { r = ["cato/backend/config"], rw = [] }
     "agent-light"      = { r = ["cato/collector/config"], rw = [] }
     "agent-events"     = { r = ["cato/collector/config"], rw = [] }

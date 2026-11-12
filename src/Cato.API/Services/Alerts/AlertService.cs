@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using Cato.API.Services.Credentials;
 using Cato.API.Services.JobRuns;
 using Cato.Domain.Entities;
 using Cato.Infrastructure.Database;
@@ -59,6 +60,7 @@ public sealed class AlertService
     private readonly QueueProgressTracker _progress;
     private readonly AlertSettings _settings;
     private readonly IJobFreshnessSource _freshness;
+    private readonly ISteamworksLoginSource _steamworksLogin;
     private readonly string _deadLetterQueue;
     private readonly ILogger<AlertService> _logger;
 
@@ -72,6 +74,7 @@ public sealed class AlertService
         IOptions<AlertSettings> settings,
         IOptions<Cato.Infrastructure.Messaging.RabbitMqSettings> rabbit,
         IJobFreshnessSource freshness,
+        ISteamworksLoginSource steamworksLogin,
         ILogger<AlertService> logger)
     {
         _db = db;
@@ -82,6 +85,7 @@ public sealed class AlertService
         _progress = progress;
         _settings = settings.Value;
         _freshness = freshness;
+        _steamworksLogin = steamworksLogin;
         _deadLetterQueue = rabbit.Value.DeadLetterQueue;
         _logger = logger;
     }
@@ -95,6 +99,7 @@ public sealed class AlertService
         checks.AddRange(await CheckQueuesAsync(nowUtc, ct));
         checks.AddRange(await CheckFreshnessAsync(nowUtc, ct));
         checks.AddRange(await CheckWatchersAsync(nowUtc, ct));
+        checks.AddRange(await CheckSteamworksLoginAsync(nowUtc, ct));
         var (opened, resolved) = await ApplyAsync(checks, nowUtc, ct);
         var sent = await DeliverAsync(nowUtc, ct) + await RemindAsync(nowUtc, ct);
         return new AlertCycleResult(checks.Count, opened, resolved, sent);
@@ -325,6 +330,36 @@ public sealed class AlertService
         checks.AddRange(orphans.Where(job => !checkedJobs.Contains(job))
             .Select(job => new AlertCheck(job, AlertRules.StaleData, false)));
         return checks;
+    }
+
+    /// <summary>
+    /// steamworks_login_expiring: the stored Steamworks login (the refresh token every Steamworks
+    /// job mints its session from) is missing, unreadable, expired, or has fewer than
+    /// <see cref="AlertSettings.SteamworksLoginWarnDays"/> days left. A secret store that cannot
+    /// be read decides nothing.
+    /// </summary>
+    public async Task<List<AlertCheck>> CheckSteamworksLoginAsync(DateTime nowUtc, CancellationToken ct)
+    {
+        var read = await _steamworksLogin.GetAsync(nowUtc, ct);
+        if (read.Failed)
+            return [];
+
+        const string renew = "Renew it: sign in on partner.steampowered.com with \"Remember me\", copy the steamRefresh_partner " +
+                             "cookie from the /jwt/refresh?redir=... request, and save it with PUT /api/credentials/steamworks/refresh-cookie " +
+                             "(or the collector's --set-refresh-cookie).";
+        string? message = null;
+        if (read.Token is not { } token)
+            message = $"No readable Steamworks login is stored: the Steamworks jobs fail with auth_required. {renew}";
+        else
+        {
+            var daysLeft = (token.ExpiresAt - nowUtc).TotalDays;
+            var login = $"The Steamworks login of account {SteamLoginToken.Mask(token.Account) ?? "unknown"}";
+            if (daysLeft <= 0)
+                message = $"{login} expired on {Stamp(token.ExpiresAt)} UTC: the Steamworks jobs fail with auth_required. {renew}";
+            else if (daysLeft < _settings.SteamworksLoginWarnDays)
+                message = $"{login} expires on {Stamp(token.ExpiresAt)} UTC, in {(daysLeft < 1 ? "less than a day" : $"{(int)daysLeft} day(s)")}. {renew}";
+        }
+        return [new AlertCheck("steamworks_login", AlertRules.SteamworksLoginExpiring, message is not null, message)];
     }
 
     // ── incidents ──

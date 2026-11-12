@@ -33,6 +33,12 @@ public sealed class AlertSettings
     public int QueueStuckMinutes { get; set; } = 30;
 
     /// <summary>
+    /// steamworks_login_expiring fires below this many days left on the stored Steamworks login;
+    /// the login status (GET /api/credentials/steamworks) warns from the same value.
+    /// </summary>
+    public int SteamworksLoginWarnDays { get; set; } = 14;
+
+    /// <summary>
     /// An open incident repeats its message this often (0: never). One message is easy to miss:
     /// on 2026-10-30 a stopped watcher's alert went out once and stayed open for six days.
     /// </summary>
