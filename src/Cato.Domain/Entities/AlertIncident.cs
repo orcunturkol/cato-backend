@@ -60,6 +60,10 @@ public static class AlertRules
     public const string SteamworksLoginExpiring = "steamworks_login_expiring";
     /// <summary>The Webshare plan's bandwidth is nearly or fully used up.</summary>
     public const string WebshareBandwidthLow = "webshare_bandwidth_low";
+    /// <summary>A proxy provider refuses all traffic (plan used up, login refused).</summary>
+    public const string ProxyProviderDown = "proxy_provider_down";
+    /// <summary>The collector's proxy jobs use a provider after the first one.</summary>
+    public const string ProxyFallbackActive = "proxy_fallback_active";
 
     public static string Title(string rule) => rule switch
     {
@@ -73,6 +77,8 @@ public static class AlertRules
         WatcherStopped => "watcher stopped",
         SteamworksLoginExpiring => "Steamworks login expiring",
         WebshareBandwidthLow => "Webshare bandwidth low",
+        ProxyProviderDown => "proxy provider down",
+        ProxyFallbackActive => "proxy fallback in use",
         _ => rule,
     };
 }

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Cato.API.Services.Credentials;
 using Cato.API.Services.JobRuns;
+using Cato.API.Services.Proxies;
 using Cato.Domain.Entities;
 using Cato.Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
@@ -62,6 +63,7 @@ public sealed class AlertService
     private readonly IJobFreshnessSource _freshness;
     private readonly ISteamworksLoginSource _steamworksLogin;
     private readonly IWebshareUsageSource _webshare;
+    private readonly IProxyStateReader _proxies;
     private readonly string _deadLetterQueue;
     private readonly ILogger<AlertService> _logger;
 
@@ -77,6 +79,7 @@ public sealed class AlertService
         IJobFreshnessSource freshness,
         ISteamworksLoginSource steamworksLogin,
         IWebshareUsageSource webshare,
+        IProxyStateReader proxies,
         ILogger<AlertService> logger)
     {
         _db = db;
@@ -89,6 +92,7 @@ public sealed class AlertService
         _freshness = freshness;
         _steamworksLogin = steamworksLogin;
         _webshare = webshare;
+        _proxies = proxies;
         _deadLetterQueue = rabbit.Value.DeadLetterQueue;
         _logger = logger;
     }
@@ -104,6 +108,7 @@ public sealed class AlertService
         checks.AddRange(await CheckWatchersAsync(nowUtc, ct));
         checks.AddRange(await CheckSteamworksLoginAsync(nowUtc, ct));
         checks.AddRange(await CheckWebshareAsync(nowUtc, ct));
+        checks.AddRange(await CheckProxiesAsync());
         var (opened, resolved) = await ApplyAsync(checks, nowUtc, ct);
         var sent = await DeliverAsync(nowUtc, ct) + await RemindAsync(nowUtc, ct);
         return new AlertCycleResult(checks.Count, opened, resolved, sent);
@@ -391,6 +396,64 @@ public sealed class AlertService
                 : $"The Webshare plan has {percentLeft:0}% of its bandwidth left ({used}). When it is used up, {effect} {fix}";
         }
         return [new AlertCheck("webshare", AlertRules.WebshareBandwidthLow, message is not null, message)];
+    }
+
+    /// <summary>
+    /// proxy_provider_down (one incident per provider, <c>proxy:&lt;name&gt;</c>): the collector set
+    /// the provider's down flag after it refused all traffic (Webshare 402, DataImpulse 407).
+    /// proxy_fallback_active (one incident, <c>proxy_fallback</c>): a job used a provider after
+    /// the first in the collector's order (it was down or at its daily budget); the collector
+    /// deletes the flag on the first provider's next success (26-hour TTL otherwise).
+    /// Both read the collector's Redis keys; with no provider list there (no chain built yet)
+    /// they decide nothing. A Redis error decides nothing either.
+    /// </summary>
+    public async Task<List<AlertCheck>> CheckProxiesAsync()
+    {
+        try
+        {
+            var providers = await _proxies.GetProvidersAsync();
+            if (providers.Count == 0)
+                return [];
+
+            var down = new Dictionary<string, ProxyDownFlag>();
+            foreach (var p in providers)
+                if (await _proxies.GetDownAsync(p.Name) is { } flag)
+                    down[p.Name] = flag;
+
+            var checks = new List<AlertCheck>();
+            foreach (var p in providers)
+            {
+                string? message = null;
+                if (down.TryGetValue(p.Name, out var flag))
+                {
+                    var next = providers.FirstOrDefault(o => o.Name != p.Name && o.Configured && !down.ContainsKey(o.Name));
+                    var effect = next is null
+                        ? "No other proxy provider is left: follower_watch, the group member counts and the SteamDB jobs read nothing."
+                        : $"The proxy jobs use {next.Name} now.";
+                    var since = flag.Since is { } s ? $" since {Stamp(s)} UTC" : "";
+                    message = $"Proxy provider {p.Name} refuses all traffic{since}: {flag.Reason}. {effect} " +
+                              $"Top it up or renew it; the collector tries it again every hour and clears this alert on its first success.";
+                }
+                checks.Add(new AlertCheck($"proxy:{p.Name}", AlertRules.ProxyProviderDown, message is not null, message));
+            }
+
+            var fallback = await _proxies.GetFallbackAsync();
+            string? fallbackMessage = null;
+            if (fallback is not null)
+            {
+                var why = string.Join("; ", fallback.Skipped.Select(s => $"{s.Name}: {s.Reason}"));
+                fallbackMessage = $"The proxy jobs use the fallback provider {fallback.Provider}" +
+                                  (why.Length > 0 ? $" ({why})." : ".") +
+                                  " This alert resolves when the first provider works again.";
+            }
+            checks.Add(new AlertCheck("proxy_fallback", AlertRules.ProxyFallbackActive, fallbackMessage is not null, fallbackMessage));
+            return checks;
+        }
+        catch (Exception ex) when (ex is StackExchange.Redis.RedisException or TimeoutException)
+        {
+            _logger.LogWarning("Alert cycle could not read the proxy state from Redis: {Error}", ex.Message);
+            return [];
+        }
     }
 
     private static string Gb(long bytes) => (bytes / (double)(1L << 30)).ToString("0.00", CultureInfo.InvariantCulture);
