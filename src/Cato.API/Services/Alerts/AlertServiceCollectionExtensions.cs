@@ -49,6 +49,10 @@ public static class AlertServiceCollectionExtensions
         services.AddScoped<ISteamworksLoginSource, CachedSteamworksLogin>();
         services.AddHttpClient(WebshareUsageSource.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(15));
         services.AddSingleton<IWebshareUsageSource, WebshareUsageSource>();
+        services.AddSingleton<Cato.API.Services.Proxies.IProxyStateReader, Cato.API.Services.Proxies.RedisProxyStateReader>();
+        services.AddHttpClient(Cato.API.Services.Proxies.EvomiUsageSource.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(15));
+        services.AddSingleton<Cato.API.Services.Proxies.IEvomiUsageSource, Cato.API.Services.Proxies.EvomiUsageSource>();
+        services.AddScoped<Cato.API.Services.Proxies.ProxyProvidersService>();
         services.AddScoped<AlertService>();
         return services;
     }

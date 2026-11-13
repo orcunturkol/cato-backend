@@ -1,6 +1,7 @@
 using Cato.API.Services.Alerts;
 using Cato.API.Services.Credentials;
 using Cato.API.Services.JobRuns;
+using Cato.API.Services.Proxies;
 using Cato.Domain.Entities;
 using Cato.Infrastructure.Database;
 using Cato.Infrastructure.Jobs;
@@ -23,11 +24,13 @@ public class AlertServiceTests : JobRunsDbTestBase
     private readonly FakeSteamworksLogin _steamworks = new() { Token = Login(Now.AddDays(200)) };
     // No Webshare API key: the rule is off unless a test sets a usage.
     private readonly FakeWebshare _webshare = new();
+    // No proxy provider list in Redis: the proxy rules are off unless a test sets one.
+    private readonly FakeProxies _proxies = new();
 
     private AlertService Service(CatoDbContext db) => new(
         db, NewCatalog(db), WorkerStart(db), [_email, _discord], _queues, _progress,
         Options.Create(new AlertSettings()), Options.Create(new RabbitMqSettings()), _freshness,
-        _steamworks, _webshare, NullLogger<AlertService>.Instance);
+        _steamworks, _webshare, _proxies, NullLogger<AlertService>.Instance);
 
     private async Task<AlertCycleResult> CycleAsync(DateTime now)
     {
@@ -655,6 +658,85 @@ public class AlertServiceTests : JobRunsDbTestBase
 
         Assert.Equal((1, 0), (result.Checks, result.Resolved));
         Assert.Null(Assert.Single(WebshareIncidents()).ResolvedAt);
+    }
+
+    private List<AlertIncident> ProxyIncidents() =>
+        Incidents().Where(i => i.Rule is AlertRules.ProxyProviderDown or AlertRules.ProxyFallbackActive).ToList();
+
+    [Fact]
+    public async Task A_down_proxy_provider_alerts_and_names_the_provider_in_use()
+    {
+        _proxies.Providers = [new("webshare", true), new("evomi", true), new("dataimpulse", false)];
+        _proxies.Down["webshare"] = new ProxyDownFlag("plan bandwidth used up (402 Payment Required)", Now.AddHours(-1), Now);
+        _proxies.Fallback = new ProxyFallback("evomi", [new ProxySkip("webshare", "plan bandwidth used up (402 Payment Required)")], Now);
+
+        var result = await CycleAsync(Now);
+
+        Assert.Equal(2, result.Opened);
+        var down = Assert.Single(ProxyIncidents(), i => i.Rule == AlertRules.ProxyProviderDown);
+        Assert.Equal("proxy:webshare|proxy_provider_down", down.OpenKey);
+        Assert.StartsWith("Proxy provider webshare refuses all traffic since 2026-10-06 14:21 UTC: plan bandwidth used up (402 Payment Required). The proxy jobs use evomi now.", down.Message);
+        var fallback = Assert.Single(ProxyIncidents(), i => i.Rule == AlertRules.ProxyFallbackActive);
+        Assert.StartsWith("The proxy jobs use the fallback provider evomi (webshare: plan bandwidth used up", fallback.Message);
+    }
+
+    [Fact]
+    public async Task With_every_proxy_provider_down_the_alert_says_nothing_is_left()
+    {
+        _proxies.Providers = [new("webshare", true), new("evomi", false)];
+        _proxies.Down["webshare"] = new ProxyDownFlag("used up", null, null);
+
+        await CycleAsync(Now);
+
+        Assert.Contains("No other proxy provider is left", Assert.Single(ProxyIncidents()).Message);
+    }
+
+    [Fact]
+    public async Task Proxy_alerts_resolve_when_the_flags_are_gone()
+    {
+        _proxies.Providers = [new("webshare", true), new("evomi", true)];
+        _proxies.Down["webshare"] = new ProxyDownFlag("used up", null, null);
+        _proxies.Fallback = new ProxyFallback("evomi", [], Now);
+        await CycleAsync(Now);
+
+        _proxies.Down.Clear();
+        _proxies.Fallback = null;
+        var result = await CycleAsync(Now.AddMinutes(5));
+
+        Assert.Equal(2, result.Resolved);
+        Assert.All(ProxyIncidents(), i => Assert.NotNull(i.ResolvedAt));
+    }
+
+    [Fact]
+    public void Proxy_stats_fields_parse_into_counts_reasons_and_targets()
+    {
+        var day = new DateOnly(2026, 11, 13);
+        var parsed = RedisProxyStateReader.ParseDay(day, [
+            ("webshare|ok", 90), ("webshare|fail", 10), ("webshare|fail|http_429", 7), ("webshare|fail|provider_unusable", 3),
+            ("webshare|target|steam_community|ok", 80), ("webshare|target|steam_community|fail", 9),
+            ("webshare|target|steamdb|ok", 10), ("evomi|ok", 4), ("junk", 1),
+        ]);
+
+        var webshare = parsed["webshare"];
+        Assert.Equal((90, 10), (webshare.Ok, webshare.Failed));
+        Assert.Equal(7, webshare.FailReasons["http_429"]);
+        Assert.Equal((80L, 9L), webshare.Targets["steam_community"]);
+        Assert.Equal((10L, 0L), webshare.Targets["steamdb"]);
+        Assert.Equal(4, parsed["evomi"].Ok);
+        Assert.Equal(["evomi", "webshare"], parsed.Keys.Order().ToArray());
+    }
+
+    private sealed class FakeProxies : IProxyStateReader
+    {
+        public List<ProxyProviderEntry> Providers { get; set; } = [];
+        public Dictionary<string, ProxyDownFlag> Down { get; } = new();
+        public ProxyFallback? Fallback { get; set; }
+
+        public Task<IReadOnlyList<ProxyProviderEntry>> GetProvidersAsync() => Task.FromResult<IReadOnlyList<ProxyProviderEntry>>(Providers);
+        public Task<ProxyDownFlag?> GetDownAsync(string provider) => Task.FromResult(Down.GetValueOrDefault(provider));
+        public Task<ProxyFallback?> GetFallbackAsync() => Task.FromResult(Fallback);
+        public Task<IReadOnlyDictionary<string, List<ProxyDayStats>>> GetStatsAsync(DateOnly today, int days) =>
+            Task.FromResult<IReadOnlyDictionary<string, List<ProxyDayStats>>>(new Dictionary<string, List<ProxyDayStats>>());
     }
 
     private sealed class FakeWebshare : IWebshareUsageSource
