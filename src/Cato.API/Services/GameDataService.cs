@@ -242,9 +242,10 @@ public class GameDataService : IGameDataService
         var perPartner = partners
             .Select(p =>
             {
-                var t = Sum(partnerApps.Where(a => a.PartnerId == p.PartnerId).Select(a => a.AppId).ToList());
+                var appIds = partnerApps.Where(a => a.PartnerId == p.PartnerId).Select(a => a.AppId).Order().ToList();
+                var t = Sum(appIds);
                 return new SteamworksWishlistPartnerSummaryDto(
-                    p.PartnerId, p.Name, t.AppCount, t.Adds, t.Deletes, t.PurchasesAndActivations, t.Gifts, t.Outstanding);
+                    p.PartnerId, p.Name, t.AppCount, t.Adds, t.Deletes, t.PurchasesAndActivations, t.Gifts, t.Outstanding, appIds);
             })
             .ToList();
         return (perPartner, Sum(partnerApps.Select(a => a.AppId).Distinct().ToList()));

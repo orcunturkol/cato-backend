@@ -123,13 +123,17 @@ public class SteamworksWishlistSummaryTests : IDisposable
         var summary = await new GameDataService(read).GetSteamworksWishlistSummaryAsync();
 
         Assert.Equal(3, summary.Games.Count);
-        Assert.Equal(
-            [
-                new SteamworksWishlistPartnerSummaryDto(216530, "PLAN B YAZILIM", 3, 190, 19, 11, 2, 190 - 19 - 11 - 2),
-                new SteamworksWishlistPartnerSummaryDto(337008, "PLANZET - FZCO", 2, 1040, 104, 52, 11, 1040 - 104 - 52 - 11),
-                new SteamworksWishlistPartnerSummaryDto(356969, "Bekir", 0, 0, 0, 0, 0, 0),
-            ],
-            summary.Partners);
+        // Equivalent, not Equal: the records hold lists, which compare by reference.
+        Assert.Equivalent(
+            new[]
+            {
+                new SteamworksWishlistPartnerSummaryDto(216530, "PLAN B YAZILIM", 3, 190, 19, 11, 2, 190 - 19 - 11 - 2, [999999, 2390230, 2429270]),
+                new SteamworksWishlistPartnerSummaryDto(337008, "PLANZET - FZCO", 2, 1040, 104, 52, 11, 1040 - 104 - 52 - 11, [2429270, 2632680]),
+                new SteamworksWishlistPartnerSummaryDto(356969, "Bekir", 0, 0, 0, 0, 0, 0, []),
+            },
+            summary.Partners,
+            strict: true);
+        Assert.Equal([999999, 2390230, 2429270], summary.Partners[0].AppIds);
         // The RPG is listed by both partners and counts once.
         Assert.Equal(new SteamworksWishlistTotalsDto(4, 1190, 119, 61, 12, 1190 - 119 - 61 - 12), summary.AllPartners);
     }

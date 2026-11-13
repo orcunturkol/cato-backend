@@ -74,7 +74,9 @@ public record SteamworksWishlistPartnerSummaryDto(
     int Deletes,
     int PurchasesAndActivations,
     int Gifts,
-    int Outstanding);
+    int Outstanding,
+    // The partner's apps (steamworks_partner_app), ascending, so a page can filter games by partner.
+    List<int> AppIds);
 
 public record SteamworksWishlistGameSummaryDto(
     Guid GameId,
