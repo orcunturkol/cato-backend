@@ -67,8 +67,10 @@ locals {
         ASPNETCORE_ENVIRONMENT               = "Production"
         Cato__BaseUrl                        = "http://api.${local.namespace}:8080"
         Serilog__WriteTo__1__Args__serverUrl = "http://seq.${local.namespace}:5341"
-        # Games that enter In review from this time on get an AI review by themselves.
-        AiReview__AutoSince = "2026-11-12T15:32:00Z"
+        # Every game In review gets an AI review by itself (a date before any round = all of them),
+        # with no daily cap: the backlog runs at once, Jev first.
+        AiReview__AutoSince      = "2000-01-01T00:00:00Z"
+        AiReview__AutoDailyLimit = "100000"
       }
       # GoogleDrive__*: the Google account that reads the meeting notes documents (drive.readonly).
       # AiReview__*: the AI review keys (Anthropic, OpenRouter).
