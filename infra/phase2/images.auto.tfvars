@@ -8,5 +8,5 @@ image_tags = {
   "cato-frontend"  = "8a8f6df"
   "ogt-api"        = "090cbc7"
   "ogt-backup"     = "7717205"
-  "ogt-frontend"   = "9630181"
+  "ogt-frontend"   = "c46c830"
 }
