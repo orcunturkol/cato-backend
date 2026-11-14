@@ -123,8 +123,10 @@ variable "collector_env" {
     WEBSHARE_PROXY_COUNTRY     = "GB"
     # Fallback order. A provider without its login (cato/collector/config) is left out, so
     # evomi and dataimpulse start when their *_PROXY_USERNAME and *_PROXY_PASSWORD are set.
-    PROXY_PROVIDERS           = "dataimpulse,evomi,webshare"
-    EVOMI_PROXY_COUNTRY       = "GB"
+    PROXY_PROVIDERS     = "evomi,dataimpulse,webshare"
+    EVOMI_PROXY_COUNTRY = "GB"
+    # The host Evomi's dashboard gives for Core Residential; port 1000 is plain HTTP (1001 is TLS).
+    EVOMI_PROXY_HOST          = "core-residential.evomi-proxy.com:1000"
     DATAIMPULSE_PROXY_COUNTRY = "GB"
     # About 10 GB a month: the follower watch (~200 MB a day at 37,500 games) plus the SteamDB and
     # group jobs. No cap until WEBSHARE_API_KEY is in cato/collector/config.
